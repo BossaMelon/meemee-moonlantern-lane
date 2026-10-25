@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "canvas": [
+    384,
+    256
+  ],
+  "background": "restaurant-shell",
+  "sorting": "explicit draw_order; actor foot positions in native pixels",
+  "walk_area_hint": [
+    [
+      78,
+      164
+    ],
+    [
+      171,
+      125
+    ],
+    [
+      325,
+      173
+    ],
+    [
+      251,
+      231
+    ]
+  ],
+  "anchors": {
+    "chef": [
+      171,
+      169
+    ],
+    "serve": [
+      236,
+      180
+    ],
+    "customer": [
+      261,
+      220
+    ],
+    "kitchen": [
+      104,
+      152
+    ],
+    "table": [
+      298,
+      157
+    ]
+  },
+  "draw_order": [
+    {
+      "sprite": "herb_shelf",
+      "foot": [
+        245,
+        110
+      ]
+    },
+    {
+      "sprite": "stove",
+      "foot": [
+        58,
+        160
+      ]
+    },
+    {
+      "sprite": "cauldron_stir_left",
+      "foot": [
+        57,
+        123
+      ],
+      "role": "cooking_overlay"
+    },
+    {
+      "sprite": "prep_table",
+      "foot": [
+        118,
+        155
+      ]
+    },
+    {
+      "sprite": "sink",
+      "foot": [
+        177,
+        133
+      ]
+    },
+    {
+      "sprite": "dining_table",
+      "foot": [
+        298,
+        160
+      ]
+    },
+    {
+      "sprite": "stool",
+      "foot": [
+        273,
+        171
+      ]
+    },
+    {
+      "sprite": "stool",
+      "foot": [
+        325,
+        180
+      ]
+    },
+    {
+      "sprite": "meemee_idle",
+      "foot": [
+        171,
+        169
+      ],
+      "role": "actor"
+    },
+    {
+      "sprite": "serving_counter",
+      "foot": [
+        271,
+        216
+      ]
+    },
+    {
+      "sprite": "warming_hood",
+      "foot": [
+        274,
+        187
+      ]
+    },
+    {
+      "sprite": "student_idle",
+      "foot": [
+        220,
+        227
+      ],
+      "role": "actor"
+    }
+  ],
+  "note": "Visual placement only. UI/core owner defines collision, interaction and runtime depth changes; do not treat this as game state. Counter is an independent transparent sprite."
+}

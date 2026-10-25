@@ -43,6 +43,15 @@ GODOT=/absolute/path/to/Godot ./tools/启动月灯巷.command
 路径可含空格，额外参数原样交给 Godot。此入口依赖本地引擎和源码，是 Mac 源码原型启动器；
 独立导出的 `.app`、签名与跨设备分发仍须另行验证。
 
+每次源码启动先执行 `Godot --headless --path PROJECT --import`，等待资源导入完成后才运行游戏；
+引擎自行增量检查，不依赖开发者已有的 `.godot` 缓存，也无需用户手动打开编辑器。
+导入返回非零时启动器失败退出，并保留引擎输出；游戏参数仅传给实际运行进程。
+这统一准备 UI/动作等资源使用者的导入缓存，不改各模块的 `ResourceLoader` 加载方式。
+Godot 4.7.2 实际 `--help` 与 [官方 CLI 文档](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)
+均支持 `--import` 等待导入后退出；[资源导入文档](https://docs.godotengine.org/en/4.7/tutorials/assets_pipeline/import_process.html)
+说明缓存位于 `.godot/imported`。此步骤只适用于使用编辑器二进制的源码启动入口；
+未来原生导出由 Godot 导出管线准备资源，不应要求玩家端执行编辑器导入，也不由本改动宣称兼容性已验。
+
 ## 游戏执行器合同
 
 prototype gate 读取 `contracts/prototype-v1.json` 中 `mode=automated` 且

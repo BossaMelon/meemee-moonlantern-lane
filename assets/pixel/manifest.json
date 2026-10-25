@@ -1,0 +1,2756 @@
+{
+  "schema_version": 1,
+  "title": "咩咩与月灯巷 · 三日魔法饭店像素资产",
+  "source": "OpenAI built-in image_gen, original generated raster artwork; see SOURCES.md",
+  "native_pixel_grid": 1,
+  "palette": [
+    "#25283f",
+    "#202438",
+    "#374568",
+    "#596a88",
+    "#8796aa",
+    "#c46588",
+    "#332d36",
+    "#8e9849",
+    "#70483c",
+    "#a5714f",
+    "#d2a06d",
+    "#f0c18b",
+    "#bf8a43",
+    "#edc46e",
+    "#f8e4b6",
+    "#fff3d0",
+    "#3c514c",
+    "#668578",
+    "#a1baa0",
+    "#c3d1ad",
+    "#492f34",
+    "#773d35",
+    "#a94f35",
+    "#d77843",
+    "#a86855",
+    "#d98f68",
+    "#f2b388",
+    "#f6d2a3",
+    "#4e697d",
+    "#6e9da9",
+    "#a9d6ce",
+    "#ea9ab1"
+  ],
+  "alpha": "binary 0/255; transparent RGB is 0/0/0",
+  "texture_filter": "nearest",
+  "mipmaps": false,
+  "camera": "three-quarter elevated orthographic; visible fronts; roofless interior",
+  "light": "upper left; indigo shadows",
+  "sprites": {
+    "floor_wood": {
+      "file": "sprites/floor_wood.png",
+      "size": [
+        64,
+        32
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        0,
+        0,
+        64,
+        32
+      ],
+      "pivot": [
+        32,
+        16
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        64,
+        32
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        0,
+        90,
+        311,
+        310
+      ],
+      "source_opaque_bounds": [
+        16,
+        117,
+        300,
+        280
+      ],
+      "export": "tile",
+      "purpose": "environment",
+      "sha256": "2b6c8e5e52da818081c5c7b4e3367d72af32a34e84423fb80b960025a6b33250",
+      "ground_step": [
+        [
+          32,
+          16
+        ],
+        [
+          -32,
+          16
+        ]
+      ]
+    },
+    "floor_stone": {
+      "file": "sprites/floor_stone.png",
+      "size": [
+        64,
+        32
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        96,
+        0,
+        64,
+        32
+      ],
+      "pivot": [
+        32,
+        16
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        64,
+        32
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        314,
+        90,
+        623,
+        310
+      ],
+      "source_opaque_bounds": [
+        328,
+        116,
+        613,
+        280
+      ],
+      "export": "tile",
+      "purpose": "environment",
+      "sha256": "9b5bd39c40600ec6b09e6b6aa7f093587824423ec1faf1ef8e99e85ed88a6103",
+      "ground_step": [
+        [
+          32,
+          16
+        ],
+        [
+          -32,
+          16
+        ]
+      ]
+    },
+    "wall_right": {
+      "file": "sprites/wall_right.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        192,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        8,
+        2,
+        55,
+        62
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        640,
+        0,
+        935,
+        315
+      ],
+      "source_opaque_bounds": [
+        662,
+        15,
+        895,
+        312
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "302a75ddaa4c7dd0586fec397569cdb0f5a2f1687244763a4fc24336748b72f4"
+    },
+    "wall_left": {
+      "file": "sprites/wall_left.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        288,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        8,
+        2,
+        55,
+        62
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        950,
+        0,
+        1254,
+        315
+      ],
+      "source_opaque_bounds": [
+        985,
+        15,
+        1218,
+        310
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "87b7837608e0a5c5a6c8772c4d24c3ad38c9668de8b64bd9f14b6d66397a82b4"
+    },
+    "moon_window": {
+      "file": "sprites/moon_window.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        0,
+        80,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        6,
+        46,
+        62
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        0,
+        315,
+        302,
+        668
+      ],
+      "source_opaque_bounds": [
+        34,
+        327,
+        279,
+        641
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "591273ff1074562071bc451fc4a8dc3e2f4033698a1f518f1f6c48183df6986e"
+    },
+    "stool": {
+      "file": "sprites/stool.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        96,
+        80,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        2,
+        28,
+        30
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        40,
+        680,
+        280,
+        914
+      ],
+      "source_opaque_bounds": [
+        75,
+        716,
+        232,
+        895
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "ed92c3d91f4c130806dc37a0dcdd86e9fd90448b4dfd38edd3bba9a4437319c9"
+    },
+    "rug": {
+      "file": "sprites/rug.png",
+      "size": [
+        64,
+        32
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        192,
+        80,
+        64,
+        32
+      ],
+      "pivot": [
+        32,
+        30
+      ],
+      "opaque_bounds": [
+        8,
+        2,
+        55,
+        30
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        303,
+        675,
+        640,
+        926
+      ],
+      "source_opaque_bounds": [
+        316,
+        717,
+        626,
+        900
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "27d777b155cc0f95acf2cc57ce7ecdd8ff57b300ac2e6aa7b58f25686b6fdbf5"
+    },
+    "door": {
+      "file": "sprites/door.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/environment.png",
+      "region": [
+        288,
+        80,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        4,
+        46,
+        62
+      ],
+      "source": "source/furniture.png",
+      "source_crop": [
+        0,
+        915,
+        305,
+        1254
+      ],
+      "source_opaque_bounds": [
+        41,
+        916,
+        273,
+        1221
+      ],
+      "export": "fit",
+      "purpose": "environment",
+      "sha256": "af31864548100c8685afae01f0ad9cc1998f3a115d28eb84b644ebd0395f04ca"
+    },
+    "stove": {
+      "file": "sprites/stove.png",
+      "size": [
+        64,
+        80
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        0,
+        0,
+        64,
+        80
+      ],
+      "pivot": [
+        32,
+        78
+      ],
+      "opaque_bounds": [
+        5,
+        2,
+        59,
+        78
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        20,
+        40,
+        420,
+        583
+      ],
+      "source_opaque_bounds": [
+        59,
+        74,
+        412,
+        573
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "34e72db03a31d8c36b6ca42cdcc484ac4e120979dbec7402157386867ff86ac8"
+    },
+    "prep_table": {
+      "file": "sprites/prep_table.png",
+      "size": [
+        80,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        96,
+        0,
+        80,
+        64
+      ],
+      "pivot": [
+        40,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        3,
+        78,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        425,
+        180,
+        875,
+        575
+      ],
+      "source_opaque_bounds": [
+        443,
+        221,
+        865,
+        546
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "5a6129c005512249f0fc25c02fcc00531fab54184a75fa3e6ade2a4744cc87af"
+    },
+    "sink": {
+      "file": "sprites/sink.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        192,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        62
+      ],
+      "opaque_bounds": [
+        4,
+        2,
+        44,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        877,
+        130,
+        1146,
+        560
+      ],
+      "source_opaque_bounds": [
+        885,
+        166,
+        1126,
+        524
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "d584759b568a548a943fe328172d6f5191c2580dfe35eb5a3ecb75d15c06a08b"
+    },
+    "dining_table": {
+      "file": "sprites/dining_table.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        288,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        7,
+        2,
+        57,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        1150,
+        115,
+        1536,
+        560
+      ],
+      "source_opaque_bounds": [
+        1184,
+        158,
+        1492,
+        524
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "3a56344504b0ffa93a94caab41b7bbee3074d6f72cbbb041b40d0f060bd2b183"
+    },
+    "serving_counter": {
+      "file": "sprites/serving_counter.png",
+      "size": [
+        96,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        0,
+        80,
+        96,
+        64
+      ],
+      "pivot": [
+        48,
+        62
+      ],
+      "opaque_bounds": [
+        8,
+        2,
+        88,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        10,
+        584,
+        545,
+        1000
+      ],
+      "source_opaque_bounds": [
+        38,
+        604,
+        532,
+        973
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "3f6aab6f283ff06677740aad54bdd4f7d5cd0d358f1ae4e7fcd623282ca2579f"
+    },
+    "warming_hood": {
+      "file": "sprites/warming_hood.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        96,
+        80,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        11,
+        62,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        548,
+        590,
+        947,
+        995
+      ],
+      "source_opaque_bounds": [
+        563,
+        636,
+        938,
+        954
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "bad885f50b90d77183cf7f77507875051c1308225bb9921884cead4070a3ea1c"
+    },
+    "herb_shelf": {
+      "file": "sprites/herb_shelf.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        192,
+        80,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        8,
+        2,
+        55,
+        62
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        948,
+        580,
+        1285,
+        1010
+      ],
+      "source_opaque_bounds": [
+        960,
+        608,
+        1253,
+        979
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "1c844e5c82c524daf88ac6984fdc780739f0daa252b113b31f7cf86593499047"
+    },
+    "floating_plates": {
+      "file": "sprites/floating_plates.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/kitchen.png",
+      "region": [
+        288,
+        80,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        4,
+        2,
+        27,
+        30
+      ],
+      "source": "source/kitchen.png",
+      "source_crop": [
+        1288,
+        620,
+        1536,
+        980
+      ],
+      "source_opaque_bounds": [
+        1304,
+        669,
+        1496,
+        906
+      ],
+      "export": "fit",
+      "purpose": "kitchen",
+      "sha256": "a9440b3a56c091dee7d149dbd0c1b65bcf2ad02a6100b8f765819eee81db4276"
+    },
+    "meemee_idle": {
+      "file": "sprites/meemee_idle.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        0,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        14,
+        7,
+        38,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        0,
+        0,
+        384,
+        512
+      ],
+      "source_opaque_bounds": [
+        115,
+        57,
+        308,
+        476
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "a36d3e3b4d5981d6e85a830a9241fca895e81a6753133b830653b11b844e97df"
+    },
+    "meemee_blink": {
+      "file": "sprites/meemee_blink.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        48,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        14,
+        7,
+        38,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        384,
+        0,
+        768,
+        512
+      ],
+      "source_opaque_bounds": [
+        497,
+        57,
+        691,
+        476
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "08d101ea3b149d974a204a54671053e7902241badff2743632bb08359cd0e4b5"
+    },
+    "meemee_serve": {
+      "file": "sprites/meemee_serve.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        96,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        60
+      ],
+      "opaque_bounds": [
+        12,
+        7,
+        47,
+        60
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        768,
+        0,
+        1152,
+        512
+      ],
+      "source_opaque_bounds": [
+        865,
+        57,
+        1148,
+        478
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "5fb52df0b132848d083ad879e562e916141e53b4a9949112112596017e0e74f0"
+    },
+    "meemee_stir": {
+      "file": "sprites/meemee_stir.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        144,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        60
+      ],
+      "opaque_bounds": [
+        12,
+        7,
+        43,
+        60
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        1152,
+        0,
+        1536,
+        512
+      ],
+      "source_opaque_bounds": [
+        1249,
+        57,
+        1497,
+        477
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "f75f71a860a2d5bcb0bac5efa4ab2c704dd949516ebb1be965812066007ffc31"
+    },
+    "student_idle": {
+      "file": "sprites/student_idle.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        0,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        14,
+        2,
+        40,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        0,
+        512,
+        384,
+        1024
+      ],
+      "source_opaque_bounds": [
+        114,
+        529,
+        324,
+        982
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "647a737a909a183f509efbf5d7a9135d2ce84f1637f3242bfb6b36db97d94d4c"
+    },
+    "student_thanks": {
+      "file": "sprites/student_thanks.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        48,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        13,
+        2,
+        43,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        384,
+        512,
+        768,
+        1024
+      ],
+      "source_opaque_bounds": [
+        488,
+        528,
+        731,
+        982
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "73b3a88ce3b446cbd173085ccecbe301a281c4267526f6f1de5dd057b0b22c2d"
+    },
+    "neighbor_idle": {
+      "file": "sprites/neighbor_idle.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        96,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        13,
+        5,
+        41,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        768,
+        512,
+        1152,
+        1024
+      ],
+      "source_opaque_bounds": [
+        870,
+        556,
+        1093,
+        981
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "c1f739f1805079bcc767cd8279aac8f1f825eb708254fe4e704d51a6181188e5"
+    },
+    "neighbor_thanks": {
+      "file": "sprites/neighbor_thanks.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/characters.png",
+      "region": [
+        144,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        59
+      ],
+      "opaque_bounds": [
+        13,
+        5,
+        41,
+        59
+      ],
+      "source": "source/characters.png",
+      "source_crop": [
+        1152,
+        512,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        1254,
+        556,
+        1479,
+        986
+      ],
+      "export": "cell",
+      "purpose": "characters",
+      "sha256": "3c8b22f5982aab1eab20d3df216b41e33e862186fb8ac8c6b9be55e9bd707447"
+    },
+    "meemee_walk_se": {
+      "file": "sprites/meemee_walk_se.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        0,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "opaque_bounds": [
+        9,
+        8,
+        40,
+        61
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        0,
+        0,
+        384,
+        512
+      ],
+      "source_opaque_bounds": [
+        76,
+        67,
+        322,
+        486
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "b14943b2648954f629fb9e988e56d89f1ac277c658d01c82b11b9f986c615167"
+    },
+    "meemee_walk_sw": {
+      "file": "sprites/meemee_walk_sw.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        48,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "opaque_bounds": [
+        9,
+        8,
+        39,
+        61
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        384,
+        0,
+        768,
+        512
+      ],
+      "source_opaque_bounds": [
+        456,
+        66,
+        694,
+        489
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "b115da4822203087ce2d5fd773f446b35d0e830878fd077345468c84a814c646"
+    },
+    "meemee_walk_ne": {
+      "file": "sprites/meemee_walk_ne.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        96,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "opaque_bounds": [
+        9,
+        8,
+        39,
+        61
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        768,
+        0,
+        1152,
+        512
+      ],
+      "source_opaque_bounds": [
+        841,
+        64,
+        1079,
+        486
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "d142e5ae8ae4338a63ce664da01557967266316484d2ce9f848c74f71dc745e2"
+    },
+    "meemee_walk_nw": {
+      "file": "sprites/meemee_walk_nw.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        144,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "opaque_bounds": [
+        10,
+        8,
+        40,
+        61
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        1152,
+        0,
+        1536,
+        512
+      ],
+      "source_opaque_bounds": [
+        1229,
+        64,
+        1469,
+        486
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "cb90a7482d39705463cab63350d3540acc32721242db174088474d676798d06e"
+    },
+    "meemee_cast_se": {
+      "file": "sprites/meemee_cast_se.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        0,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        55
+      ],
+      "opaque_bounds": [
+        7,
+        4,
+        48,
+        55
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        0,
+        512,
+        384,
+        1024
+      ],
+      "source_opaque_bounds": [
+        55,
+        546,
+        384,
+        951
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "8e056041bbfcfb1d7d124b9bc1bb78cbc2db11ae45bf9c58998ca2b751f6221b"
+    },
+    "meemee_cast_nw": {
+      "file": "sprites/meemee_cast_nw.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        48,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        55
+      ],
+      "opaque_bounds": [
+        3,
+        6,
+        43,
+        55
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        384,
+        512,
+        768,
+        1024
+      ],
+      "source_opaque_bounds": [
+        384,
+        560,
+        725,
+        951
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "579cb57ab847fb3d67ad781aaad30ea645ccb51c42cc38791f3d97a52e1f9af1"
+    },
+    "meemee_dodge_sw": {
+      "file": "sprites/meemee_dodge_sw.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        96,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        55
+      ],
+      "opaque_bounds": [
+        7,
+        10,
+        45,
+        55
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        768,
+        512,
+        1152,
+        1024
+      ],
+      "source_opaque_bounds": [
+        822,
+        593,
+        1125,
+        951
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "cd9657ef5f3ca9596cc900b1cf9b040af4aab51694878a33ba15a448f253b3d8"
+    },
+    "meemee_dodge_se": {
+      "file": "sprites/meemee_dodge_se.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/actions.png",
+      "region": [
+        144,
+        64,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        55
+      ],
+      "opaque_bounds": [
+        5,
+        10,
+        43,
+        55
+      ],
+      "source": "source/actions.png",
+      "source_crop": [
+        1152,
+        512,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        1196,
+        593,
+        1494,
+        951
+      ],
+      "export": "cell",
+      "purpose": "actions",
+      "sha256": "ea69223faffecc9210836e8933ba1aa7baf3148a164d7340e49ff50e26bdbd69"
+    },
+    "hagrid_idle": {
+      "file": "sprites/hagrid_idle.png",
+      "size": [
+        64,
+        80
+      ],
+      "atlas": "atlases/guests.png",
+      "region": [
+        0,
+        0,
+        64,
+        80
+      ],
+      "pivot": [
+        32,
+        78
+      ],
+      "opaque_bounds": [
+        6,
+        2,
+        56,
+        78
+      ],
+      "source": "source/hagrid.png",
+      "source_crop": [
+        0,
+        0,
+        768,
+        1024
+      ],
+      "source_opaque_bounds": [
+        76,
+        20,
+        672,
+        1001
+      ],
+      "export": "cell",
+      "purpose": "guests",
+      "sha256": "11288e43bab76e58016cb9cad85215d2b73121d75b6d0bb8bbd73b951961fc19"
+    },
+    "hagrid_thanks": {
+      "file": "sprites/hagrid_thanks.png",
+      "size": [
+        64,
+        80
+      ],
+      "atlas": "atlases/guests.png",
+      "region": [
+        64,
+        0,
+        64,
+        80
+      ],
+      "pivot": [
+        32,
+        78
+      ],
+      "opaque_bounds": [
+        9,
+        2,
+        59,
+        78
+      ],
+      "source": "source/hagrid.png",
+      "source_crop": [
+        768,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        872,
+        20,
+        1472,
+        1001
+      ],
+      "export": "cell",
+      "purpose": "guests",
+      "sha256": "78456e820858371d9c2eb9832a7f6afb206c44ec8b4570d9d8a763fd8c4bbd88"
+    },
+    "cauldron_stir_left": {
+      "file": "sprites/cauldron_stir_left.png",
+      "size": [
+        48,
+        48
+      ],
+      "atlas": "atlases/cooking.png",
+      "region": [
+        0,
+        0,
+        48,
+        48
+      ],
+      "pivot": [
+        24,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        4,
+        46,
+        46
+      ],
+      "source": "source/cauldron.png",
+      "source_crop": [
+        50,
+        150,
+        755,
+        850
+      ],
+      "source_opaque_bounds": [
+        118,
+        209,
+        723,
+        792
+      ],
+      "export": "fit",
+      "purpose": "cooking",
+      "sha256": "4ab2038b9236df5a42138d0132c58f99e3b3251fe059bf36c6acabd85525b525"
+    },
+    "cauldron_stir_right": {
+      "file": "sprites/cauldron_stir_right.png",
+      "size": [
+        48,
+        48
+      ],
+      "atlas": "atlases/cooking.png",
+      "region": [
+        48,
+        0,
+        48,
+        48
+      ],
+      "pivot": [
+        24,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        5,
+        46,
+        46
+      ],
+      "source": "source/cauldron.png",
+      "source_crop": [
+        780,
+        150,
+        1485,
+        850
+      ],
+      "source_opaque_bounds": [
+        812,
+        221,
+        1418,
+        792
+      ],
+      "export": "fit",
+      "purpose": "cooking",
+      "sha256": "0a8939302e15229b867f6156c66f4fa81d22b979af8c028cc23c1cc7e7752a7a"
+    },
+    "flour": {
+      "file": "sprites/flour.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        0,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        4,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        0,
+        0,
+        384,
+        350
+      ],
+      "source_opaque_bounds": [
+        58,
+        43,
+        384,
+        341
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "4f90daee72bb8a2d44cd9335fb943cdd0b92c6f63e2c4432fce80d2e2140cd6c"
+    },
+    "pumpkin": {
+      "file": "sprites/pumpkin.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        32,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        4,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        384,
+        0,
+        768,
+        350
+      ],
+      "source_opaque_bounds": [
+        440,
+        42,
+        756,
+        333
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "114c406d3a4cf1c6d17779944896f7ac058eb00cae2b778e406d5d9d09984ef7"
+    },
+    "cream": {
+      "file": "sprites/cream.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        64,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        7,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        768,
+        0,
+        1152,
+        350
+      ],
+      "source_opaque_bounds": [
+        824,
+        90,
+        1117,
+        333
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "3fb695918b73cbb4492e60f2e1f01f13cc1a165b490c1c5df50f3d6584add01c"
+    },
+    "ember_herb": {
+      "file": "sprites/ember_herb.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        96,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        2,
+        29,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        1152,
+        0,
+        1536,
+        350
+      ],
+      "source_opaque_bounds": [
+        1213,
+        35,
+        1505,
+        350
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "c721c682e3acb38fe84e2d647b66dc80f219b4b73f8730b2df0290cc0257f18c"
+    },
+    "sparkcap": {
+      "file": "sprites/sparkcap.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        0,
+        32,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        0,
+        350,
+        384,
+        655
+      ],
+      "source_opaque_bounds": [
+        92,
+        391,
+        343,
+        638
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "eccfaf800348a417fe85f42725c108b3abfc70c655c0b8936c4b8ba60a9bb4c3"
+    },
+    "moonheart": {
+      "file": "sprites/moonheart.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        32,
+        32,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        5,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        384,
+        350,
+        768,
+        655
+      ],
+      "source_opaque_bounds": [
+        429,
+        364,
+        754,
+        651
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "e3a2a5a1fbde088e90c533af76febade7bc4dd7f1cf3fc2e22e30366433a4fdf"
+    },
+    "floating_pie": {
+      "file": "sprites/floating_pie.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        64,
+        32,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        768,
+        350,
+        1152,
+        655
+      ],
+      "source_opaque_bounds": [
+        830,
+        364,
+        1121,
+        654
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "e30985577b1723f4af92e501f3068e857616b5c6279b2dda95e2c6da02a4b6e3"
+    },
+    "ember_soup": {
+      "file": "sprites/ember_soup.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        96,
+        32,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        3,
+        29,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        1152,
+        350,
+        1536,
+        655
+      ],
+      "source_opaque_bounds": [
+        1224,
+        350,
+        1503,
+        654
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "6e7accd6a4d818fe53c35f13d0e3b6e33eacbe7d5c85e9872e24ab1129373b0a"
+    },
+    "moon_stew": {
+      "file": "sprites/moon_stew.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        0,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        9,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        0,
+        655,
+        421,
+        985
+      ],
+      "source_opaque_bounds": [
+        24,
+        657,
+        413,
+        955
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "a1acc92a89047829b1d8e7a1eb90dadddf194cfa5c31ff4b18aff221d298d6e1"
+    },
+    "star_soup": {
+      "file": "sprites/star_soup.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        32,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        7,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        425,
+        665,
+        770,
+        985
+      ],
+      "source_opaque_bounds": [
+        449,
+        704,
+        747,
+        954
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "cb13d472729dabac9a0518cc39b90aae2c74659302240fd7a0b469ef048b0288"
+    },
+    "comet_pie": {
+      "file": "sprites/comet_pie.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        64,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        9,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        775,
+        655,
+        1170,
+        985
+      ],
+      "source_opaque_bounds": [
+        786,
+        679,
+        1158,
+        955
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "33fb0309c6f3e4542d25652c9103d7925f303a8b845cc0938f24dc53594702ac"
+    },
+    "takeaway_basket": {
+      "file": "sprites/takeaway_basket.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/food.png",
+      "region": [
+        96,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        2,
+        7,
+        30,
+        30
+      ],
+      "source": "source/food.png",
+      "source_crop": [
+        1172,
+        665,
+        1536,
+        985
+      ],
+      "source_opaque_bounds": [
+        1195,
+        704,
+        1513,
+        966
+      ],
+      "export": "fit",
+      "purpose": "food",
+      "sha256": "02c4bdcee5458a76d9b5b4965dd26ffad8a760324a7c83ca64853b1ab083adb0"
+    },
+    "sparkcap_idle": {
+      "file": "sprites/sparkcap_idle.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        0,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        5,
+        28,
+        30
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        20,
+        145,
+        370,
+        510
+      ],
+      "source_opaque_bounds": [
+        48,
+        195,
+        329,
+        468
+      ],
+      "export": "scale:0.09",
+      "purpose": "combat",
+      "sha256": "e8f508fca8959bb985a0cef99beeb488fb75b16929cdf94d7b017658069bb514"
+    },
+    "sparkcap_windup": {
+      "file": "sprites/sparkcap_windup.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        64,
+        0,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        8,
+        28,
+        30
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        390,
+        180,
+        725,
+        510
+      ],
+      "source_opaque_bounds": [
+        425,
+        231,
+        706,
+        473
+      ],
+      "export": "scale:0.09",
+      "purpose": "combat",
+      "sha256": "692a4b4c423dfa7f14d839c386b0fe40bc03a59ddb29261096dcce4e28073244"
+    },
+    "moonheart_guard": {
+      "file": "sprites/moonheart_guard.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        128,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        8,
+        12,
+        56,
+        62
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        745,
+        120,
+        1095,
+        515
+      ],
+      "source_opaque_bounds": [
+        756,
+        146,
+        1084,
+        494
+      ],
+      "export": "scale:0.145",
+      "purpose": "combat",
+      "sha256": "392acc1b695524c28a6cc1a21d682676f8940eeeac71b8bd08ade7ebe07939e7"
+    },
+    "moonheart_exposed": {
+      "file": "sprites/moonheart_exposed.png",
+      "size": [
+        64,
+        64
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        192,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        15,
+        61,
+        62
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        1105,
+        120,
+        1536,
+        515
+      ],
+      "source_opaque_bounds": [
+        1115,
+        151,
+        1520,
+        478
+      ],
+      "export": "scale:0.145",
+      "purpose": "combat",
+      "sha256": "319d4177ac68e8899c7846273c7a4f53b2db17fb456b2a89ef76a68fca30ca84"
+    },
+    "bolt_wand": {
+      "file": "sprites/bolt_wand.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        0,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        6,
+        2,
+        26,
+        30
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        40,
+        540,
+        365,
+        945
+      ],
+      "source_opaque_bounds": [
+        80,
+        564,
+        330,
+        917
+      ],
+      "export": "fit",
+      "purpose": "combat",
+      "sha256": "a280b866bb77e8a5a5576314abf93cf97b73ab38657bd7206a63a7b1d25b8156"
+    },
+    "fan_wand": {
+      "file": "sprites/fan_wand.png",
+      "size": [
+        32,
+        32
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        64,
+        64,
+        32,
+        32
+      ],
+      "pivot": [
+        16,
+        30
+      ],
+      "opaque_bounds": [
+        3,
+        2,
+        29,
+        30
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        390,
+        540,
+        755,
+        945
+      ],
+      "source_opaque_bounds": [
+        440,
+        579,
+        743,
+        901
+      ],
+      "export": "fit",
+      "purpose": "combat",
+      "sha256": "d8ef01c939665ed5cf237dd19f9284b70214387bf9752e870e66ec3c2474160c"
+    },
+    "gust_small": {
+      "file": "sprites/gust_small.png",
+      "size": [
+        64,
+        48
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        128,
+        64,
+        64,
+        48
+      ],
+      "pivot": [
+        32,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        3,
+        62,
+        46
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        760,
+        630,
+        1100,
+        960
+      ],
+      "source_opaque_bounds": [
+        775,
+        687,
+        1084,
+        907
+      ],
+      "export": "fit",
+      "purpose": "combat",
+      "sha256": "3b3fa89c9e7b787379e61c85d84fcbd3b831262f14e118fd7b66009bf7b2bcb6"
+    },
+    "gust_large": {
+      "file": "sprites/gust_large.png",
+      "size": [
+        64,
+        48
+      ],
+      "atlas": "atlases/combat.png",
+      "region": [
+        192,
+        64,
+        64,
+        48
+      ],
+      "pivot": [
+        32,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        6,
+        62,
+        46
+      ],
+      "source": "source/combat.png",
+      "source_crop": [
+        1105,
+        610,
+        1536,
+        975
+      ],
+      "source_opaque_bounds": [
+        1114,
+        667,
+        1515,
+        931
+      ],
+      "export": "fit",
+      "purpose": "combat",
+      "sha256": "4794ac922ec1974021f7520ec4093442f7984d26e409a2860708ce854a604d68"
+    },
+    "dialogue_panel": {
+      "file": "sprites/dialogue_panel.png",
+      "size": [
+        128,
+        72
+      ],
+      "atlas": "atlases/ui.png",
+      "region": [
+        0,
+        0,
+        128,
+        72
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        128,
+        72
+      ],
+      "source": "source/ui.png",
+      "source_crop": [
+        10,
+        210,
+        720,
+        620
+      ],
+      "source_opaque_bounds": [
+        37,
+        231,
+        707,
+        601
+      ],
+      "export": "stretch",
+      "purpose": "ui",
+      "sha256": "e056c562c6377b7812d69a557187dbaaab7d4558b94fa06cb554141c4a47158f",
+      "nine_slice_margins": [
+        14,
+        14,
+        14,
+        14
+      ],
+      "content_margins": [
+        18,
+        16,
+        18,
+        16
+      ]
+    },
+    "button_normal": {
+      "file": "sprites/button_normal.png",
+      "size": [
+        96,
+        40
+      ],
+      "atlas": "atlases/ui.png",
+      "region": [
+        128,
+        0,
+        96,
+        40
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        96,
+        40
+      ],
+      "source": "source/ui.png",
+      "source_crop": [
+        725,
+        310,
+        1225,
+        540
+      ],
+      "source_opaque_bounds": [
+        737,
+        328,
+        1209,
+        519
+      ],
+      "export": "stretch",
+      "purpose": "ui",
+      "sha256": "62bcf5d239c49e9b76e5d258dd878a1a27b937874ef30786afcdc8986c7408bc",
+      "nine_slice_margins": [
+        12,
+        12,
+        12,
+        12
+      ],
+      "content_margins": [
+        14,
+        12,
+        14,
+        12
+      ]
+    },
+    "button_focus": {
+      "file": "sprites/button_focus.png",
+      "size": [
+        96,
+        40
+      ],
+      "atlas": "atlases/ui.png",
+      "region": [
+        0,
+        80,
+        96,
+        40
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        96,
+        40
+      ],
+      "source": "source/ui.png",
+      "source_crop": [
+        100,
+        770,
+        700,
+        1040
+      ],
+      "source_opaque_bounds": [
+        113,
+        792,
+        686,
+        1016
+      ],
+      "export": "stretch",
+      "purpose": "ui",
+      "sha256": "c5a325be88828b7f0d7ad71e6ce29ff4674e91cb404811d04d5ce4f33f1b10ec",
+      "nine_slice_margins": [
+        12,
+        12,
+        12,
+        12
+      ],
+      "content_margins": [
+        14,
+        12,
+        14,
+        12
+      ]
+    },
+    "inventory_slot": {
+      "file": "sprites/inventory_slot.png",
+      "size": [
+        48,
+        48
+      ],
+      "atlas": "atlases/ui.png",
+      "region": [
+        128,
+        80,
+        48,
+        48
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        48,
+        48
+      ],
+      "source": "source/ui.png",
+      "source_crop": [
+        825,
+        690,
+        1180,
+        1055
+      ],
+      "source_opaque_bounds": [
+        844,
+        708,
+        1158,
+        1036
+      ],
+      "export": "stretch",
+      "purpose": "ui",
+      "sha256": "90570ce723e9dd0242e165cc593f46f06e49d903bf40543b00b0446bd045112a",
+      "nine_slice_margins": [
+        12,
+        12,
+        12,
+        12
+      ],
+      "content_margins": [
+        14,
+        12,
+        14,
+        12
+      ]
+    }
+  },
+  "backgrounds": {
+    "restaurant-interior": {
+      "file": "backgrounds/restaurant-interior.png",
+      "size": [
+        384,
+        256
+      ],
+      "source": "source/restaurant-interior.png",
+      "sha256": "ad05dd3a7ef73bf38d818480eab2dcd67a920ff7776c55b66d07b5556b8376bf",
+      "purpose": "complete static environment; no collision implied"
+    },
+    "restaurant-lane": {
+      "file": "backgrounds/restaurant-lane.png",
+      "size": [
+        384,
+        256
+      ],
+      "source": "source/restaurant-lane.png",
+      "sha256": "05ef95c362b3537102e91adc0f6a557ff5c9480f21c170d97dc2beb49185453a",
+      "purpose": "complete static environment; no collision implied"
+    },
+    "restaurant-shell": {
+      "file": "backgrounds/restaurant-shell.png",
+      "size": [
+        384,
+        256
+      ],
+      "source": "source/restaurant-shell.png",
+      "sha256": "d33b5a4f28acf129e81a94717525c574c29241d42c32c1549e1d0d3f89679245",
+      "purpose": "complete static environment; no collision implied"
+    },
+    "mushroom-garden": {
+      "file": "backgrounds/mushroom-garden.png",
+      "size": [
+        480,
+        270
+      ],
+      "source": "source/mushroom-garden.png",
+      "sha256": "7cf3286c4e5cd337f9caeefc242e241961368f8e8319394e3dd96a228a133391",
+      "purpose": "complete static environment; no collision implied"
+    }
+  },
+  "sources": {
+    "actions.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "2ff525264e3c2d5354cdbf563d905346286de7548b9301b7a5de32403827cfd8",
+      "runtime": false
+    },
+    "cauldron.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "6675212036112e4d68c6b91948e14d1e5c8415b3a85f5626020fb3d1e44fce99",
+      "runtime": false
+    },
+    "characters.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "065ebdc7d9f060942a8c0ed101625958b5f4da66b4f08abcc80e13850243e71c",
+      "runtime": false
+    },
+    "combat.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "7c4f1b0a092a53e534a33fb012fb8adab7bca8c08be2e29a899af05ce3ddc505",
+      "runtime": false
+    },
+    "food.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "6c2d199e970a44e89bf8d5e5b81125e607e8844a2fc1e4138e9290ec0117e573",
+      "runtime": false
+    },
+    "furniture.png": {
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "d2ff16399275fc6f7503d3ab7270bd674a2a84a73eeebfb7548c933c5190c800",
+      "runtime": false
+    },
+    "hagrid.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "fc480bd68417984ad8557f5f1e02fd8a7ef0f00aa8e71622d13b7a3063936cab",
+      "runtime": false
+    },
+    "kitchen.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "5c01f08ee46544793fecf8bb9f75fc0f5bd3418a709d0f152dddaf1a2833d817",
+      "runtime": false
+    },
+    "mushroom-garden.png": {
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "sha256": "29f5870444023ffb9e63ab456c4e45f4629ac09892916f9ed07b569cd8ebdef3",
+      "runtime": false
+    },
+    "restaurant-interior.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGB",
+      "sha256": "7cf38e8abd43359897516f4a3cc3d419bf7d949b402b93d737fe3ef62c7819bb",
+      "runtime": false
+    },
+    "restaurant-lane.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGB",
+      "sha256": "0b2028ec87521ee5a0ef7c7c1c1fdaedde9e29f908c3c8ac0d3e2023525315f9",
+      "runtime": false
+    },
+    "restaurant-shell.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGB",
+      "sha256": "6636ef0ddf27871a77c23361e1af1c7c5a6c801a0b936a010e4f45f5d7b00ec2",
+      "runtime": false
+    },
+    "ui.png": {
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "01af99fb7d194b55707841528f2e8254c0c96f1c63e157c21913ec2b01b0ccfa",
+      "runtime": false
+    }
+  },
+  "content_contract_revision": "4d06f599b40663b3910a215f89b1bd1a26343b48",
+  "aliases": {
+    "meemee": "meemee_idle",
+    "hagrid": "hagrid_idle",
+    "stirring_cauldron": "cauldron_stir_left",
+    "gust": "gust_small"
+  },
+  "animations": {
+    "meemee_idle": {
+      "frames": [
+        "meemee_idle",
+        "meemee_blink",
+        "meemee_idle"
+      ],
+      "duration_ms": [
+        2400,
+        140,
+        1800
+      ],
+      "loop": true
+    },
+    "serve": {
+      "frames": [
+        "meemee_idle",
+        "meemee_serve",
+        "meemee_idle"
+      ],
+      "duration_ms": [
+        80,
+        400,
+        100
+      ],
+      "loop": false,
+      "trigger": "actual successful dish sale"
+    },
+    "self_stir": {
+      "frames": [
+        "cauldron_stir_left",
+        "cauldron_stir_right"
+      ],
+      "duration_ms": [
+        260,
+        260
+      ],
+      "loop": true,
+      "trigger": "actual cooking effect; UI must stop when effect ends"
+    },
+    "hagrid_thanks": {
+      "frames": [
+        "hagrid_idle",
+        "hagrid_thanks",
+        "hagrid_idle"
+      ],
+      "duration_ms": [
+        100,
+        750,
+        100
+      ],
+      "loop": false,
+      "trigger": "actual quest completion, never preview/decline"
+    },
+    "gust": {
+      "frames": [
+        "gust_small",
+        "gust_large"
+      ],
+      "duration_ms": [
+        100,
+        140
+      ],
+      "loop": false,
+      "trigger": "actual skill event; visual only, never damage or radius authority"
+    }
+  },
+  "integration_limits": [
+    "Pose frames are discrete poses, not a complete interpolated walking cycle.",
+    "Art does not implement gameplay, collision, input, cooking effects or UI focus.",
+    "Environment floor pieces are modular decorative diamonds; not certified seamless Wang tiles.",
+    "Background furniture is baked in; use either background composition or modular furniture, not both over the same furniture."
+  ]
+}
