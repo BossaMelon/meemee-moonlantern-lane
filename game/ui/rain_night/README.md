@@ -34,4 +34,8 @@ Godot --headless --path . --script game/ui/checks/rain_night_flow.gd -- /private
 python3 tools/with_render_lock.py -- Godot --fullscreen --path . --script game/ui/checks/rain_night_native.gd -- /private/tmp/NEW_NATIVE_FLOW
 ```
 
-`components` 使用合成 typed-view；`pad` 用真实 Main 与 GUI 准备料理，再注入 D-pad/A/B；`flow` 从采购走真实三波、次晨升级装备、E02 出发与暂停保存退出。仅在营业中用 12x 模拟，不代表人类游玩时长。`native` 复用同一真实输入流程，改挂实际根窗口并保存原始 PNG 和窗口/视口/显示驱动元数据，不后期缩放。完整三输入、料理效果实战、稀材和退出恢复由 P06 runtime suite 验证；这些定向检查不自行声称 Q06、实体设备或趣味通过。
+`components` 使用合成 typed-view；`pad` 用真实 Main 与 GUI 准备料理，再注入 D-pad/A/B；`flow` 从采购走真实三波、次晨升级装备、E02 出发与暂停保存退出。仅在营业中用 12x 模拟，不代表人类游玩时长。
+
+`native` 只验证呈现整改，复用真实经营流程到次晨装备即保存退出，不进入战斗。历史和投资区使用实际鼠标滚轮 InputEvent 导航，不能直接改滚动值或发 pressed。根窗口原图不后期缩放，逐图记录 Window/DisplayServer mode、尺寸、screen DPI/scale、stretch 与 PNG/UI 坐标映射、真实窗口焦点与焦点控件；focus signals 单独留在同一报告。等待 frame_post_draw 超过5秒即报告失败退出。用 `--windowed --resolution 844x390` 启动并在输出目录后附 `--small` 检查小窗口。headless 调用仅为无图的布局预检，不充当原生证据。原生运行必须先获负责人时段分配，再用全程共享锁串行执行。
+
+完整三输入、料理效果实战、稀材和退出恢复由 P06 runtime suite 验证；这些定向检查不自行声称 Q06、实体设备或趣味通过。

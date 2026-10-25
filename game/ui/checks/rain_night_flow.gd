@@ -98,12 +98,7 @@ func run():
 		Engine.time_scale=old_scale
 	await click("world_journal")
 	await act_click("primary","settle")
-	var comparison={}
-	for id in ["upgrade_field_kit","upgrade_shelf","growth_field_kit","growth_shelf","growth_effect_field_kit","growth_effect_shelf","growth_balance_field_kit","growth_balance_shelf"]:
-		var control=ui.get_action_control(id)
-		expect(is_instance_valid(control) and ui.scroll.get_global_rect().encloses(control.get_global_rect()),"both growth choices are comparable on the first screen: "+id)
-		comparison[id]=str(control.get_global_rect())
-	trace.append({"layout_checkpoint":"growth-first-screen","scroll_rect":str(ui.scroll.get_global_rect()),"choice_rects":comparison})
+	await check_growth_page()
 	await screenshot("settled-growth")
 	observed_upgrade_cost=int(ui.game.view().upgrades.filter(func(row): return row.upgrade_id=="field_kit")[0].cost)
 	await act_click("upgrade_field_kit","upgrade")
@@ -114,6 +109,17 @@ func run():
 	await act_click("equip_fan_wand","equip_weapon")
 	expect(ui.game.view().progression.equipped_weapon=="fan_wand","actual next morning equipment command succeeds")
 	expect("扇射魔杖" in ui.get_action_control("departure_summary").text and "风咒" in ui.get_action_control("departure_summary").text,"departure button is accompanied by the actual equipped wand and skill")
+	await finish_route()
+
+func check_growth_page():
+	var comparison={}
+	for id in ["upgrade_field_kit","upgrade_shelf","growth_field_kit","growth_shelf","growth_effect_field_kit","growth_effect_shelf","growth_balance_field_kit","growth_balance_shelf"]:
+		var control=ui.get_action_control(id)
+		expect(is_instance_valid(control) and ui.scroll.get_global_rect().encloses(control.get_global_rect()),"both growth choices are comparable on the first screen: "+id)
+		comparison[id]=str(control.get_global_rect())
+	trace.append({"layout_checkpoint":"growth-first-screen","scroll_rect":str(ui.scroll.get_global_rect()),"choice_rects":comparison})
+
+func finish_route():
 	await act_click("start_expedition","start_expedition")
 	expect(ui.game.view().phase=="expedition" and is_instance_valid(ui.battle_panel),"legal next-morning departure mounts the real E02 scene")
 	expect(ui.game.view().expedition.version==2 and ui.game.view().expedition.weapon_id=="fan_wand","real E02 model receives the newly equipped wand")
