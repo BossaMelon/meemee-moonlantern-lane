@@ -29,6 +29,7 @@ var input_count = 0
 var visual_evidence: Dictionary = {}
 var display_samples: Array = []
 var focus_events: Array = []
+var window_size_events: Array = []
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -43,6 +44,8 @@ func _initialize():
 	started_ms=Time.get_ticks_msec()
 	root.focus_entered.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":true}))
 	root.focus_exited.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":false}))
+	root.size_changed.connect(record_window_size)
+	record_window_size()
 	call_deferred("run")
 
 func expect(value: bool, message: String):
@@ -72,11 +75,18 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		# The CLI requests actual fullscreen. Never replace its screen-sized
 		# viewport with the old 1280/960 test dimensions or enlarge a PNG.
 		var deadline=Time.get_ticks_msec()+10000
+		var stable_since=Time.get_ticks_msec()
+		var last_rect=Rect2i()
 		while Time.get_ticks_msec()<deadline:
-			if root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN and fullscreen_coverage()!="": break
+			var current_rect=Rect2i(DisplayServer.window_get_position(),DisplayServer.window_get_size())
+			var correct=root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN and fullscreen_coverage()!=""
+			if current_rect!=last_rect or not correct: stable_since=Time.get_ticks_msec()
+			last_rect=current_rect
+			if correct and Time.get_ticks_msec()-stable_since>=500: break
 			await process_frame
 		expect(root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"CLI enters actual fullscreen mode")
 		expect(fullscreen_coverage()!="","fullscreen window reaches the API-reported screen area before scene startup")
+		expect(Time.get_ticks_msec()-stable_since>=500,"native fullscreen rectangle is stable for at least 500 ms")
 	else:
 		expect(root.mode==Window.MODE_WINDOWED and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_WINDOWED,"CLI enters explicit windowed mode")
 		root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
@@ -265,6 +275,10 @@ func fullscreen_coverage() -> String:
 	var usable=DisplayServer.screen_get_usable_rect(screen)
 	if DisplayServer.get_name()=="macOS" and screen_rect.encloses(usable) and window_rect==usable: return "macos_usable_rect"
 	return ""
+
+func record_window_size():
+	var window_size=DisplayServer.window_get_size()
+	window_size_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"mode":DisplayServer.window_get_mode(),"window_size":[window_size.x,window_size.y],"root_size":[root.size.x,root.size.y]})
 
 func active_scene_name() -> String:
 	if not is_instance_valid(ui): return ""
@@ -667,6 +681,7 @@ func write_report():
 	report["active_asset_evidence"]=visual_evidence
 	report["display_samples"]=display_samples
 	report["focus_events"]=focus_events
+	report["window_size_events"]=window_size_events
 	report["active_assets_loaded"]=visual_evidence.get("active_scene")==report.active_scene and visual_evidence.get("active_assets_loaded",false)
 	# The last live rendered frame is authoritative; children may already be
 	# exiting when the product's tree_exiting observer writes the final report.
