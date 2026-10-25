@@ -25,7 +25,7 @@ static func create(day: int, run_id: String, seed_value: int = 1, weapon_id: Str
 	var count = 4 if day == 2 else 3
 	for i in range(count):
 		var p = positions[i] + Vector2(rng.randi_range(-20,20),rng.randi_range(-20,20))
-		s.enemies.append(_enemy("m%d" % i,"sparkcap",p,2,800 + i*250))
+		s.enemies.append(_enemy("m%d" % i,"sparkcap",p,2,800 + i*200))
 	if day == 3: s.enemies.append(_enemy("elite","moonheart",Vector2(780,350),4,1000))
 	s.rng_state = str(rng.state)
 	_canonical(s)
@@ -337,10 +337,12 @@ static func validate(value: Variant) -> String:
 	if not _integer(s.next_cast,1,1000000) or not _integer(s.next_projectile,1,1000000): return "弹体序号非法"
 	if s.weapon_id not in ["bolt_wand","fan_wand"] or not s.skills is Array or s.skills.size() > 1 or (s.skills.size() == 1 and s.skills[0] != "gust"): return "动作装备非法"
 	if not s.entrance_armed is bool or not s.return_reason is String or (s.status == "returned") != (s.return_reason in ["retreat","completed","defeated","timeout","entrance"]): return "返程状态非法"
+	if s.status != "returned" and s.return_reason != "": return "尚未返程却有返程原因"
 	if not s.player is Dictionary or not s.input is Dictionary: return "玩家或输入非法"
 	var p: Dictionary = s.player
 	if not p.has_all(["x","y","hp","shield","aim_x","aim_y","cast_cooldown_ms","dodge_cooldown_ms","skill_cooldown_ms","dodge_remaining_ms","dodge_x","dodge_y","hurt_ms","skill_flash_ms"]): return "玩家状态不完整"
 	if not _coordinates(p) or not _integer(p.hp,0,3) or not p.shield is bool: return "玩家生命或位置非法"
+	if (p.hp == 0) != (s.status == "returned" and s.return_reason == "defeated"): return "玩家生命与返程状态不一致"
 	for key in ["aim_x","aim_y","dodge_x","dodge_y"]:
 		if not _finite_axis(p[key]): return "玩家方向非法"
 	for key in ["cast_cooldown_ms","dodge_cooldown_ms","skill_cooldown_ms","dodge_remaining_ms","hurt_ms","skill_flash_ms"]:
@@ -351,9 +353,10 @@ static func validate(value: Variant) -> String:
 	if not s.enemies is Array or not s.projectiles is Array or not s.drops is Array: return "动作实体数组非法"
 	if s.enemies.size() != (3 if s.day == 1 else 4) or s.projectiles.size() > 32 or s.drops.size() > s.enemies.size(): return "动作实体数量非法"
 	var enemies = {}
+	var expected_ids = ["m0","m1","m2","m3"] if s.day == 2 else (["m0","m1","m2","elite"] if s.day == 3 else ["m0","m1","m2"])
 	for e in s.enemies:
 		if not e is Dictionary or not e.has_all(["id","kind","x","y","hp","state","telegraph","shielded","timer_ms","exposed_ms","direction_x","direction_y","attack_index","attack_hit","wave_radius","hit_casts","drop_spawned"]): return "敌人状态不完整"
-		if not e.id is String or enemies.has(e.id) or not _coordinates(e) or e.kind not in ["sparkcap","moonheart"]: return "敌人身份非法"
+		if not e.id is String or e.id not in expected_ids or enemies.has(e.id) or not _coordinates(e) or e.kind not in ["sparkcap","moonheart"]: return "敌人身份非法"
 		if (e.kind == "moonheart") != (s.day == 3 and e.id == "elite"): return "精英配置非法"
 		if not _integer(e.hp,0,4 if e.kind == "moonheart" else 2) or e.state not in ["idle","telegraph","dash","wave","defeated"] or (e.hp == 0) != (e.state == "defeated"): return "敌人生命/阶段非法"
 		if not e.shielded is bool or not e.attack_hit is bool or not e.drop_spawned is bool or e.drop_spawned != (e.hp == 0): return "敌人掉落/护盾非法"
