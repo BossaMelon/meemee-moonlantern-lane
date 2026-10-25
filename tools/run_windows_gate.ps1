@@ -78,7 +78,9 @@ public static class W01Process {
  [DllImport("kernel32.dll", SetLastError=true)] static extern uint ResumeThread(IntPtr t);
  [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr p,out uint code);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
- static void Check(bool ok) { if(!ok) throw new Win32Exception(Marshal.GetLastWin32Error()); }
+ static void Check(bool ok,string operation="Win32 operation") {
+  if(!ok) { int code=Marshal.GetLastWin32Error(); throw new Win32Exception(code,operation+": "+new Win32Exception(code).Message); }
+ }
  static uint Active(IntPtr job) {
   int size=Marshal.SizeOf<Accounting>(); IntPtr p=Marshal.AllocHGlobal(size);
   try { Check(QueryInformationJobObject(job,1,p,(uint)size,IntPtr.Zero)); return Marshal.PtrToStructure<Accounting>(p).Active; }
@@ -108,18 +110,19 @@ public static class W01Process {
   ProcessInfo pi=new ProcessInfo(); var ids=new HashSet<int>(); var watch=Stopwatch.StartNew();
   try {
    var limits=new ExtendedLimit(); limits.Basic.Flags=0x2000;
-   Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf<ExtendedLimit>()));
+   Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf<ExtendedLimit>()),"configure owned job");
    var security=new Security(); security.Size=(uint)Marshal.SizeOf<Security>(); security.Inherit=1;
    using(var output=new FileStream(stdout,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite))
    using(var error=new FileStream(stderr,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite))
    using(var input=CreateFileW("NUL",0x80000000,3,ref security,3,0,IntPtr.Zero)) {
-    Check(!input.IsInvalid);
+    Check(!input.IsInvalid,"open NUL stdin");
     IntPtr oh=output.SafeFileHandle.DangerousGetHandle(), eh=error.SafeFileHandle.DangerousGetHandle(), ih=input.DangerousGetHandle();
     Check(SetHandleInformation(oh,1,1)); Check(SetHandleInformation(eh,1,1)); Check(SetHandleInformation(ih,1,1));
     var si=new Startup(); si.Size=(uint)Marshal.SizeOf<Startup>(); si.Flags=0x100;
     si.Input=ih; si.Output=oh; si.Error=eh;
     var command=new StringBuilder(Quote(exe)); foreach(var arg in args) command.Append(" ").Append(Quote(arg));
-    Check(CreateProcessW(exe,command,IntPtr.Zero,IntPtr.Zero,true,0x08000004,IntPtr.Zero,cwd,ref si,out pi));
+    Check(CreateProcessW(exe,command,IntPtr.Zero,IntPtr.Zero,true,0x08000004,IntPtr.Zero,cwd,ref si,out pi),
+     "CreateProcess exe="+exe+" cwd="+cwd+" command="+command);
     // If assignment fails, only the still-suspended process we just created is terminated.
     if(!AssignProcessToJobObject(job,pi.Process)) {
      int code=Marshal.GetLastWin32Error(); TerminateProcess(pi.Process,125); throw new Win32Exception(code);
@@ -159,6 +162,9 @@ function Assert-Archive($Path, [long]$Size, $Sha) {
 function Invoke-Owned($Exe, [string[]]$Arguments, $Working, [int]$Seconds, $Label, $EngineLog = '') {
     $out = Join-Path $ReportDirectory ($Label + '-stdout.log')
     $err = Join-Path $ReportDirectory ($Label + '-stderr.log')
+    $entry = [ordered]@{label=$Label; executable=$Exe; arguments=$Arguments; working_directory=$Working; process=$null; engine_error_logged=$false}
+    $executions.Add($entry)
+    Write-Json (Join-Path $ReportDirectory 'executions.json') $executions.ToArray()
     $result = [W01Process]::Run($Exe, $Arguments, $Working, $out, $err, $Seconds)
     $text = [IO.File]::ReadAllText($out, $utf8) + [IO.File]::ReadAllText($err, $utf8)
     if ($EngineLog) {
@@ -167,8 +173,7 @@ function Invoke-Owned($Exe, [string[]]$Arguments, $Working, [int]$Seconds, $Labe
     }
     $text = [regex]::Replace($text, '\x1b\[[0-?]*[ -/]*[@-~]', '')
     $engineError = [regex]::IsMatch($text, '(?m)^\s*(?:SCRIPT ERROR|ERROR):')
-    $entry = [ordered]@{label=$Label; executable=$Exe; arguments=$Arguments; process=$result; engine_error_logged=$engineError}
-    $executions.Add($entry)
+    $entry.process=$result; $entry.engine_error_logged=$engineError
     Write-Json (Join-Path $ReportDirectory 'executions.json') $executions.ToArray()
     if (-not $result.AllOwnedProcessesExited) { throw "Owned job did not become empty: $Label" }
     if ($result.TimedOut) { throw "Owned command timeout: $Label" }
@@ -258,9 +263,11 @@ Start-Process -NoNewWindow -FilePath $exe -ArgumentList @('-NoProfile','-NonInte
 exit 0
 '@, $utf8)
         $rejected=$false
-        try { $null=Invoke-Owned $pwsh @('-NoProfile','-NonInteractive','-File',$parent) $ownedRoot 2 'fixture-owned-child' }
+        try { $null=Invoke-Owned $pwsh @('-NoProfile','-NonInteractive','-File',$parent) $ownedRoot 5 'fixture-owned-child' }
         catch { if ($_.Exception.Message -notmatch 'Owned command timeout') { throw }; $rejected=$true }
         if (-not $rejected) { throw 'Child-process timeout fixture accepted.' }
+        $childResult=$executions[$executions.Count-1].process
+        if ($childResult.ExitCode -ne 0 -or $childResult.ObservedPids.Count -lt 2) { throw 'Fixture did not observe a normally exited parent and its remaining child.' }
         $summary.fixture_cases = @('wrong archive hash refused','changed Git blob refused','clean exit-zero import accepted','stdout/stderr/engine-log exit-zero errors refused','closed-parent owned child terminated and job empty')
         $summary.status='passed; fixtures only, no game or Windows source acceptance'
     } else {
