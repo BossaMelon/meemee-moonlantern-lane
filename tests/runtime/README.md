@@ -48,7 +48,7 @@ python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --out
 
 焦点诊断记录 `focus_entered/exited` 当时和下一帧的窗口焦点、输入序号、测试保持缓存、产品设备输入与权威动作输入，避免假设窗口/应用通知的先后顺序。战斗还在施法/闪避/技能的请求或观测状态改变时保留同类只读样本，JSONL 每条输入附焦点状态。失焦不会清理或重播驱动缓存，也不往核心补状态；失焦清输入和仍聚焦时丢输入须据记录分别判断。原生渲染须服从总协调分配的时段及正式共享锁，其他 chat 占用时仅做静态准备，不自行抢焦点。
 
-H01 `81f04a8` 已提供共享锁，获得原生渲染时段后用 `python3 /Users/yuehao.wang/.codex/worktrees/66a0/meemee-moonlantern-lane/tools/with_render_lock.py -- python3 tests/runtime/run_critical_path.py ...` 包住整轮；caller cwd 不变。P03 不复制该工具到自己的范围。headless 诊断不占渲染锁。
+H01 共享锁已合入主仓库，获得原生渲染时段后用 `python3 /Users/yuehao.wang/code/meemee-moonlantern-lane/tools/with_render_lock.py -- python3 tests/runtime/run_critical_path.py ...` 包住整轮；caller cwd 不变。P03 不复制该工具到自己的范围。headless 诊断不占渲染锁。
 
 监督器在每个进程结束后另存产品存档与备份的原始字节、SHA256，避免后续阶段覆盖唯一磁盘证据。这些文件与只读内存预期快照分别记录。
 
