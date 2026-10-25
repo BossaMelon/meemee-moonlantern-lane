@@ -453,7 +453,60 @@
         "used": false
       },
       null
-    ]
+    ],
+    "upgrade_restock_tradeoff": {
+      "upgrade_ids": [
+        "field_kit",
+        "shelf"
+      ],
+      "price_source": "contracts/quality-slice-v1.json rules.economy.upgrade_cost",
+      "baseline_baskets": {
+        "hot_meals": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 12
+            },
+            {
+              "item_id": "cream",
+              "quantity": 12
+            }
+          ],
+          "cost": 60
+        },
+        "quick_service": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 12
+            },
+            {
+              "item_id": "flour",
+              "quantity": 8
+            },
+            {
+              "item_id": "ember_herb",
+              "quantity": 4
+            }
+          ],
+          "cost": 64
+        }
+      },
+      "reduced_hot_basket": {
+        "buys": [
+          {
+            "item_id": "pumpkin",
+            "quantity": 6
+          },
+          {
+            "item_id": "cream",
+            "quantity": 6
+          }
+        ],
+        "cost": 30
+      },
+      "rules": "全部五seed，正常不探险首晚到日结；每个单买/双买/采购分支均从真实同源快照起步，不改现金或库存。单买逐项完成原篮；双买用原资金guard，完整篮失败不改变失败命令前状态；从双买后快照另走缩小篮并实际备餐营业。预算预测不作为passed报告。"
+    }
   },
   "scenarios": [
     {
@@ -687,6 +740,28 @@
       ],
       "outcomes": [
         "未试玩保持待验，单调反馈明确失败；自动runner不能报告QH passed，不外发招募邀请。"
+      ]
+    },
+    {
+      "id": "upgrade-restock-tradeoff",
+      "seed": 1,
+      "route": "economy",
+      "acceptance_ids": [
+        "Q04",
+        "Q05"
+      ],
+      "seed_policy": "all_seeds",
+      "config_ref": "configuration.upgrade_restock_tradeoff",
+      "steps": [
+        "全部seeds按正常不探险quick_service/hot_meals完成首晚，保存真实日结快照；不领取恢复/任务或注入资金。",
+        "每路线/seed从同源日结分别购买field_kit、shelf（契约候选价各100），next_day后逐项真实buy完整baseline_basket；记录每次请求、cash、UID库存和账本。",
+        "热锅分支从日结依次合法购买两项，next_day后尝试完整60篮，验证不足资金的buy原子拒绝；从同一双买后快照另开分支购买30的reduced_hot_basket，制作并实际营业，记录采购量和结果。",
+        "快餐尝试第二项时若现金不足仅由原资金guard拒绝；现金足够的热锅双买须成功，不得新增升级互斥条件。"
+      ],
+      "outcomes": [
+        "五seed两路线单买任一项后均实际完成原篮且现金非负，不用恢复/加钱；field_kit沿next_day真实装备试用。",
+        "热锅双买合法，完整篮无法全部购齐而缩小篮可实际备餐经营，采购/库存真实缩减；没有硬禁双买或以算术代执行。",
+        "保留失败命令前后等价证据和所有分支账本；新100初值未执行前保持待验，不以旧60报告宣称通过。"
       ]
     }
   ]
