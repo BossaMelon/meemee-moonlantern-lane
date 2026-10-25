@@ -14,6 +14,10 @@ var observations: Array = []
 var battle_observed: Dictionary = {}
 var started_ms = 0
 var config: Dictionary = {}
+var pending_product_exit = ""
+var product_exit_observed = false
+var saved_sha256 = ""
+var pickup_proofs: Array = []
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -51,6 +55,7 @@ func fresh(size: Vector2i):
 	# Configuration only: no seed/economy/phase/state replacement.
 	ui.save_path=folder+"/restaurant-save.json"
 	root.add_child(ui)
+	ui.tree_exiting.connect(_observe_product_exit)
 	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
 	await frames(6)
 	await screenshot(mode+"-initial-viewport")
@@ -151,22 +156,33 @@ func screenshot(name: String):
 	screenshots.append(path)
 
 func json_equal(a: Variant,b: Variant) -> bool:
-	return JSON.parse_string(JSON.stringify(a))==JSON.parse_string(JSON.stringify(b))
+	return JSON.parse_string(JSON.stringify(a,"",true,true))==JSON.parse_string(JSON.stringify(b,"",true,true))
 
 func record_checkpoint(name: String):
 	checkpoint=name
 	var file=FileAccess.open(folder+"/"+name+"-expected.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify(ui.game.snapshot(),"  ")); file.close()
+	file.store_string(JSON.stringify(ui.game.snapshot(),"  ",true,true)); file.close()
 	write_report()
+
+func _observe_product_exit():
+	if pending_product_exit.is_empty(): return
+	product_exit_observed=true
+	var disk=JSON.parse_string(FileAccess.get_file_as_string(ui.save_path))
+	saved_sha256=FileAccess.get_sha256(ui.save_path)
+	expect(json_equal(ui.game.snapshot(),disk),"product exit writes the complete final snapshot")
+	record_checkpoint(pending_product_exit)
+
+func expect_product_exit(name: String, control: Button):
+	pending_product_exit=name
+	write_report() # Intent alone is never a completed checkpoint.
+	await activate_control(control,"product_save_quit")
+	expect(false,"product save-and-quit input must terminate this process")
 
 func save_and_exit(name: String):
 	await activate("save")
 	expect("保存成功" in ui.feedback.text,"save reports success before process exit")
 	await screenshot(mode+"-"+name)
-	record_checkpoint(name)
-	# The real product quit control saves the same state and exits this process.
-	await activate("quit")
-	expect(false,"product quit must end process")
+	await expect_product_exit(name,ui.get_action_control("quit"))
 
 func restore(name: String):
 	var expected=JSON.parse_string(FileAccess.get_file_as_string(folder+"/"+name+"-expected.json"))
@@ -294,10 +310,9 @@ func battle(day: int, resume: bool = false):
 			await activate_control(ui.battle_panel.save_button,"battle_save")
 			expect("保存成功" in ui.feedback.text,"combat save reaches actual store")
 			await screenshot(mode+"-combat-checkpoint")
-			record_checkpoint("combat-paused")
-			# No product quit button is exposed on E01's fullscreen scene. This
-			# controlled harness exit is labelled separately, never product exit.
-			quit(0)
+			# A real product exit control must be supplied by the published E01/UI
+			# integration. Do not retain the earlier harness-exit fallback.
+			expect(false,"published combat save-and-quit integration is required")
 			return
 		var input=CombatDriver.next_input(s)
 		# Exercise acquired actions once, then reuse E01's actual movement policy.
@@ -313,10 +328,26 @@ func battle(day: int, resume: bool = false):
 	for action in ["movement","cast","dodge","hit","drop"]: expect(seen[action],"observed real battle "+action)
 	if day>=2: expect(seen.skill,"new skill executed from input")
 	if day==3: expect(inventory("moonheart").bag>0,"elite yields actual advanced ingredient")
+	verify_pickups_once()
 	battle_observed[str(day)]=seen
 	pressed_keys.clear(); active_touches.clear()
 	await frames(5)
 	await activate("tab_shopping")
+
+func verify_pickups_once():
+	var saved: Dictionary=ui.game.snapshot()
+	for drop in saved.expedition.drops:
+		if not drop.collected: continue
+		var identity: Dictionary=saved.collected_drops.get(drop.id,{})
+		expect(not identity.is_empty(),"collected drop has persisted identity: "+drop.id)
+		if identity.is_empty(): continue
+		var items=saved.items.filter(func(item): return item.uid==identity.uid and item.item_id==drop.item_id)
+		var ledger_count=0
+		for row in saved.ledger:
+			if row.kind=="pickup": ledger_count+=row.args.get("drop_ids",[]).count(drop.id)
+		expect(items.size()==1,"drop has exactly one actual inventory UID: "+drop.id)
+		expect(ledger_count==1,"drop appears exactly once in economic ledger: "+drop.id)
+		pickup_proofs.append({"drop_id":drop.id,"uid":identity.uid,"matching_items":items.size(),"ledger_occurrences":ledger_count})
 
 func prepare_day(day: int, hot: bool):
 	var targets={"floating_pie":4,"moon_stew":4} if hot else {"floating_pie":4}
@@ -350,7 +381,12 @@ func run():
 	if config.has("size"): size=Vector2i(config.size[0],config.size[1])
 	await fresh(size)
 	var hot=mode!="touch"
-	if stage=="layout":
+	if stage=="exit-smoke":
+		await save_and_exit("smoke")
+	elif stage=="restore-smoke":
+		await restore("smoke")
+		checkpoint="complete"; write_report(); quit(0 if failures.is_empty() else 1)
+	elif stage=="layout":
 		for id in ["pause","save","load","quit","primary","tab_gear"]:
 			var control=ui.get_action_control(id)
 			expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(control.get_global_rect()),"narrow viewport contains "+id)
@@ -395,6 +431,6 @@ func run():
 
 func write_report():
 	if input_file!=null: input_file.flush()
-	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"limitations":["No physical controller, iOS/Windows device or human fun claim.","Combat checkpoint uses controlled harness exit after actual UI save; main scene and Hagrid checkpoints use actual product quit."]}
+	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
 	var file=FileAccess.open(folder+"/"+attempt+"-report.json",FileAccess.WRITE)
 	if file!=null: file.store_string(JSON.stringify(report,"  ")); file.close()

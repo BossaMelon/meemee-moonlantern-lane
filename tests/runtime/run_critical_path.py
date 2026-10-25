@@ -16,6 +16,7 @@ from pathlib import Path
 
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "finished"), ("after-finished", "complete")]
+AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete"}
 
 
 def command_output(*cmd: str, cwd: Path) -> str:
@@ -27,7 +28,7 @@ def main() -> int:
     parser.add_argument("--godot", default=os.environ.get("GODOT"), required=not os.environ.get("GODOT"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--modes", nargs="+", choices=["mouse", "touch", "pad"], default=["mouse", "touch", "pad"])
-    parser.add_argument("--stage", choices=[x[0] for x in STAGES] + ["layout"], help="Targeted continuation using existing real save/checkpoint files")
+    parser.add_argument("--stage", choices=[x[0] for x in STAGES] + list(AUXILIARY_STAGES), help="Targeted continuation using existing real save/checkpoint files")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
     parser.add_argument("--timeout", type=int, default=300)
     args = parser.parse_args()
@@ -51,7 +52,7 @@ def main() -> int:
         "runs": [], "passed": False,
         "scope": "P01/P14 runtime evidence only; automated prototype gate remains separate.",
         "limits": ["Synthetic input, not physical devices or human playtest.",
-                   "Combat checkpoint exits harness after actual UI save; other checkpoints use real quit button.",
+                   "Every restart checkpoint requires the real product save-and-quit control and observed process exit.",
                    "Source launcher/cache-free packaging verification is a separate required check."]
     }
     report_path = output / ("evidence.json" if args.stage is None else f"evidence-{args.stage}.json")
@@ -65,7 +66,7 @@ def main() -> int:
         folder.mkdir(exist_ok=True)
         if args.stage is None and (folder / "restaurant-save.json").exists():
             raise SystemExit(f"Refusing to overwrite existing evidence/save: {folder}. Use a new output directory or --stage.")
-        for stage, expected in ([("layout", "layout-complete")] if args.stage == "layout" else STAGES):
+        for stage, expected in ([(args.stage, AUXILIARY_STAGES[args.stage])] if args.stage in AUXILIARY_STAGES else STAGES):
             if args.stage is not None and stage != args.stage:
                 continue
             attempt = stage + "-" + uuid.uuid4().hex[:8]
@@ -74,20 +75,22 @@ def main() -> int:
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
-            command = [godot, "--path", str(root), "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
+            command = [str(root / "tools/启动月灯巷.command"), "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
                        "--script", "tests/runtime/critical_path.gd", "--", "--config", str(config)]
-            run = {"mode": mode, "stage": stage, "command": command, "expected_checkpoint": expected}
+            run = {"mode": mode, "stage": stage, "command": command, "environment": {"GODOT": godot}, "expected_checkpoint": expected}
             evidence["runs"].append(run)
             write_report()
             started = time.monotonic()
             log_path = folder / f"{attempt}-process.log"
             with log_path.open("w") as log:
-                try:
-                    proc = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout)
-                    run["exit_code"] = proc.returncode
-                except subprocess.TimeoutExpired:
-                    run["exit_code"] = None
-                    run["timeout"] = True
+                with subprocess.Popen(command, cwd=root, env=dict(os.environ, GODOT=godot), stdout=log, stderr=subprocess.STDOUT) as proc:
+                    run["process_id"] = proc.pid
+                    try:
+                        run["exit_code"] = proc.wait(timeout=args.timeout)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()  # Only this test-owned process; never an unrelated engine.
+                        run["exit_code"] = proc.wait()
+                        run["timeout"] = True
             run["elapsed_seconds"] = round(time.monotonic() - started, 3)
             run["log"] = str(log_path)
             text = log_path.read_text(errors="replace")
@@ -98,9 +101,13 @@ def main() -> int:
             run["checks"] = result.get("checks", 0)
             run["checkpoint"] = result.get("checkpoint")
             run["failures"] = result.get("failures", [])
+            run["product_exit_observed"] = result.get("product_exit_observed", False)
+            run["saved_sha256"] = result.get("saved_sha256", "")
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
+                             and result.get("process_id") == run["process_id"]
+                             and (expected in ("complete", "layout-complete") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
                              and result.get("pixel_room_loaded") is True
                              and result.get("display") not in (None, "headless"))
             write_report()
