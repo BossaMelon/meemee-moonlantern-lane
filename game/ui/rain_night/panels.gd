@@ -12,6 +12,7 @@ const EFFECTS={"light_step":"轻步 · 首次闪避延长","clear_breath":"清�
 const TAGS={"meal":"料理","quick":"快捷","portable":"外带","hearty":"正餐","warming":"暖身","heat_hold":"保温","trail_light":"照路","celebration":"庆功"}
 const RARE={"sparkcap":{"name":"星火菇","value":4,"dish":"星火汤"},"moonheart":{"name":"月心菇","value":8,"dish":"彗星馅饼"}}
 const GEAR_NAMES={"bolt_wand":"直线魔杖","fan_wand":"扇射魔杖","gust":"风咒"}
+const Art=preload("res://game/ui/pixel_assets.gd")
 const REASONS={"unprepared":"菜单份数不足","unmatched":"现有菜品效果不匹配","cooled":"炖锅已凉，不能满足暖身需求","congestion":"供餐通道拥堵，等候耗尽","budget":"标价超过预算","matched":"需求与预算匹配","ordinary":"普通餐盘","floating":"浮空餐盘","pot":"热锅成组","hagrid_patrol":"海格巡护带餐"}
 var state: Dictionary={}
 var page="forecast"
@@ -20,6 +21,8 @@ var controls: Dictionary={}
 var priority_draft: Array=[]
 var priority_source: Array=[]
 var details_open=false
+var history_open=false
+var wave_action_in_footer=false
 
 func present(value: Dictionary, section: String, item_id: String=""):
 	state=value.duplicate(true)
@@ -124,6 +127,39 @@ func _tags(values: Array) -> String:
 	for value in values: names.append(TAGS.get(value,str(value)))
 	return " / ".join(names)
 
+func _needs(values: Array) -> String:
+	var names: Array[String]=[]
+	for value in values:
+		if value=="meal" and values.size()>1: continue
+		names.append(TAGS.get(value,str(value)))
+	return "且".join(names)
+
+func _batch_name(wave_id: Variant) -> String:
+	var parts=str(wave_id).split("-")
+	if parts.size()==2 and parts[1].begins_with("w"): return "第%d批"%int(parts[1].substr(1))
+	return "开门前"
+
+func _order_name(order_id: String) -> String:
+	var parts=order_id.split("-")
+	if parts.size()==3 and parts[2].begins_with("c"):
+		return "%s · %d号单"%[_batch_name(parts[0]+"-"+parts[1]),int(parts[2].substr(1))]
+	return "海格的带餐" if "hagrid" in order_id else "特别点单"
+
+func _wave_orders(wave_id: String) -> Array:
+	var result=[]
+	for order in state.get("demand_board",[]):
+		if not order.get("special",false) and str(order.get("id","")).begins_with(wave_id+"-"): result.append(order)
+	return result
+
+func _demand_summary(orders: Array) -> String:
+	var needs={}
+	for order in orders:
+		var tags=_needs(order.get("required",[]))
+		needs[tags]=needs.get(tags,0)+1
+	var lines: Array[String]=[]
+	for tags in needs: lines.append("%s %d位"%[tags,needs[tags]])
+	return " · ".join(lines)
+
 func _forecast():
 	_text(status_line(),"night_forecast",ACCENT,22)
 	var groups={"w1":[],"w2":[],"w3":[]}
@@ -134,22 +170,23 @@ func _forecast():
 	for index in range(1,4):
 		var orders: Array=groups["w%d"%index]
 		if orders.is_empty():
-			_text("第%d波 · 预报暂未提供"%index,"wave_summary_%d"%index,MUTED)
+			_text("第%d批 · 预报暂未提供"%index,"wave_summary_%d"%index,MUTED)
 			continue
-		var needs={}
 		var budgets: Array=[]
 		for order in orders:
-			var tags=_tags(order.get("required",[]))
-			needs[tags]=needs.get(tags,0)+1
 			budgets.append(int(order.budget))
-		var lines: Array[String]=[]
-		for tags in needs: lines.append("%s %d位" % [tags,needs[tags]])
-		_text("第%d波 · %d位 · 预算%d–%d金\n%s" % [index,orders.size(),budgets.min(),budgets.max(),"；".join(lines)],"wave_summary_%d"%index)
+		_text("第%d批 · %d位：%s\n每位预算 %d–%d金" % [index,orders.size(),_demand_summary(orders),budgets.min(),budgets.max()],"wave_summary_%d"%index)
 	_text("看需求再选取材路。稀有料理是额外选择，基础供货也能继续经营。","route_choice_note",MUTED)
 
 func _service_page():
 	var service=_service()
 	_text(status_line(),"service_status",ACCENT,22)
+	var intermission=state.get("phase","")=="intermission"
+	if intermission:
+		var upcoming=_wave_orders(str(service.get("next_wave_id","")))
+		var next_demand="下一批 %d位：%s"%[upcoming.size(),_demand_summary(upcoming)] if not upcoming.is_empty() else "下一批需求尚未记入账本"
+		_text("%s\n保温 %d/3份 · 还可留%d份"%[next_demand,service.held_uids.size(),maxi(0,3-service.held_uids.size())],"next_wave_summary",ACCENT)
+		_text("先去灶台补餐、菜单板改量和顺序，备好再迎客。","intermission_note",MUTED,16)
 	var lanes: Array[String]=[]
 	for channel in CHANNELS:
 		var count=0
@@ -158,23 +195,41 @@ func _service_page():
 			if reservation.channel==channel:
 				count+=1
 				remaining.append(int(reservation.remaining_ms))
-		lanes.append("%s %d/%d%s" % [CHANNELS[channel].name,count,CHANNELS[channel].capacity," · 下一份%.1f秒"%(remaining.min()/1000.0) if not remaining.is_empty() else " · 空闲"])
-	_text("\n".join(lanes),"service_channels")
+		lanes.append("%s%d/%d%s" % [{"ordinary":"普通","floating":"浮空","pot":"热锅"}[channel],count,CHANNELS[channel].capacity,"（%.1f秒）"%(remaining.min()/1000.0) if not remaining.is_empty() else ""])
+	_text(" · ".join(lanes),"service_channels",MUTED,16)
 	for reservation in service.reservations:
-		_text("料理#%d → %s · %s · 剩%.1f秒（已预留，不可重复使用）" % [reservation.item_uid,reservation.order_id,CHANNELS[reservation.channel].name,reservation.remaining_ms/1000.0],"reservation_%d"%reservation.item_uid,MUTED,16)
+		var label=_text("料理#%d → %s · %s · 剩%.1f秒（正送餐，暂不能取用）" % [reservation.item_uid,_order_name(str(reservation.order_id)),CHANNELS[reservation.channel].name,reservation.remaining_ms/1000.0],"reservation_%d"%reservation.item_uid,MUTED,16)
+		label.set_meta("order_id",reservation.order_id)
+		label.set_meta("item_uid",reservation.item_uid)
+	var completed=[]
 	for order in service.orders:
-		var detail=""
-		match str(order.status):
-			"waiting": detail="等候 · 还可等%.1f秒" % (maxi(0,int(order.patience_ms)-int(order.waited_ms))/1000.0)
-			"reserved": detail="已预留，在途期间不再消耗耐心"
-			"delivered": detail="已送达"
-			"left": detail="已离开 · "+_order_reason(str(order.id))
-		_text("%s · 预算%d金\n%s · %s" % [order.id,order.budget,_tags(order.required),detail],"service_order_"+str(order.id),INK,16)
-	if state.get("phase","")=="intermission":
-		_text("真正波间停时。可到灶台补餐、菜单板改量和优先序；继续不会自动开波。","intermission_note",ACCENT)
+		if str(order.status) in ["delivered","left"]:
+			completed.append(order)
+			continue
+		_order_line(order)
+	if not completed.is_empty():
+		var delivered=completed.filter(func(order): return order.status=="delivered").size()
+		_button("service_history_toggle","%s本批小结 · 送达%d / 离开%d"%["收起" if history_open else "展开",delivered,completed.size()-delivered],_toggle_history)
+		if history_open:
+			for order in completed: _order_line(order)
+	if intermission and not wave_action_in_footer:
 		var next_id=service.get("next_wave_id")
 		var enabled=next_id is String and not next_id.is_empty() and service.reservations.is_empty() and _allowed("start_wave",["intermission"])
-		_button("start_wave","备好后，开下一波",_request.bind("start_wave",{"wave_id":next_id}),enabled)
+		_button("start_wave","备好后，迎接下一批",_request.bind("start_wave",{"wave_id":next_id}),enabled)
+
+func _toggle_history():
+	history_open=not history_open
+	_rebuild()
+
+func _order_line(order: Dictionary):
+	var detail=""
+	match str(order.status):
+		"waiting": detail="等候 · 还可等%.1f秒" % (maxi(0,int(order.patience_ms)-int(order.waited_ms))/1000.0)
+		"reserved": detail="正在送餐，客人安心等候"
+		"delivered": detail="已送达"
+		"left": detail="已离开 · "+_order_reason(str(order.id))
+	var label=_text("%s · 预算%d金\n%s · %s" % [_order_name(str(order.id)),order.budget,_needs(order.required),detail],"service_order_"+str(order.id),INK,16)
+	label.set_meta("order_id",order.id)
 
 func _order_reason(id: String) -> String:
 	for sale in state.get("sales",[]):
@@ -189,17 +244,19 @@ func _menu():
 	for item in state.get("items",[]):
 		if item.item_id=="moon_stew" and counts.has(item.get("temperature")): counts[item.temperature]+=1
 	var held=_service().held_uids.size()
-	_text("炖锅：新热%d份 · 保温%d份 · 已凉%d份\n保温位 %d/3 · 尚余%d位（份数含真实在途库存）" % [counts.hot,counts.held,counts.cooled,held,maxi(0,3-held)],"temperature_summary",ACCENT)
+	_text("炖锅：新热%d份 · 保温%d份 · 已凉%d份\n保温位 %d/3 · 尚余%d位（含正在送出的份数）" % [counts.hot,counts.held,counts.cooled,held,maxi(0,3-held)],"temperature_summary",ACCENT)
 	_text("已凉仍可作正餐；不能匹配暖身需求，重新上菜单或读档不会复热。","temperature_note",MUTED,16)
 	var reserved={}
 	for reservation in _service().reservations: reserved[int(reservation.item_uid)]=true
-	_button("inventory_details_toggle","收起料理身份明细" if details_open else "查看具体料理身份",_toggle_details)
+	_button("inventory_details_toggle","收起每份料理" if details_open else "查看每份料理",_toggle_details)
 	for item in state.get("items",[]):
 		if not selected_item.is_empty() and item.item_id!=selected_item: continue
 		if item.get("prepared_wave_id")==null: continue
 		var locked=reserved.has(int(item.uid)) or item.location=="reserved"
 		if not details_open and not locked: continue
-		_text("%s #%d · %s · %s%s" % [_name(item.item_id),item.uid,item.prepared_wave_id,{"hot":"新热","held":"保温","cooled":"已凉"}.get(item.get("temperature"),"本波资格按制作波次")," · 预留中，不可移出/自食/售回" if locked else ""],"dish_uid_%d"%item.uid,MUTED,16)
+		var label=_text("%s #%d · %s备好 · %s%s" % [_name(item.item_id),item.uid,_batch_name(item.prepared_wave_id),{"hot":"新热","held":"保温","cooled":"已凉"}.get(item.get("temperature"),"新做的饼才会浮送")," · 正在送餐，暂不能取用" if locked else ""],"dish_uid_%d"%item.uid,MUTED,16)
+		label.set_meta("item_uid",item.uid)
+		label.set_meta("prepared_wave_id",item.prepared_wave_id)
 	_text("供餐优先序（先选到的匹配菜先出餐）","menu_priority_title",ACCENT)
 	var enabled=_allowed("set_menu_priority",["preparation","intermission"])
 	for index in range(priority_draft.size()):
@@ -257,40 +314,71 @@ func _meal():
 	var pending=state.get("pending_meal_effect")
 	var carried=state.get("expedition",{}).get("meal_effect")
 	if pending is Dictionary:
-		_text("待下次正式探险：%s · 来源料理#%d" % [EFFECTS.get(pending.effect_id,pending.effect_id),pending.source_item_uid],"meal_state",ACCENT)
+		_text("下次出门带上：%s · 来自料理#%d" % [EFFECTS.get(pending.effect_id,pending.effect_id),pending.source_item_uid],"meal_state",ACCENT)
 	elif carried is Dictionary:
 		_text("已携入探险：%s · 来源料理#%d · %s" % [EFFECTS.get(carried.effect_id,carried.effect_id),carried.source_item_uid,"已触发消耗" if carried.used else "未触发，离场不返还"],"meal_state",ACCENT)
-	else: _text("餐前效果空槽 · 两种料理只能选一份","meal_state",ACCENT)
+	else: _text("出门前吃点什么？两种料理选一份。","meal_state",ACCENT)
 	for id in ["floating_pie","star_soup"]:
 		var uids=_bag_uids(id)
 		var next_source=" · 下一份#%d"%uids[0] if not uids.is_empty() else " · 储藏没有可食用份数"
 		_text(_name(id)+next_source,"meal_source_"+id)
-		_button("consume_pie" if id=="floating_pie" else "consume_star_soup","自食一份"+_name(id),_request.bind("consume",{"item_id":id,"quantity":1}),pending==null and not uids.is_empty() and _allowed("consume",["shopping"]))
-	_text("自食真实消耗一份料理，放弃其售价。效果不会因暂停或读档刷新。","meal_tradeoff",MUTED)
+		var button=_button("consume_pie" if id=="floating_pie" else "consume_star_soup","吃一份"+_name(id),_request.bind("consume",{"item_id":id,"quantity":1}),pending==null and not uids.is_empty() and _allowed("consume",["shopping"]))
+		_dish_icon(button,id)
+	_text("吃掉的这一份就不能卖了。带来的效果只能用一次，暂停或读档不会补回。","meal_tradeoff",MUTED,16)
 
 func _rare():
 	for id in RARE:
 		var data: Dictionary=RARE[id]
 		var amount=_bag_uids(id).size()
-		_text("%s · 可操作储藏%d份" % [data.name,amount],"rare_stock_"+id,ACCENT)
+		_text("%s · 柜中还有%d份" % [data.name,amount],"rare_stock_"+id,ACCENT)
 		_text("售原料得%d金；做%s可出售或自食，也可保留给之后的菜单。原料售回不计菜品收入。" % [data.value,data.dish],"rare_tradeoff_"+id)
 		_button("recycle_"+id,"售回1份%s · %d金" % [data.name,data.value],_request.bind("recycle",{"item_id":id,"quantity":1}),amount>0 and _allowed("recycle",["shopping","preparation"]))
 		_button("rare_cook_"+id,"回灶台，看看"+str(data.dish),func(): world_requested.emit("world_craft"))
 	_button("rare_keep","先保留，合上储藏柜",func(): world_requested.emit("world_storage"))
 
 func _growth():
-	_text("累计菜品收入：%d金" % state.get("dish_income",0),"growth_income",ACCENT)
+	_text("累计菜品收入 %d金 · 手头 %d金" % [state.get("dish_income",0),state.get("cash",0)],"growth_income",ACCENT,16)
+	var choices=HBoxContainer.new()
+	choices.add_theme_constant_override("separation",16)
+	add_child(choices)
 	for upgrade in state.get("upgrades",[]):
 		if upgrade.upgrade_id not in ["field_kit","shelf"]: continue
-		_text("%s · %d金\n%s" % [upgrade.name,upgrade.cost,upgrade.description],"growth_"+str(upgrade.upgrade_id))
+		var column=VBoxContainer.new()
+		column.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		column.size_flags_stretch_ratio=1
+		column.add_theme_constant_override("separation",6)
+		choices.add_child(column)
+		var title=_text("%s · %d金" % [upgrade.name,upgrade.cost],"growth_"+str(upgrade.upgrade_id),ACCENT,18)
+		var effect=_text(str(upgrade.description),"growth_effect_"+str(upgrade.upgrade_id),INK,16)
 		var remaining=int(state.get("cash",0))-int(upgrade.cost)
-		_text("购买后可用%d金"%remaining if remaining>=0 else "还差%d金"%(-remaining),"growth_balance_"+str(upgrade.upgrade_id),MUTED)
-		_button("upgrade_"+str(upgrade.upgrade_id),"已购买" if upgrade.owned else "投资明天 · "+str(upgrade.name),_request.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),not upgrade.owned and upgrade.available and _allowed("upgrade",["settled"]))
-		if not upgrade.available and not upgrade.owned: _text(str(upgrade.reason),"growth_reason_"+str(upgrade.upgrade_id),MUTED)
+		var balance=_text("已投资" if upgrade.owned else ("买后剩%d金"%remaining if remaining>=0 else "还差%d金"%(-remaining)),"growth_balance_"+str(upgrade.upgrade_id),MUTED,16)
+		var button=_button("upgrade_"+str(upgrade.upgrade_id),"已购买" if upgrade.owned else "投资明天",_request.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),not upgrade.owned and upgrade.available and _allowed("upgrade",["settled"]))
+		_dish_icon(button,"fan_wand" if upgrade.upgrade_id=="field_kit" else "floating_pie")
+		for control in [title,effect,balance,button]:
+			control.custom_minimum_size.x=0
+			remove_child(control);column.add_child(control)
+		if not upgrade.available and not upgrade.owned:
+			var reason=_text(str(upgrade.reason),"growth_reason_"+str(upgrade.upgrade_id),MUTED,16)
+			reason.custom_minimum_size.x=0
+			remove_child(reason);column.add_child(reason)
 	var progression: Dictionary=state.get("progression",{})
-	_text("已拥有：%s\n次晨待生效：%s" % [_gear_names(progression.get("owned_weapons",[])),_gear_names(progression.get("pending_unlocks",[]))],"growth_state",MUTED)
+	_text("已拥有：%s · 明早带来：%s" % [_gear_names(progression.get("owned_weapons",[])),_gear_names(progression.get("pending_unlocks",[]))],"growth_state",MUTED,16)
 	_button("next_morning","合上账本，进入次晨",_request.bind("next_day",{}),_allowed("next_day",["settled"]))
-	_text("次晨到装备处选新杖，再从门口出发试试新路线。","growth_next_step",MUTED)
+	_text("明早到装备处选好魔杖，再去菇圃试试。","growth_next_step",MUTED,16)
+
+func _dish_icon(button: Button, id: String):
+	button.icon=Art.sprite(id)
+	button.expand_icon=true
+	button.add_theme_constant_override("icon_max_width",32)
+
+static func departure_summary(value: Dictionary) -> String:
+	var progression: Dictionary=value.get("progression",{})
+	var skills: Array[String]=[]
+	for skill in progression.get("skills",[]): skills.append(GEAR_NAMES.get(skill,str(skill)))
+	var meal=value.get("pending_meal_effect")
+	var food="未吃餐前料理"
+	if meal is Dictionary: food="%s（料理#%d）"%[EFFECTS.get(meal.effect_id,meal.effect_id),meal.source_item_uid]
+	return "%s · %s\n%s"%[GEAR_NAMES.get(progression.get("equipped_weapon",""),"尚未装备魔杖"),"、".join(skills) if not skills.is_empty() else "暂无技能",food]
 
 func _gear_names(values: Array) -> String:
 	var names: Array[String]=[]

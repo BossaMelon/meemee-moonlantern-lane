@@ -9,13 +9,15 @@
 | 真实世界入口 | 相关组件与动作 |
 |---|---|
 | `world_journal` 账本 | 三波预报、日结成长；`upgrade_field_kit` / `upgrade_shelf` 沿旧 ID；`next_morning` 发送 `next_day {}` |
-| `world_counter` 柜台 | 本波等待、通道、在途与实际离开原因；真正 intermission 时才出现 `start_wave`，发送当时 `service.next_wave_id` |
+| `world_counter` 柜台 | 本波等待、通道、在途与实际离开原因；intermission 首屏先看下一批与保温，`start_wave` 由主场景固定页脚的唯一按钮承载，发送当时 `service.next_wave_id`；`service_history_toggle` 只展开本批已送达/离开小结 |
 | `world_menu` 菜单板 | 热/保温/已凉份数、三份保温余量、预留身份；`priority_up_<item_id>` / `priority_down_<item_id>` 改本地草稿，`menu_priority_apply` 发送完整顺序 |
 | `world_craft` / `world_stove` | 保留 `recipe_<id>`、`craft_<id>` 与批量控件；真实新核心允许 shopping/preparation/intermission，不能把 paused trading 当波间 |
 | `world_storage` 柜格 | `recycle_sparkcap` / `recycle_moonheart` 售真实 bag 一份；`rare_cook_<id>` 回世界聚焦灶台；`rare_keep` 保留，不发经济指令 |
 | `world_gear` 装备 | `consume_pie` / `consume_star_soup` 发 `consume {item_id,quantity:1}`；沿旧 `equip_fan_wand` / `start_expedition` 接合法次晨流程，无 practice/reset |
 
 只读定位 ID：`night_forecast`、`wave_summary_1/2/3`、`service_status`、`service_channels`、`service_order_<order_id>`、`reservation_<item_uid>`、`temperature_summary`、`dish_uid_<uid>`、`meal_state`、`meal_source_<item_id>`、`growth_income/growth_state`。这些是 Label，不是手动服务普通客的按钮。菜单默认只列被预留的身份，`inventory_details_toggle` 才展开当前菜品的其余身份，避免把80份库存变成长清单。普通出餐与成交反馈只由核心的真实状态/事件驱动。
+
+可见订单用“第几批 · 几号单”，料理来源用制作批次与份号；原始 `order_id` / `item_uid` / `prepared_wave_id` 保留在对应 Label 的只读 metadata 与既有定位 ID 中。折叠的订单需从真实 `service_history_toggle` 展开后才能定位。`next_wave_summary` 显示真实下一批需求，缺数据不显示虚构零人；`departure_summary` 位于出发操作旁，显示当前魔杖、技能及餐前效果来源。日结两个投资列复用既有杖/料理图标，费用和购买后余额从当前 view 读取。
 
 菜单优先序只在 preparation/intermission 且核心 available_commands 明确允许时可改；同 ID 集合、无重复才允许应用。本地草稿不会写回 view。预留身份来自 service.reservations 的真实 item_uid，显示并排除其可操作份数。开波使用构建按钮时的确切 next_wave_id，不自动重选或跳过过期 ID。
 

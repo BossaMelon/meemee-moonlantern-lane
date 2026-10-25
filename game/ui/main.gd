@@ -41,6 +41,7 @@ var feedback: Label
 var scroll: ScrollContainer
 var body: VBoxContainer
 var primary: Button
+var departure_status: Label
 var pause_button: Button
 var sheet_layer: Control
 var sheet_surface: PanelContainer
@@ -432,6 +433,7 @@ func _button(id: String, value: String, callback: Callable, enabled: bool = true
 	return button
 
 func get_action_control(id: String) -> Control:
+	if id=="departure_summary" and is_instance_valid(departure_status) and departure_status.is_inside_tree(): return departure_status
 	var direct=action_controls.get(id)
 	if is_instance_valid(direct) and direct.is_inside_tree(): return direct
 	for panel in rain_panels:
@@ -442,6 +444,7 @@ func get_action_control(id: String) -> Control:
 
 func _append_rain_panel(section: String):
 	var panel=RainPanels.new()
+	panel.wave_action_in_footer=section=="service"
 	body.add_child(panel)
 	rain_panels.append(panel)
 	panel.intent_requested.connect(_act)
@@ -482,6 +485,7 @@ func _refresh():
 	var focus_id=str(focused.get_meta("action_id","")) if focused else ""
 	var old_scroll=scroll.scroll_vertical
 	rain_panels.clear()
+	action_controls.erase("start_wave")
 	for child in body.get_children():
 		body.remove_child(child)
 		child.queue_free()
@@ -530,6 +534,13 @@ func _refresh():
 	primary.text={"shopping":"食材备齐，回厨房 →","preparation":"翻开门牌，开始第一波 →","closing":"收工，记下今晚的账 →"}.get(view.phase,"")
 	primary.visible=sheet_open and ((tab=="shopping" and view.phase=="shopping") or (tab=="craft" and view.phase=="shopping") or (tab=="counter" and view.phase=="preparation") or (tab=="journal" and view.phase=="closing"))
 	primary.disabled=view.paused or not view.has("progression")
+	primary.set_meta("action_id","primary")
+	if sheet_open and tab=="counter" and view.phase=="intermission":
+		primary.text="备好后，迎接下一批 →"
+		primary.visible=true
+		primary.disabled=view.paused or not _enabled("start_wave") or not view.service.reservations.is_empty() or not view.service.next_wave_id is String
+		primary.set_meta("action_id","start_wave")
+		action_controls.start_wave=primary
 	if view.paused:
 		for id in action_controls:
 			if id not in ["pause","resume","save","load","quit","sheet_close"]: action_controls[id].disabled=true
@@ -760,7 +771,13 @@ func _build_gear():
 	if not compact: body.add_child(_label("巷后菇圃 · 今日准备",24,GOLD))
 	var expedition = view.expedition
 	body.add_child(_label("今日 %d 次 · 撤退不罚款，保留已拾取食材"%expedition.attempts_remaining if compact else "今日剩余 %d 次 · 击败食材怪后靠近拾取\n可以不去；撤退或失败保留已拾取材料，无罚款。"%expedition.attempts_remaining,16 if compact else 18,MUTED))
-	body.add_child(_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition")))
+	departure_status=_label(RainPanels.departure_summary(view),17,GOLD)
+	body.add_child(departure_status)
+	var depart=_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition"))
+	depart.icon=Art.sprite(str(view.progression.equipped_weapon))
+	depart.expand_icon=true
+	depart.add_theme_constant_override("icon_max_width",32)
+	body.add_child(depart)
 	body.add_child(_label("棚架干路可引冲撞桩；湿渠材料集中，风咒可清孢子。两路通往深处，也可提早返店。",17,MUTED))
 	_append_rain_panel("meal")
 	body.add_child(_label("武器与技能",22,GOLD))
@@ -783,7 +800,7 @@ func _build_gear():
 		if instance.location=="bag": card.add_child(_button("install_cauldron","留用：安装自搅坩埚",_act.bind("install",{"uid":instance.uid}),view.phase=="preparation" and device.installed==0))
 		elif instance.location=="installed": card.add_child(_button("uninstall_cauldron","拆下坩埚，回到储藏",_act.bind("uninstall",{"uid":instance.uid}),view.phase=="preparation"))
 	card.add_child(_button("sell_cauldron","售回一件未装配坩埚 · 18 金",_act.bind("recycle",{"item_id":"stirring_cauldron","quantity":1}),view.phase in ["shopping","preparation"] and device.bag>0))
-	_build_stock("ingredient","探险材料也进入真实储藏")
+	_build_stock("ingredient","带回的材料")
 
 func _build_special():
 	var pending = view.pending
@@ -810,12 +827,10 @@ func _build_journal():
 	for i in range(maxi(0,messages.size()-5),messages.size()): body.add_child(_label(messages[i],17,MUTED))
 
 func _build_summary():
-	body.add_child(_label("今夜收工，辛苦啦",24,GOLD))
 	var summary = view.summary
-	body.add_child(_label("第 %d 晚账单\n料理收入 %d − 已售成本 %d = 毛利 %d\n店铺费用 %d · 结末金币 %d" % [summary.day,summary.revenue,summary.sold_cost,summary.gross_profit,summary.fee,summary.cash],20))
-	body.add_child(_label("库存、厨具售回、奖励与升级另有来源，不把回收收入当料理毛利。",17,MUTED))
-	body.add_child(_label("海格巡护带餐："+_quest_status(),18,GOLD))
+	body.add_child(_label("第%d晚 · 料理收入%d − 成本%d = 毛利%d\n店铺费用%d · 结末%d金" % [summary.day,summary.revenue,summary.sold_cost,summary.gross_profit,summary.fee,summary.cash],18))
 	_append_rain_panel("growth")
+	body.add_child(_label("海格巡护带餐："+_quest_status(),17,GOLD))
 	for sale in view.sales:
 		if sale.day==view.day: body.add_child(_label(_event_text(sale),17,MUTED))
 
@@ -855,6 +870,9 @@ func _rewards(rewards: Variant) -> String:
 
 func _primary_action():
 	if game.view().paused: return
+	if view.phase=="intermission" and tab=="counter":
+		_act("start_wave",{"wave_id":view.service.next_wave_id})
+		return
 	match view.phase:
 		"shopping": _act("finish_shopping",{})
 		"preparation": _act("open_shop",{})

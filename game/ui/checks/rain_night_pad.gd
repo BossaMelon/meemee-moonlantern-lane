@@ -37,6 +37,7 @@ func run():
 	expect(actions.size()==before+1 and actions.back().kind=="consume" and actions.back().result.ok,"component A issues one accepted real consume command")
 	var meal=ui.game.view().pending_meal_effect
 	expect(meal is Dictionary and meal.effect_id=="light_step" and meal.source_item_uid>0 and not meal.used,"real one-slot effect retains consumed source UID")
+	expect("轻步" in ui.get_action_control("departure_summary").text and ("#%d"%meal.source_item_uid) in ui.get_action_control("departure_summary").text,"departure summary includes actual pending meal and its source portion")
 	expect(ui.get_action_control("consume_pie").disabled and ui.get_action_control("consume_star_soup").disabled,"both meal choices disable after actual slot occupation")
 	var boundary: Dictionary=ui.game.snapshot()
 	await press(JOY_BUTTON_B)

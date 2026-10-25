@@ -100,7 +100,7 @@ func run():
 	var request_count=received.size()
 	await click("menu_priority_apply")
 	expect(received.size()==request_count,"real disabled button cannot emit a trading priority write")
-	expect("预留中" in panel.get_action_control("dish_uid_2").text,"same reserved UID is explicitly locked")
+	expect("正在送餐" in panel.get_action_control("dish_uid_2").text and panel.get_action_control("dish_uid_2").get_meta("item_uid")==2,"same reserved UID is read-only and explained as currently being delivered")
 	panel.present(trading,"service")
 	await frames()
 	expect(panel.get_action_control("start_wave")==null,"paused active service is not intermission")
