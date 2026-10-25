@@ -20,7 +20,8 @@
       "owner": "acceptance_contract",
       "allowed_paths": [
         "contracts/**",
-        "tests/fixtures/**"
+        "tests/fixtures/**",
+        "docs/05-restaurant-prototype.md"
       ],
       "depends_on": []
     },
