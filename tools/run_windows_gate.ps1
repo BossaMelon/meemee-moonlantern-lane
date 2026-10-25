@@ -343,10 +343,10 @@ exit 0
             if (Test-Path -LiteralPath $gateReport -PathType Leaf) {
                 $failedGate=Read-Log $gateReport | ConvertFrom-Json -AsHashtable
                 if (($failedGate.errors -join "`n") -match 'command timed out after 120s:.*quality-slice') {
-                    $summary.quality_timeout_diagnostic=@{acceptance=$false; original_gate_status=$failedGate.status}
+                    $summary.quality_timeout_diagnostic=@{acceptance=$false; original_gate_status=$failedGate.status; selected_case='Q02'}
                     $diagnosticLog=Join-Path $ReportDirectory 'quality-diagnostic-engine.log'
                     try {
-                        $null = Invoke-Owned $engine @('--headless','--path',$source,'--log-file',$diagnosticLog,'--script','tests/run.gd','--','--suite','quality-slice','--report',(Join-Path $ReportDirectory 'quality-diagnostic-cases.json')) $source 120 'quality-diagnostic' $diagnosticLog
+                        $null = Invoke-Owned $engine @('--headless','--path',$source,'--log-file',$diagnosticLog,'--script','tests/run.gd','--','--suite','quality-slice','--case','Q02','--report',(Join-Path $ReportDirectory 'quality-diagnostic-cases.json')) $source 120 'quality-diagnostic' $diagnosticLog
                         $summary.quality_timeout_diagnostic.result='completed; original gate still failed'
                     } catch {
                         $summary.quality_timeout_diagnostic.result=$_.Exception.Message

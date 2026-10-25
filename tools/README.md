@@ -247,7 +247,7 @@ stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` �
 仅白名单上传 `font-report.json` 和日志，不上传该目录内可能产生的存档文件。
 随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
 不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
-若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次同 suite、同 120 秒上限的诊断，
+若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次已定位的 Q02、同 120 秒上限的诊断，
 补存控制台、独立引擎日志和实际 case 报告（若完成）；原 gate 失败始终保留，诊断不能替代验收。
 
 每个外部命令先暂停创建、加入本次未命名 Windows Job Object 后才恢复执行；
