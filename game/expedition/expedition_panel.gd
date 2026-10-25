@@ -5,6 +5,7 @@ signal pause_requested
 signal save_requested
 signal save_quit_requested
 signal action_events(events: Array)
+const EMPTY_INPUT = {"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}
 var session
 var state: Dictionary = {}
 var keys: Dictionary = {}
@@ -20,7 +21,8 @@ var manifest: Dictionary = {}
 var font: SystemFont
 var message = ""
 var serial = 0
-var last_input: Dictionary = {}
+var last_input: Dictionary = EMPTY_INPUT.duplicate()
+var _exit_pending = false
 var field = Rect2()
 var pause_button: Button
 var save_button: Button
@@ -43,7 +45,7 @@ func _ready():
 	if FileAccess.file_exists(path): manifest = JSON.parse_string(FileAccess.get_file_as_string(path))
 	pause_button = _button("暂停 / Esc",func(): release_inputs(); pause_requested.emit())
 	save_button = _button("保存",func(): release_inputs(); save_requested.emit())
-	save_quit_button = _button("保存退出",func(): release_inputs(); save_quit_requested.emit())
+	save_quit_button = _button("保存退出",_request_save_quit)
 	return_button = _button("返回饭店",_leave)
 	resized.connect(_layout)
 	_layout()
@@ -88,7 +90,8 @@ func _pause_text(paused: bool) -> String:
 
 func bind_session(value):
 	session = value
-	last_input = {}
+	_exit_pending = false
+	release_inputs()
 	refresh()
 
 func refresh():
@@ -110,16 +113,43 @@ func _command(kind: String, args: Dictionary = {}):
 	refresh()
 	return result
 
-func release_inputs():
+func _same_input(a: Dictionary, b: Dictionary) -> bool:
+	for key in EMPTY_INPUT:
+		if a.get(key,EMPTY_INPUT[key]) != b.get(key,EMPTY_INPUT[key]): return false
+	return true
+
+func _clear_device_inputs():
 	keys.clear()
 	touches.clear()
 	joy_buttons.clear()
 	sticks = {"move":Vector2.ZERO,"aim":Vector2.ZERO}
 	mouse_cast = false
 	mouse_aim = false
-	last_input = {}
-	if session != null and session.view().get("phase","") == "expedition": _command("expedition_input",{})
+	last_input = EMPTY_INPUT.duplicate()
+
+func release_inputs():
+	var prior = last_input
+	_clear_device_inputs()
+	# A clear is a real command only when the authoritative held input needs it.
+	# In particular, repeated host release/bind/exit callbacks must not grow requests.
+	if not _exit_pending and session != null:
+		var view: Dictionary = session.view()
+		if view.get("phase","") == "expedition":
+			var held: Dictionary = view.get("expedition",{}).get("input",prior)
+			if not _same_input(held,EMPTY_INPUT): _command("expedition_input",EMPTY_INPUT.duplicate())
 	queue_redraw()
+
+func _request_save_quit():
+	if _exit_pending: return
+	release_inputs()
+	_exit_pending = true
+	save_quit_requested.emit()
+
+func cancel_save_quit():
+	# The host calls this ONLY if saving failed or the user cancelled leaving.
+	_exit_pending = false
+	release_inputs()
+	grab_focus()
 
 func _notification(what):
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT: release_inputs()
@@ -130,16 +160,17 @@ func _leave():
 	if result.get("ok",false): returned.emit()
 
 func _process(delta: float):
-	if session == null or not visible: return
+	if _exit_pending or session == null or not is_visible_in_tree(): return
 	var view: Dictionary = session.view()
 	if view.get("phase","") != "expedition": return
-	var input = current_input()
-	if input != last_input:
-		var result = _command("expedition_input",input)
-		if result.get("ok",false): last_input = input.duplicate(true)
 	if view.get("paused",false):
+		_clear_device_inputs()
 		refresh()
 		return
+	var input = current_input()
+	if not _same_input(input,last_input):
+		var result = _command("expedition_input",input)
+		if result.get("ok",false): last_input = input.duplicate(true)
 	# Accumulate fractional milliseconds; don't round every rendered frame.
 	frame_ms += delta*1000.0
 	var elapsed = int(frame_ms)
@@ -184,37 +215,68 @@ func _centers() -> Dictionary:
 		"dodge":Vector2(size.x-100,size.y-93),"skill":Vector2(size.x-155,size.y-30)}
 
 func _input(event: InputEvent):
-	if not visible or session == null or session.view().get("phase","") != "expedition": return
-	if event is InputEventKey and not event.echo:
-		keys[event.physical_keycode if event.physical_keycode != 0 else event.keycode] = event.pressed
-		if event.pressed and event.keycode == KEY_ESCAPE: release_inputs(); pause_requested.emit()
+	if not is_visible_in_tree() or session == null: return
+	if _exit_pending:
+		get_viewport().set_input_as_handled()
+		return
+	var view: Dictionary = session.view()
+	if view.get("phase","") != "expedition": return
+	if (event is InputEventKey and event.keycode == KEY_ESCAPE) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_START):
+		get_viewport().set_input_as_handled()
+		if event.pressed and not (event is InputEventKey and event.echo):
+			release_inputs()
+			if not view.paused: pause_button.grab_focus()
+			else: grab_focus()
+			pause_requested.emit()
+		return
+	# Paused controls belong to the GUI, never to the combat held-input buffer.
+	if view.get("paused",false): return
+	if event is InputEventKey:
+		var code = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if code in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_J,KEY_SPACE,KEY_K,KEY_SHIFT,KEY_L,KEY_E]:
+			if not event.echo: keys[code] = event.pressed
+			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		pointer = get_global_transform_with_canvas().affine_inverse()*event.position
 		mouse_aim = field.has_point(pointer)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var local = get_global_transform_with_canvas().affine_inverse()*event.position
-		if not event.pressed: mouse_cast = false
-		elif field.has_point(local): mouse_cast = true; mouse_aim = true; pointer = local
+		if not event.pressed:
+			if mouse_cast: get_viewport().set_input_as_handled()
+			mouse_cast = false
+		elif field.has_point(local):
+			mouse_cast = true; mouse_aim = true; pointer = local
+			grab_focus()
+			get_viewport().set_input_as_handled()
 	elif event is InputEventJoypadMotion:
 		var amount = event.axis_value if absf(event.axis_value) >= 0.2 else 0.0
 		if event.axis == JOY_AXIS_LEFT_X: sticks.move.x = amount
 		elif event.axis == JOY_AXIS_LEFT_Y: sticks.move.y = amount
 		elif event.axis == JOY_AXIS_RIGHT_X: sticks.aim.x = amount; mouse_aim = false
 		elif event.axis == JOY_AXIS_RIGHT_Y: sticks.aim.y = amount; mouse_aim = false
+		if event.axis in [JOY_AXIS_LEFT_X,JOY_AXIS_LEFT_Y,JOY_AXIS_RIGHT_X,JOY_AXIS_RIGHT_Y]: get_viewport().set_input_as_handled()
 	elif event is InputEventJoypadButton:
-		joy_buttons[event.button_index] = event.pressed
-		if event.pressed and event.button_index == JOY_BUTTON_START: release_inputs(); pause_requested.emit()
+		if event.button_index in [JOY_BUTTON_A,JOY_BUTTON_B,JOY_BUTTON_X]:
+			joy_buttons[event.button_index] = event.pressed
+			get_viewport().set_input_as_handled()
+		elif event.button_index in [JOY_BUTTON_DPAD_UP,JOY_BUTTON_DPAD_DOWN,JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_RIGHT]:
+			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch:
 		var local = get_global_transform_with_canvas().affine_inverse()*event.position
-		if not event.pressed: touches.erase(event.index)
+		if not event.pressed:
+			if touches.has(event.index): get_viewport().set_input_as_handled()
+			touches.erase(event.index)
 		else:
 			var centers = _centers()
 			for kind in ["skill","cast","dodge","move","aim"]:
 				if local.distance_to(centers[kind]) <= (62.0 if kind in ["move","aim"] else 31.0):
 					touches[event.index] = {"kind":kind,"origin":centers[kind],"position":local}
 					mouse_aim = false
+					get_viewport().set_input_as_handled()
 					break
-	elif event is InputEventScreenDrag and touches.has(event.index): touches[event.index].position = get_global_transform_with_canvas().affine_inverse()*event.position
+	elif event is InputEventScreenDrag and touches.has(event.index):
+		touches[event.index].position = get_global_transform_with_canvas().affine_inverse()*event.position
+		get_viewport().set_input_as_handled()
 	queue_redraw()
 
 func _texture(id: String, background: bool = false) -> Texture2D:
