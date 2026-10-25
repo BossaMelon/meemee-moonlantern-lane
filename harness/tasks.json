@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "H01",
+      "owner": "repository_steward",
+      "allowed_paths": [
+        "tools/**",
+        ".github/workflows/**",
+        ".gitignore"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "H02",
+      "owner": "acceptance_contract",
+      "allowed_paths": [
+        "contracts/**",
+        "tests/fixtures/**"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "H03",
+      "owner": "platform_research",
+      "allowed_paths": [
+        "AGENTS.md",
+        "README.md",
+        "docs/03-agent-handoff.md",
+        "docs/04-technical-decisions.md",
+        "docs/project-status.md",
+        "harness/tasks.json",
+        ".github/pull_request_template.md"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "P01",
+      "owner": "core_implementation",
+      "allowed_paths": [
+        "project.godot",
+        "game/core/**",
+        "tests/run.gd",
+        "tests/core/**"
+      ],
+      "depends_on": [
+        "H01",
+        "H02",
+        "H03"
+      ]
+    },
+    {
+      "id": "P02",
+      "owner": "ui_implementation",
+      "allowed_paths": [
+        "scenes/**",
+        "game/ui/**",
+        "assets/**"
+      ],
+      "depends_on": [
+        "P01"
+      ]
+    },
+    {
+      "id": "P03",
+      "owner": "runtime_verification",
+      "allowed_paths": [
+        "tests/runtime/**"
+      ],
+      "depends_on": [
+        "P02"
+      ]
+    }
+  ]
+}
