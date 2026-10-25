@@ -1,5 +1,17 @@
 # 雨夜呈现组件与定位协议
 
+随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。
+
+字体检查入口：`Godot --headless --path PROJECT --log-file ABS_TEMP/engine-UUID.log --script game/ui/checks/portable_font.gd -- ABS_FRESH_DIR [--small] [--missing-glyph] [--path-tests]`。必须明确提供尚不存在的绝对输出目录，其父目录必须已存在；不要先mkdir输出目录。日志使用临时兄弟文件，不能先在输出目录内创建日志。接受本机TMPDIR/TEMP/TMP/RUNNER_TEMP或项目.gitignore明确忽略的output目录下的新目录；Windows支持这些根下的盘符绝对路径（正/反斜杠、空格均可），拒UNC/设备/盘符相对路径。拒绝回溯、越界前缀、玩家目录、链接/junction和已存在的文件或目录，不创建父目录、不复用旧位置。macOS的/tmp与/var按标准系统别名处理。
+
+检查实际 FontFile 数据 hash、完整随包字体链和真实 Main 中经 InputEvent 打开的标签/按钮字体绑定，并扫描生产源码/场景的字符全集（保守包含注释）及实际文字。`--missing-glyph` 是预期 exit1 的缺字负例。缺资源负例应在隔离小项目中保留同一检查/provider/清单/许可而不放字体及导入缓存，必须 exit1；不移动真实字体、不接触玩家存档。`--path-tests` 附加Windows/POSIX词法正负例，仍执行真正字体和Main绑定检查，不能代替Windows实际运行。W01须在冷导入后真实运行此字体入口，不能将exit2视为跳过或换原文件解码/系统字体回退求绿。
+
+CLI输出协议v1：exit0表示全部字体/绑定/几何检查通过；exit1表示字体/资源/字形断言失败；exit2表示CLI/输出目录或报告写入错误。正常完成写 `ABS_FRESH_DIR/font-report.json`，stdout另有一行 `PORTABLE_FONT_RESULT {JSON}`，含protocol/report/checks/failures/exit_code。目录在加载字体/UI前被拒时，不在请求位置写报告，stderr为 `PORTABLE_FONT_PATH_ERROR {JSON}`，含error/requested_output/font_probe_ran=false。报告保留原有fonts/missing/bindings/source_sha256，并记录fresh输出策略和可选path_cases。这是headless源码/资源字体与实际Main绑定协议，不是原生导出声明。
+
+默认检查1440×904虚拟视口，输出目录后加 `--small` 检查844×390；记录账本/菜谱/菜单/装备实际浮层与滚动区域几何，不能据此声称原生全屏。字形度量影响输入时沿用 `card_touch_scroll.gd` 等真实输入定向检查，不要求重跑无关经营链。
+
+原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。W01 只负责 Windows 源码门禁和冷导入，不生成原生包；E03 的 PCK 仅为资源回归。清单/OFL/NOTICE 属非资源文件，后续 D02 负责将其随真实原生导出产物纳入，并在无源码/原导入缓存的产物检查中验证。此 headless 检查不声称已经过原生导出、全屏/844×390像素或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
+
 `panels.gd` 是只读 typed-view 组件：`present(view, page, selected_item="")` 深拷贝输入，显示真实字段；`get_action_control(id)` 返回当前可见页面的 Control，`status_line()` 提供一行世界 HUD 摘要。没有 Session、存档、计时推进、发奖或成交模拟。组件 fixture 检查不能作为新雨夜游戏或 Q06 证据。
 
 组件页为 `forecast/service/menu/meal/rare/growth`，由主 UI 挂在现有纸木浮层中，保留 `world_*`、`get_open_sheet()`、`get_world_view()`；不增加常驻侧栏，不提供隐藏旧 tabbar。主场景按 P04 正式 facade 显式 `Session.new(seed,"rain-night-v1")`，默认存档为 `user://profiles/rain-night-v1/moonlantern.json`，不扫描旧 v2 用户路径。实际独立用户数据目录由 H05 启动器负责。

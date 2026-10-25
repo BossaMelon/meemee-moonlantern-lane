@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
+from copy import deepcopy
 
 import quality_runtime as runtime
 from quality_support import file_states
@@ -74,6 +75,14 @@ class DefaultProfileBoundaryTests(unittest.TestCase):
         self.assertEqual(set(runtime.validate_manifest(manifest, 'a'*40, 'b'*40)),
                          {str(guarded[0]), str(code), str(extra)})
 
+    def test_font_stage_cannot_pass_without_actual_page_font_observations(self):
+        digest = 'c' * 64
+        result = {'stage': 'font', 'suite': 'p06-rain-night-main-scene-runtime', 'simulation_scale': 1.0,
+                  'source_sha256': {'game/ui/main.gd': digest},
+                  'default_profile': {'save_path': runtime.DEFAULT_SAVE, 'user_dir': str(self.user),
+                                      'absolute_save': self.probe['save_path'], 'custom_user_dir_name': self.name}}
+        self.assertTrue(runtime.result_errors(result, {'probe': self.probe}, {'game/ui/main.gd': digest}))
+
     def test_missing_formal_dependencies_cannot_launch_any_process(self):
         with patch.object(runtime.subprocess, 'run') as launch, self.assertRaises(ValueError):
             runtime.prepare(self.root, '/not/an/engine', self.root/'out', self.root/'old.json', 'mouse', 'a'*40, 'b'*40)
@@ -117,6 +126,40 @@ class DefaultProfileBoundaryTests(unittest.TestCase):
         self.assertIn(str(evidence), manifest['guarded_files'])
         with self.assertRaises(FileExistsError):
             runtime.seed_checkpoint(manifest, evidence, 'touch', out)
+
+
+class FontEvidenceBoundaryTests(unittest.TestCase):
+    def fixture(self):
+        # Synthetic boundary fixture only; never submitted as runtime evidence.
+        font = {'class': 'FontFile', 'path': runtime.FONT_PATH, 'instance': '1234',
+                'data_sha256': runtime.FONT_SHA, 'data_bytes': 8331336,
+                'allow_system_fallback': False, 'fallback_count': 0}
+        binding = {'font_instance': '1234', 'font_path': runtime.FONT_PATH, 'missing_glyphs': []}
+        pages = [{'page': name, 'font': deepcopy(font), 'bindings': [dict(binding)],
+                  'canvas_font': deepcopy(font), 'buttons': []} for name in sorted(runtime.FONT_PAGES)]
+        paused = next(row for row in pages if row['page'] == 'expedition-paused')
+        paused['buttons'] = [dict(binding, id=name, ready=True, visible=True, enabled=True, inside_viewport=True)
+                             for name in ['pause_button', 'save_button', 'save_quit_button', 'return_button']]
+        return {'font_pages': pages, 'font_negative_data_sha': False, 'window_size': [844, 390],
+                'batch_proof': {'selected_three': True, 'selected_one': True, 'batch_inside_clip': True,
+                                'economic_delta': 0, 'lower_scroll': 80, 'batch_scroll': 0, 'scroll_samples': 9}}
+
+    def test_missing_data_fallbacks_detached_canvas_buttons_and_unscrolled_batch_fail(self):
+        valid = self.fixture()
+        self.assertEqual(runtime.font_result_errors(valid), [])
+        for field, wrong in [('data_sha256', '0'*64), ('allow_system_fallback', True),
+                             ('class', 'SystemFont'), ('fallback_count', 1)]:
+            bad = deepcopy(valid); bad['font_pages'][0]['font'][field] = wrong
+            with self.subTest(field=field): self.assertTrue(runtime.font_result_errors(bad))
+        bad = deepcopy(valid); bad['font_pages'].pop()
+        self.assertTrue(runtime.font_result_errors(bad))
+        for target in ('canvas_font', 'buttons'):
+            bad = deepcopy(valid); row = next(p for p in bad['font_pages'] if p['page'] == 'expedition-paused')
+            if target == 'canvas_font': row[target]['instance'] = 'detached'
+            else: row[target][0]['inside_viewport'] = False
+            with self.subTest(target=target): self.assertTrue(runtime.font_result_errors(bad))
+        bad = deepcopy(valid); bad['batch_proof']['lower_scroll'] = 0
+        self.assertTrue(runtime.font_result_errors(bad))
 
 
 if __name__ == '__main__':

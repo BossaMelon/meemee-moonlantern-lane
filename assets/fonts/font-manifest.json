@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "primary": {
+    "path": "res://assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf",
+    "family": "Noto Sans SC",
+    "version": "2.004",
+    "weight": 400,
+    "size_bytes": 8331336,
+    "upstream_commit": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+    "source_url": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+    "git_blob_sha1": "fc0fda9394367c16c1af7555a2ae4d5e2e6a6f02",
+    "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+    "license_path": "res://assets/fonts/noto-sans-sc/OFL.txt",
+    "license_source_url": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/LICENSE",
+    "license_sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+    "license": "OFL-1.1",
+    "font_version_string": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+    "copyright": "© 2014-2021 Adobe (http://www.adobe.com/).",
+    "notice_path": "res://assets/fonts/noto-sans-sc/NOTICE.txt",
+    "notice_sha256": "6e90fd3d0d7833c890789675674ae9d5f0f135f2fc842247cccffa8f38abb0dd"
+  },
+  "fallbacks": []
+}
