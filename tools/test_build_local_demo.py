@@ -6,13 +6,15 @@ import hashlib
 import io
 import json
 import os
+import signal
+import time
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import build_local_demo as demo
 
@@ -283,6 +285,98 @@ class PackagingProtocolTests(FixtureCase):
             self.assertFalse(demo.same_snapshot({'a': 1}, actual))
         self.assertFalse(demo.same_snapshot([1, 2], [2, 1]))
         self.assertFalse(demo.same_snapshot({'requests': {'id': 1}}, {'requests': {}}))
+
+
+class ReviewEdgeRegressions(FixtureCase):
+    def tamper_configuration(self, stage, kind="content"):
+        binary = self.engine / 'Contents/MacOS/Godot'
+        action = '(project/"override.cfg").write_text("[application]\\nconfig/use_custom_user_dir=false\\n")'
+        if kind == "symlink":
+            target = self.root / 'outside-config.txt'
+            target.write_text('external fixture must remain unchanged')
+            action = '(project/"override.cfg").unlink(); (project/"override.cfg").symlink_to(' + repr(str(target)) + ')'
+        injection = 'if mode==' + repr(stage) + ':\n ' + action + '\n'
+        original = binary.read_text()
+        binary.write_text(original.replace('sys.exit(7 if bad=="restore-failed"', injection + 'sys.exit(7 if bad=="restore-failed"'))
+
+    def test_review_config_mutation_is_rejected_after_every_probe_stage(self):
+        original = (self.engine / 'Contents/MacOS/Godot').read_text()
+        for stage in ('save', 'restore', 'player-directory'):
+            with self.subTest(stage=stage):
+                (self.engine / 'Contents/MacOS/Godot').write_text(original)
+                self.tamper_configuration(stage)
+                with self.assertRaises(demo.BuildError):
+                    self.build(output=self.root / ('bad-config-' + stage))
+
+    def test_review_config_symlink_cannot_write_through_to_an_external_file(self):
+        self.tamper_configuration('save', 'symlink')
+        try:
+            with self.assertRaises(demo.BuildError): self.build()
+        finally:
+            self.assertEqual((self.root / 'outside-config.txt').read_text(), 'external fixture must remain unchanged')
+
+    def test_review_late_config_mutation_is_rejected_before_delivery(self):
+        original = demo.shutil.copy2
+        def mutate_after_probe(source, destination, *args, **kwargs):
+            result = original(source, destination, *args, **kwargs)
+            if Path(destination).name == 'GODOT-LICENSE.txt':
+                (self.output / demo.APP_NAME / 'Contents/Resources/project/override.cfg').write_text('[application]\nconfig/use_custom_user_dir=false\n')
+            return result
+        with patch.object(demo.shutil, 'copy2', side_effect=mutate_after_probe), self.assertRaises(demo.BuildError):
+            self.build()
+
+    def group_fixture(self, interrupted=False):
+        parent_file = self.root / ('interrupt-parent.pid' if interrupted else 'timeout-parent.pid')
+        heartbeat = self.root / ('interrupt-heartbeat.json' if interrupted else 'timeout-heartbeat.json')
+        child_code = ('import os,signal,time,json\nfrom pathlib import Path\n'
+                      'signal.signal(signal.SIGTERM,signal.SIG_IGN)\n'
+                      'for tick in range(1200):\n path=Path(' + repr(str(heartbeat)) + ')\n temporary=path.with_suffix(".tmp")\n temporary.write_text(json.dumps({"pid":os.getpid(),"pgid":os.getpgrp(),"tick":tick}))\n temporary.replace(path)\n time.sleep(0.03)\n')
+        parent_code = ('import os,subprocess,sys,time\nfrom pathlib import Path\n'
+                       'Path(' + repr(str(parent_file)) + ').write_text(str(os.getpid()))\n'
+                       'subprocess.Popen([sys.executable,"-c",' + repr(child_code) + '],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n'
+                       'time.sleep(60)\n')
+        original = demo.subprocess.Popen
+        class InterruptOnce(original):
+            raised = False
+            def communicate(process, *args, **kwargs):
+                if not process.raised:
+                    process.raised = True
+                    until = time.monotonic() + 5
+                    while not heartbeat.exists() and time.monotonic() < until: time.sleep(0.01)
+                    raise KeyboardInterrupt()
+                return super().communicate(*args, **kwargs)
+        try:
+            if interrupted:
+                with patch.object(demo.subprocess, 'Popen', InterruptOnce):
+                    result = demo.run_process([sys.executable, '-c', parent_code], os.environ.copy(), 1)
+            else:
+                result = demo.run_process([sys.executable, '-c', parent_code], os.environ.copy(), 0.7)
+            first = json.loads(heartbeat.read_text())
+            time.sleep(0.15)
+            second = json.loads(heartbeat.read_text())
+            self.assertEqual(first['pgid'], result['pid'])
+            self.assertEqual(first['tick'], second['tick'], 'TERM-ignoring same-group child still running after return')
+            self.assertIs(result.get('owned_group_exit_verified'), True)
+        finally:
+            if parent_file.exists():
+                group = int(parent_file.read_text())
+                try: os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError: pass
+
+    def test_review_timeout_stops_closed_pipe_term_ignoring_group_child(self):
+        self.group_fixture()
+
+    def test_review_interrupt_stops_closed_pipe_term_ignoring_group_child(self):
+        self.group_fixture(interrupted=True)
+
+    def test_denied_group_query_is_not_mistaken_for_absence(self):
+        process = Mock(pid=os.getpid() + 100000)
+        with patch.object(demo.os, 'killpg', side_effect=[None, None, PermissionError(), ProcessLookupError()]) as send:
+            exited, signals = demo.stop_owned_group(process)
+        self.assertTrue(exited)
+        self.assertEqual(signals, ['SIGTERM'])
+        self.assertEqual(send.call_args_list, [((process.pid, 0),), ((process.pid, signal.SIGTERM),),
+                                              ((process.pid, 0),), ((process.pid, 0),)])
 
 
 if __name__ == '__main__':

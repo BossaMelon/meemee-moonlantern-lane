@@ -13,8 +13,10 @@ import plistlib
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import tarfile
+import time
 import uuid
 
 LAUNCHER = 'tools/启动月灯巷.command'
@@ -56,6 +58,32 @@ def safe_path(value: Path) -> Path:
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_isolation_config(path, expected):
+    """Accept only the intended bytes in a private regular file, never a link."""
+    safe_path(path)
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as stream:
+        opened = os.fstat(stream.fileno())
+        require(stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1, 'isolation config must be a private regular file')
+        actual = stream.read()
+        current = path.lstat()
+        require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino), 'isolation config changed while checked')
+    expected_hash = hashlib.sha256(expected).hexdigest()
+    require(actual == expected and hashlib.sha256(actual).hexdigest() == expected_hash,
+            'isolation config differs from the expected configuration: ' + str(path))
+    return expected_hash
+
+
+def write_isolation_config(path, expected, previous=None):
+    if previous is None:
+        with path.open('xb') as stream: stream.write(expected)
+    else:
+        validate_isolation_config(path, previous)
+        temporary = path.with_name('.override-' + uuid.uuid4().hex)
+        with temporary.open('xb') as stream: stream.write(expected)
+        temporary.replace(path)
+    validate_isolation_config(path, expected)
 
 
 def hashes(root):
@@ -104,32 +132,64 @@ def archive_source(repo, candidate):
     return archive, files, scenes[0]
 
 
+def stop_owned_group(process):
+    """The new session's group is ours; parent exit/closed pipes do not prove group exit."""
+    group = process.pid
+    require(group != os.getpgrp(), 'refusing to signal the caller process group')
+    signals = []
+    def exists():
+        process.poll()  # Reap our parent even when its children closed the pipes.
+        try:
+            os.killpg(group, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # A denied query is not proof of absence (including during exit).
+            return True
+    for sig, grace in ((signal.SIGTERM, 0.25), (signal.SIGKILL, 5)):
+        if not exists(): return True, signals
+        try:
+            os.killpg(group, sig)
+            signals.append(sig.name)
+        except ProcessLookupError:
+            return True, signals
+        except PermissionError:
+            return False, signals
+        deadline = time.monotonic() + grace
+        while exists():
+            if time.monotonic() >= deadline: break
+            time.sleep(0.02)
+        else:
+            return True, signals
+    return not exists(), signals
+
+
 def run_process(command, env, timeout, log=None):
-    """Only terminate our new process group on timeout; never leave its import child running."""
+    """Bound cancellation to this newly created session, and verify its group exits."""
     with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           text=True, start_new_session=True) as process:
         timed_out = False
         interrupted = False
+        group_exited = None
+        cleanup_signals = []
         try:
             stdout, stderr = process.communicate(timeout=timeout)
         except (subprocess.TimeoutExpired, KeyboardInterrupt) as interruption:
             timed_out = isinstance(interruption, subprocess.TimeoutExpired)
             interrupted = isinstance(interruption, KeyboardInterrupt)
+            group_exited, cleanup_signals = stop_owned_group(process)
             try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            try:
-                stdout, stderr = process.communicate(timeout=5)
+                stdout, stderr = process.communicate(timeout=2)
             except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                stdout, stderr = process.communicate()
+                # An escaped session may hold a pipe. Do not signal an unowned group.
+                process.stdout.close(); process.stderr.close()
+                raise BuildError('owned group cleanup could not drain process pipes')
         if log is not None:
             log.write_text(stdout + '\n' + stderr)
+        require(group_exited is not False, 'owned process group did not exit after TERM/KILL')
         return {'command': [str(x) for x in command], 'pid': process.pid, 'exit_code': process.returncode,
+                'process_group_id': process.pid, 'cleanup_signals': cleanup_signals, 'owned_group_exit_verified': group_exited,
                 'timed_out': timed_out, 'interrupted': interrupted, 'engine_error_logged': bool(re.search(r'(?m)^\s*(?:SCRIPT ERROR|ERROR):', stdout + '\n' + stderr)),
                 'stdout': stdout[-16000:], 'stderr': stderr[-16000:]}
 
@@ -324,13 +384,22 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
         verify = output / 'verification'; verify.mkdir(); probe = verify / 'package_probe.gd'; probe.write_text(PROBE)
         token = uuid.uuid4().hex
         profiles = {name: 'MoonlanternDemo/quality-' + candidate[:12] + '-' + token + '/' + name for name in ('player', 'verify')}
+        configs = {name: ('[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name="' + profile + '"\n').encode()
+                   for name, profile in profiles.items()}
+        manifest['isolation_configurations_sha256'] = {name: hashlib.sha256(config).hexdigest() for name, config in configs.items()}
+        for name, config in configs.items():
+            write_isolation_config(verify / (name + '-override.cfg'), config)
+        def check_configs(current):
+            validate_isolation_config(project / 'override.cfg', current)
+            for name, config in configs.items():
+                validate_isolation_config(verify / (name + '-override.cfg'), config)
         manifest.update(profiles=profiles, app=APP_NAME, command='开始试玩.command', cold_cache_initially_absent=not (project / '.godot').exists())
         reports = {}
+        previous_config = None
         for mode, profile_name in (('save', 'verify'), ('restore', 'verify'), ('player-directory', 'player')):
-            config = '[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name="' + profiles[profile_name] + '"\n'
-            (project / 'override.cfg').write_text(config)
-            (verify / (profile_name + '-override.cfg')).write_text(config)
-            manifest.setdefault('isolation_configurations_sha256', {})[profile_name] = digest(project / 'override.cfg')
+            config = configs[profile_name]
+            write_isolation_config(project / 'override.cfg', config, previous_config)
+            previous_config = config
             report_path = verify / (mode + '.json')
             env = {**os.environ, 'MOON_DEMO_MODE': mode, 'MOON_DEMO_REPORT': str(report_path),
                    'MOON_DEMO_EXPECTED_PROFILE': profiles[profile_name], 'MOON_DEMO_BUILD_ID': token}
@@ -339,6 +408,7 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
             execution.update(mode=mode, profile=profiles[profile_name], report=str(report_path),
                              config_sha256=manifest['isolation_configurations_sha256'][profile_name])
             manifest['executions'].append(execution)
+            check_configs(config)
             launcher_log = resources / 'launcher.log'
             require(launcher_log.is_file() and not launcher_log.is_symlink(), 'actual app entry did not retain its log')
             execution['launcher_log_sha256'] = digest(launcher_log)
@@ -365,16 +435,17 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
         for name in ('GODOT-LICENSE.txt', 'GODOT-THIRD-PARTY-LICENSES.json'):
             shutil.copy2(verify / name, output / name)
             shutil.copy2(verify / name, resources / name)
-        manifest.update(status='headless-verified; native/Q06/legacy-external-hash acceptance pending',
-                        generated_import_metadata_sha256=generated,
-                        overrides=[{'path': 'override.cfg', 'sha256': digest(project / 'override.cfg'), 'reason': 'new isolated user directory only'}],
+        manifest.update(generated_import_metadata_sha256=generated,
+                        overrides=[{'path': 'override.cfg', 'sha256': manifest['isolation_configurations_sha256']['player'], 'reason': 'new isolated user directory only'}],
                         probe_reports=reports, player_save_file=reports['player-directory']['save_path'])
-        manifest['verification']['headless_main_default_save_restore_verified'] = True
         (output / '先看这里.txt').write_text('咩咩与月灯巷 · 本地质量试玩\n双击「' + APP_NAME + '」或「开始试玩.command」。自带Godot 4.7.2，离线源码运行包装，不是原生导出/公证发行包。\n'
             + '候选：' + candidate + '\n独立玩家存档：' + manifest['player_save_file'] + '\n'
             + '本包不读取、迁移旧v2玩家档。manifest记录源码、引擎、配置与诊断；headless默认保存/恢复不代表UI输入、native/Q06或人类趣味验收。\n')
         manifest['generated_sidecars_sha256'] = {p.relative_to(output).as_posix(): digest(p) for p in output.rglob('*')
             if p.is_file() and not p.is_relative_to(project) and not p.is_relative_to(resources / 'Godot.app') and p.name != 'manifest.json'}
+        check_configs(configs['player'])
+        manifest['status'] = 'headless-verified; native/Q06/legacy-external-hash acceptance pending'
+        manifest['verification']['headless_main_default_save_restore_verified'] = True
     except (Exception, KeyboardInterrupt) as error:
         manifest['status'] = 'failed; retained partial package and evidence; do not deliver'
         message = str(error) or type(error).__name__
