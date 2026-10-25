@@ -6,6 +6,22 @@
 
 采用 2D 像素三分之四斜俯视，目标是达到可在 Steam 销售的品质。Mac 离线三日原型是技术基线；用户已反馈“不好玩、地图和战斗单调”，品质目标尚未达到。**当前候选、交付验收、已知问题与证据统一见 [项目状态](docs/project-status.md)**。Windows/iOS、真实设备和人类趣味分别验收。
 
+## Mac 源码启动（main）
+
+main 已包含完整三日技术原型，可使用[源码启动器](tools/启动月灯巷.command)。在项目源码目录中运行：
+
+```sh
+./tools/启动月灯巷.command
+```
+
+也可在 Finder 中双击同一启动器。需要 **Godot 4.7.2 标准版**；启动器按顺序寻找 `GODOT` 指定的可执行文件、本项目 `.tools/Godot.app`、Git 工作树原始 checkout 的 `.tools/Godot.app`，最后是 PATH 中的 `godot`。例如引擎安装在 `/Applications` 时：
+
+```sh
+GODOT="/Applications/Godot.app/Contents/MacOS/Godot" ./tools/启动月灯巷.command
+```
+
+默认全屏启动；普通窗口或小屏检查请显式指定，例如 `./tools/启动月灯巷.command --windowed --resolution 844x390`。显式窗口模式会保留，最终全屏模式与尺寸的实际验收见项目状态。首次启动会自动无窗口导入资源后再运行，无需手动打开编辑器或搭场景。缺引擎、版本不符、缺主场景或导入进程失败会给出明确错误。此入口依赖源码与本地引擎；原生 `.app` 导出、签名和目标设备交付另行验收。
+
 ## Mac 本地试玩包
 
 已交付候选 `32e704a` 的本机试玩包，自带 Godot，无需搭场景或安装引擎。在 Finder 的“前往文件夹”打开下列目录，双击 `月灯巷试玩.app` 或 `开始试玩.command`：
@@ -29,22 +45,6 @@ open "/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-20261025-32e70
 ```
 
 同目录 `.bak` 为备份；与源码/验证档隔离，验证时不覆盖玩家主档或备份。操作见[操作与保存](#操作与保存)，完整证据见[项目状态](docs/project-status.md)。
-
-## Mac 源码启动
-
-[源码启动器](tools/启动月灯巷.command)用于含完整游戏候选的源码目录；当前 main 与已交付试玩候选的集成差异见项目状态。在完整项目源码目录中运行：
-
-```sh
-./tools/启动月灯巷.command
-```
-
-也可在 Finder 中双击同一启动器。需要 **Godot 4.7.2 标准版**；启动器按顺序寻找 `GODOT` 指定的可执行文件、本项目 `.tools/Godot.app`、Git 工作树原始 checkout 的 `.tools/Godot.app`，最后是 PATH 中的 `godot`。例如引擎安装在 `/Applications` 时：
-
-```sh
-GODOT="/Applications/Godot.app/Contents/MacOS/Godot" ./tools/启动月灯巷.command
-```
-
-默认全屏启动；普通窗口或小屏检查请显式指定，例如 `./tools/启动月灯巷.command --windowed --resolution 844x390`。显式窗口模式会保留，最终全屏模式与尺寸的实际验收见项目状态。首次启动会自动无窗口导入资源后再运行，无需手动打开编辑器或搭场景。缺引擎、版本不符、缺主场景或导入进程失败会给出明确错误。此入口依赖源码与本地引擎；原生 `.app` 导出、签名和目标设备交付另行验收。
 
 ## 操作与保存
 
