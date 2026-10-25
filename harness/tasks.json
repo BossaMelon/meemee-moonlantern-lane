@@ -318,7 +318,8 @@
         "game/expedition/expedition_panel.gd",
         "game/expedition/RAIN_GARDEN_API.md",
         "tests/expedition/export_resources.gd",
-        "tests/expedition/export_resources.gd.uid"
+        "tests/expedition/export_resources.gd.uid",
+        "tests/expedition/export_resources.py"
       ],
       "depends_on": [
         "P07"
