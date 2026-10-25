@@ -1,5 +1,18 @@
 # P03 主场景运行验收
 
+## P06 雨夜切片的独立证据准备
+
+旧三日脚本/报告只验证旧技术基线，不满足 [雨夜品质切片](../../docs/06-quality-slice.md) 的 Q06。`quality_support.py` 仅准备新的隔离证据目录和完整快照比较，不启动新产品、不调用核心命令，也不输出 Q06/QH 通过。完整新路线必须消费产品 owner 已发布的真实 UI/input 协议；Q01–Q05 自动套件由核心 runner 负责，人类 QH 不能自动通过。
+
+```sh
+python3 tests/runtime/quality_support.py --legacy-evidence /absolute/path/to/old-runtime/evidence.json --legacy-mode mouse --output /private/tmp/NEW_QUALITY_FIXTURE
+python3 -m unittest discover -s tests/runtime -p 'test_quality_support.py' -v
+```
+
+准备工具只接受旧完整运行中成功保存退出的真实主备档，核对归档 SHA256 和 v2 后逐字节复制到全新目录；不覆写旧产物或玩家数据，不造缺失备份。`preparation.json` 绑定原报告、候选、进程、来源/副本哈希以及新目录中旧默认路径的缺席状态。`isolation_changes()` 检查这些完整文件状态；新目录存在本身不能证明产品默认路径正确，后续须实跑新旧入口并记录实际 user-data/save 路径、profile/version/map 身份。准备报告固定 `runtime_verified=false`、`passed=false`、`human_status=not_assessed`，退出码0仅指准备成功。
+
+`snapshot_differences()` 比较所有对象字段与数组顺序/长度，不删除 requests、时钟、温度、UID、危险区或成长；只容许 JSON 整数的等值数值表示，拒绝 bool/number 混同与非有限数。单元夹具明确仅用于工具正反例，不是游戏存档或运行通过证明。旧三日运行说明如下。
+
 使用已有 Godot 4.7.2，通过引擎真实渲染主场景并注入 `InputEvent`。不使用 Computer Use，不直接提交核心命令、发按钮信号、修改经济状态或调用测试专用战斗模拟。沿用 UI owner 的场景预加载、帧等待、库存和数量辅助；P03 自己编排新世界入口与采购/备餐，覆盖旧 helper 的导航。战斗决策复用 E01 `tests/expedition/action_driver.gd`，只读取实际 session 的位置并转成设备事件。
 
 ```sh
