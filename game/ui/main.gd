@@ -628,6 +628,9 @@ func _collect_buttons(node: Node):
 
 func _card() -> VBoxContainer:
 	var panel = PanelContainer.new()
+	# Decorative paper must let touch drags reach the enclosing ScrollContainer.
+	# Child Buttons retain their own input handling and click boundaries.
+	panel.mouse_filter=Control.MOUSE_FILTER_PASS
 	panel.add_theme_stylebox_override("panel",_style(Color("354a3c") if tab=="shelf" else Color("f5e9cb"),Color("d4be91"),0,12))
 	body.add_child(panel)
 	var box = VBoxContainer.new()
