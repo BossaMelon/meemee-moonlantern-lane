@@ -18,7 +18,7 @@
 | P04 | core_implementation（原 P01） | [PR #28](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/28) `c670f4c` 已自然同步 E02/A02；core/project/tests 相对已验 `512bd72` 无差，复用其干净报告 `/private/tmp/p04-prototype-delivery/report.json`：完整 gate 79,654，旧 15 case 48,786，新 Q01–Q05 30,705。真实双 suite 均 exit 0、无引擎错误；不把原证据改标成新运行。坏档校验 P2 已定向闭合；已接收 PR #31，合并提交 `c293a9f4b3c13d86a4b19faa96453ad88f24be28` 源码树与正式候选 `13e5c50` 相同，已随最终门禁链合 main；QH 未验。 |
 | P05 | ui_implementation（原 P02） | [PR #31](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/31) 视觉候选 `749f440` 产品同 `571b7d4`/主审 `4cc5c2f`；root 核 13 源码、8 PNG、两报告哈希匹配：全屏 231 项/5 图，小屏 225 项/3 图，8 focus、两进程 exit 0、锁释放。独立审美确认原三项 UI/阅读问题全部关闭；营业重建小结点击 P2 及窄屏触屏 F05 已定向闭合；PR #31 已接收 PR #27（`8c15ef4`），并合入 PR #28（`c293a9f`），不将旧视觉报告改标到新候选。 |
 | P06 | runtime_verification（原 P03） | [PR #27](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/27) 已合入 PR #31（`8c15ef4`）；正式验收候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 的窄屏 touch 553/0、完整全屏 touch 1450/0 已由 root 实读接受，结合原 SHA mouse/pad、F04/history 与三 P2 定向证据接受 Q06 组合覆盖。原始证据与边界见下文；QH/实体硬件/Windows/iOS 未验。 |
-| A02 | pixel_art（原 A01） | 六件必要 sprite 已由 PR #21 交付。后续四件地面/浅渠/连续长桩资产 [PR #30](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/30) 内容 `9d2a3fa`，root 读代码、看 native/scale/layout，核旧 131 tracked 素材路径 blob、全部旧 manifest 记录与 SOURCES 不变；独立审美接受组件。native 更新 `fc08c8b` 资产无差、当前双 CI 绿后原生合 main `06252e00899c77359239fe0beb9cee5aa1688385`。四资产已交付，尚非 runtime/趣味验收。 |
+| A02 | pixel_art（原 A01） | 六件必要 sprite 已由 PR #21 交付。后续四件地面/浅渠/连续长桩资产 [PR #30](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/30) 内容 `9d2a3fa`，root 读代码、看 native/scale/layout，核旧 131 tracked 素材路径 blob、全部旧 manifest 记录与 SOURCES 不变；独立审美接受组件。native 更新 `fc08c8b` 资产无差、当前双 CI 绿后原生合 main `06252e00899c77359239fe0beb9cee5aa1688385`。原组件报告不单独代表 Q06；四资产已由 P06 正式场景消费/实际运行核验，人类趣味待验。 |
 | D01 | engineering_delivery（沿用 H05 同 owner/chat/model/tier） | [PR #34](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/34) `4cbcc2e` 的两 P2 已定向闭合并合 main `5b9d252`；[PR #36](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/36) 单行 JSON 数值兼容修复、26 项回归及当前 gate 经 root 接受后合 main `ae174278`。固定 `13e5c50` 的全新 r2 实际包 headless 三阶段通过，root 已独立核验接受；两种实际包原生入口 QA 亦已接受。 |
 
 110 取舍机制已实际闭合：root 复算 20 个热锅双买分支，现金账差额均为 0；标准档双买余 16 后可合法购买 3 份缩小篮，高价档余 52 后可购买正式 10 份篮并继续次晚。40 个正常模拟覆盖两价、两路、五种子和探索/不探索，均未依赖应急恢复。该证据来自真实命令与正式 `512bd72` 报告，替代旧 60/100 数值的缺口声明；不据此宣称全局平衡、人类趣味或 Steam 品质合格。
@@ -43,6 +43,9 @@ r2 实际包 `/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-rain-n
 实际包原生入口验收已由 root 接受，独立于上述完整产品 Q06：直接 CF entry 110＋LaunchServices 54＝164 checks，8 张原 PNG 均实际 mode 3、focus=true、IHDR 正确。真实 InputEvent 买 1 面粉使现金 60→58、库存 0→1，再用暂停 UI 保存退出；`/usr/bin/open -n -W APP` 启动第二进程，任何输入前两个完整快照与改变后的 expected 逐字段一致、主备哈希同为 `56cc80..`，随后实际 UI 退出。测试加载真实 Main 的 instrumented adapter，无 save_path 改写或命令代替输入；不声称无参数真人 Finder 启动、物理硬件或 QH 已验。
 
 包 manifest `0afb..` 未改，player override `ee80..` 精确还原且玩家主备档仍空；308 个静态源码、80 个引擎文件、23 个旧档 guard、旧包 567 文件及首轮失败包 732 文件前后无差，QA 仅改变 `launcher.log` 与 `.godot/editor/filesystem_cache10`。已知 PID `58116/58147/58150` 全退、锁已释放。交付报告 `/private/tmp/p06-package-r2-13e5c50/handoff.json`，证据索引 SHA256 `6489c36627c69d3784e5c6253537a4cf2a1c856ee350489e21ac74126fb3c0e1`，释放记录同目录 `slot-release.json`。r2 本地交付已接受，仍非原生导出/公证或 Steam 发布；Windows/iOS、实体硬件与 QH 未验，旧三日 tag/包/存档和商业边界保留。
+
+
+持久证据归档：`/Users/yuehao.wang/code/meemee-moonlantern-lane/output/acceptance-rain-night-20261026-13e5c50/` 的 `archive-index.json`（SHA256 `ae95c44924bcf5b91b51b836d9e7e29f3bffc187f52b14679093c48f27b87034`）记录 5 组已接受证据的原路径映射与逐文件哈希。root 已核验 704 个原件/副本每对 SHA 全部匹配，11 个重复导出 source/cache 省略路径明确；原报告绝对路径、运行 SHA 和本页历史 tmp 引用保留，不改标为新运行。
 
 ## 已交付与当前候选
 
