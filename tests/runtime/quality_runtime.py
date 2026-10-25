@@ -20,7 +20,10 @@ from quality_support import file_states, isolation_changes, prepare_isolation, s
 STAGES = [("start", "spore-warning"), ("after-spore", "intermission"),
           ("after-intermission", "delivery-in-flight"), ("after-delivery", "upgrade-pending"),
           ("after-upgrade", "next-morning-equipped"), ("after-equipped", "complete")]
-AUXILIARY_STAGES = {"focus": "focus-complete", "history": "history-complete", "narrow": "narrow-complete"}
+AUXILIARY_STAGES = {"focus": "focus-complete", "history": "history-complete", "narrow": "narrow-complete", "font": "font-complete"}
+FONT_SHA = "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9"
+FONT_PATH = "res://assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf"
+FONT_PAGES = {"main", "shopping", "craft", "shelf", "journal", "gear", "expedition-live", "expedition-paused"}
 DEFAULT_SAVE = "user://profiles/rain-night-v1/moonlantern.json"
 REQUIRED = ("game/ui/rain_night/panels.gd", "game/core/rain_night_session.gd",
             "tests/expedition/rain_driver.gd", "tests/runtime/rain_night_path.gd",
@@ -191,4 +194,42 @@ def result_errors(result: dict, manifest: dict, expected_sources: dict) -> list[
         errors.append("Wrong suite or scaled gameplay time")
     if not result.get("source_sha256") or any(expected_sources.get(path) != digest for path, digest in result.get("source_sha256", {}).items()):
         errors.append("Driver source observations differ from candidate hashes")
+    if result.get("stage") == "font":
+        errors.extend(font_result_errors(result))
+    return errors
+
+
+def font_result_errors(result: dict) -> list[str]:
+    errors = []
+    pages = result.get("font_pages", [])
+    if not isinstance(pages, list) or {row.get("page") for row in pages} != FONT_PAGES or len(pages) != len(FONT_PAGES):
+        return ["Font stage lacks the exact required actual page observations"]
+    def pinned(font):
+        return (isinstance(font, dict) and font.get("class") == "FontFile" and font.get("path") == FONT_PATH
+                and font.get("data_sha256") == FONT_SHA and font.get("data_bytes") == 8331336
+                and font.get("allow_system_fallback") is False and font.get("fallback_count") == 0
+                and bool(font.get("instance")))
+    for row in pages:
+        font = row.get("font", {})
+        bindings = row.get("bindings", [])
+        if not pinned(font) or not bindings or any(b.get("font_instance") != font.get("instance")
+                or b.get("font_path") != FONT_PATH or b.get("missing_glyphs") != [] for b in bindings):
+            errors.append("Actual page text does not bind the pinned packaged font: " + row["page"])
+        if row["page"].startswith("expedition"):
+            canvas = row.get("canvas_font", {})
+            if not pinned(canvas) or canvas.get("instance") != font.get("instance"):
+                errors.append("Actual expedition Canvas does not share the pinned font")
+        if row["page"] == "expedition-paused":
+            buttons = row.get("buttons", [])
+            if (len(buttons) != 4 or {b.get("id") for b in buttons} != {"pause_button", "save_button", "save_quit_button", "return_button"}
+                    or any(b.get("font_instance") != font.get("instance") or b.get("font_path") != FONT_PATH
+                           or any(b.get(k) is not True for k in ("ready", "visible", "enabled", "inside_viewport")) for b in buttons)):
+                errors.append("Four actual expedition Buttons are not ready, reachable and font-bound")
+    batch = result.get("batch_proof", {})
+    if any(batch.get(k) is not True for k in ("selected_three", "selected_one", "batch_inside_clip")) or batch.get("economic_delta") != 0:
+        errors.append("Real batch selection did not reach 3 then 1 without economic intent")
+    if result.get("window_size") == [844, 390] and not (batch.get("lower_scroll", 0) > batch.get("batch_scroll", 0) and batch.get("scroll_samples", 0) > 0):
+        errors.append("Narrow batch reachability lacks actual scrolling")
+    if result.get("font_negative_data_sha") is not False:
+        errors.append("Font diagnostic negative expectation cannot be accepted as a pass")
     return errors

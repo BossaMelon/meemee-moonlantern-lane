@@ -215,3 +215,60 @@ python3 -m unittest discover -s tools -p test_build_local_demo.py -v
 
 测试只用临时 Git/小型假引擎协议夹具；假项目明确不能作为游戏运行，临时目录自动清理。
 它们不构建真实交付包，也不称为游戏、原生或 Q06 验收。现有 required CI 不替代这项本地守卫测试。
+
+## W01：真实 Windows 源码验证
+
+`windows-validation.yml` 的稳定检查名为 `windows-source`，使用 Windows 2022、Python 3.14.6
+与 UTF-8。官方 setup-python v6 已解析并固定为
+`ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 和直接双 suite gate 保留。
+Linux prototype 仅新增冷导入准备、exit 0 错误扫描与白名单诊断。
+现有 validator 禁止 prototype block 中出现任何 if/continue-on-error；因此 Linux 导入失败时
+把原始进程/引擎日志和结果打印到 Actions step log，成功后另存白名单 artifact，不更改该约束。
+
+Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub runner 执行：
+
+```powershell
+./tools/run_windows_gate.ps1 -ReportDirectory "$env:RUNNER_TEMP/w01-source"
+```
+
+它本地克隆已 checkout 的不可变 Git SHA，在本次 GUID 临时目录中以 `core.autocrlf=false`
+检出到中文/空格路径；导入前后逐文件核对 Git blob 与 SHA256，拒绝链接/子模块、源码改写或未知新增文件。
+只允许本次引擎生成的 `.godot`、有源文件对应的 `.import`/`.uid` 元数据。
+报告区分实际 checkout/source SHA（PR 中可能为 GitHub merge commit）和 PR head，不能把它们互换。
+
+仅下载标准 editor `Godot_v4.7.2-stable_win64.exe.zip` 到本次临时目录，核对
+86,013,866 bytes 与 SHA256
+`731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953`，再解压并核有效 4.7.2。
+不安装全局引擎或导出模板。首次缓存必须缺席，实际 headless import 后要求纹理资源存在；
+stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` 也拒收。
+冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，输出 leaf 为尚不存在的
+`RUNNER_TEMP/w01-font`，由探针自行创建。缺探针/字体、非零退出、缺字、空绑定、OS fallback、
+字体数据或探针五项源码哈希与本次 Git blob 不符均失败；检查 Main 实际 Label/Button 绑定的字体实例。
+仅白名单上传 `font-report.json` 和日志，不上传该目录内可能产生的存档文件。
+随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
+不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
+若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次已定位的 Q02、同 120 秒上限的诊断，
+补存控制台、独立引擎日志和实际 case 报告（若完成）；原 gate 失败始终保留，诊断不能替代验收。
+
+每个外部命令先暂停创建、加入本次未命名 Windows Job Object 后才恢复执行；
+包括其正常继承的子进程，整组必须变空。超时仅终止该 job，关闭句柄也会回收该 job；
+不按名称杀 Godot、不处理未知进程。报告的 `ObservedPids` 是采样观察，不冒充完整 PID 历史；
+`AllOwnedProcessesExited` 来自实际 job 活跃进程计数。失败保留本次目录，不删除或复用已有输出。
+
+守卫 fixture 单独运行，不下载引擎、不执行游戏：
+
+```powershell
+./tools/run_windows_gate.ps1 -SelfTest -ReportDirectory "$env:RUNNER_TEMP/w01-selftest"
+```
+
+它检查错误 ZIP 哈希、Git blob 改写、exit 0 的三种错误日志通道与正例，以及父进程先退出后仍活着的
+自有子进程超时回收。`fixture_only=true`、`windows_source_verified=false` 明确区分 fixture 和实际验证。
+本机没有 PowerShell 时不能把静态阅读称为 fixture 通过；以实际 Windows CI 证据为准。
+
+CI 只上传显式列出的 summary/executions/source 哈希映射/gate JSON 及命令/导入日志，保留 7 天。
+ZIP、EXE、PCK、源码克隆和测试主备档都不在上传清单。既有 gate 的临时 case 报告汇总保留在 gate JSON 中，
+不是上传存档文件。Windows 失败时同样上传这些诊断；确有 Windows 不兼容先报告，具体越界修复由 root 另行授权。
+
+这是 Windows **source editor** 及文件系统/核心协议证据，不证明导出的游戏 EXE、原生窗口、中文排版、
+实体手柄/触屏或人类趣味。完整 Windows 原生导出仍是后续单独验收；不把标准 release 的 `--script`
+或 `--main-pack` 当作可用的诊断入口，不上传游戏构建或发布 Steam。

@@ -1,5 +1,18 @@
 extends SceneTree
 const Cases = preload("res://tests/expedition/rain_model_cases.gd")
 func _initialize():
-	var result = Cases.new().run()
+	var args = OS.get_cmdline_user_args()
+	var output = ""
+	for i in range(args.size()):
+		if args[i] == "--output":
+			if i+1 >= args.size() or args[i+1].is_empty():
+				push_error("--output requires a fresh absolute output directory")
+				quit(1)
+				return
+			output = args[i+1]
+	var result = Cases.new().run(output)
+	if not (result.get("checks") is int and result.get("failures") is Array):
+		push_error("rain model runner did not return structured checks/failures")
+		quit(1)
+		return
 	quit(1 if not result.failures.is_empty() else 0)

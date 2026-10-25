@@ -3,9 +3,18 @@ const Cases = preload("res://tests/expedition/return_boundary_cases.gd")
 const Session = preload("res://game/core/game_session.gd")
 func _initialize():
 	var args = OS.get_cmdline_user_args()
-	var output = "/tmp/e02-return-boundaries"
-	for i in range(args.size()-1):
-		if args[i] == "--output": output = args[i+1]
+	var output = ""
+	for i in range(args.size()):
+		if args[i] == "--output":
+			if i+1 >= args.size() or args[i+1].is_empty():
+				push_error("--output requires a fresh absolute output directory")
+				quit(1)
+				return
+			output = args[i+1]
 	var factory = Callable() if "--component-only" in args else func(seed_value): return Session.new(seed_value)
 	var result = Cases.new().run(factory,output)
+	if not (result.get("checks") is int and result.get("failures") is Array):
+		push_error("return boundary runner did not return structured checks/failures")
+		quit(1)
+		return
 	quit(1 if not result.failures.is_empty() else 0)
