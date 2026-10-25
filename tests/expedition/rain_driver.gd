@@ -90,5 +90,7 @@ func next_input(s: Dictionary) -> Dictionary:
 				if not d.collected and p.distance_to(_pos(d)) < nearest: pickup = d; nearest = p.distance_to(_pos(d))
 			if not pickup.is_empty(): move = _walk(p,_pos(pickup))
 			else: deep = false; move = _walk(p,Vector2(28,270))
+	# This observation strategy intentionally reserves its first gust for the deep zone.
+	if observe_deep and not observed_deep_active: skill = false
 	if s.status == "returned": finished = true
 	return {"move_x":move.x,"move_y":move.y,"aim_x":aim.x,"aim_y":aim.y,"cast":cast,"dodge":dodge,"skill":skill}

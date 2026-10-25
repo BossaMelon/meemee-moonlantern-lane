@@ -37,7 +37,6 @@ var _paused = false
 var hud_style: StyleBoxFlat
 var menu_style: StyleBox
 var _paper_available = false
-var gust_visual_range = 120.0
 
 func _ready():
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -173,7 +172,6 @@ func _feedback(events: Array):
 			"drop_collected": message = "采得月心菇" if event.item_id == "moonheart" else "采得星火菇"
 			"enemy_staggered": message = "撞桩破绽！" if event.entity_id == "deep-elite" else "撞桩硬直，趁现在施法"
 			"spore_cleared": message = "风咒吹散了孢子"
-			"skill": gust_visual_range = event.get("range",120.0)
 
 func refresh():
 	if session != null:
@@ -539,7 +537,7 @@ func _draw():
 				draw_line(pos,pos+Vector2(actor.aim_x,actor.aim_y)*35,Color("bce7e8"),2)
 				if actor.shield: draw_arc(pos,24,0,TAU,40,Color("faf4c0"),2)
 				if actor.skill_flash_ms > 0:
-					draw_arc(pos,gust_visual_range,0,TAU,48,Color(0.6,1,0.9,0.75),3)
+					draw_arc(pos,actor.get("skill_range",120.0),0,TAU,48,Color(0.6,1,0.9,0.75),3)
 					_sprite("gust_large",pos,Color("a4f0cf"))
 		_draw_hazards()
 		for projectile in state.projectiles:
@@ -570,9 +568,11 @@ func _draw_hud():
 	_text(inset+Vector2(116,51)*u,"散射魔杖" if state.weapon_id == "fan_wand" else "直线魔杖",14)
 	var quality = state.get("version",1) == 2
 	var seconds = floori(state.elapsed_ms/1000.0) if quality else ceili(state.remaining_ms/1000.0)
-	var timer_rect = Rect2(Vector2((size.x-104*u)/2.0,18*u),Vector2(104,42)*u)
+	var timer_width = 144 if quality else 104
+	var timer_rect = Rect2(Vector2((size.x-timer_width*u)/2.0,18*u),Vector2(timer_width,42)*u)
 	draw_style_box(hud_style,timer_rect)
-	_text(timer_rect.position+Vector2(21,29)*u,"%d:%02d" % [seconds/60,seconds%60],22)
+	if quality: _text(timer_rect.position+Vector2(12,27)*u,"用时",12,Color("c7d4c7"))
+	_text(timer_rect.position+Vector2(54 if quality else 21,29)*u,"%d:%02d" % [seconds/60,seconds%60],22)
 	if quality:
 		var collected = state.resource_nodes.filter(func(node): return node.collected).size()+state.drops.filter(func(drop): return drop.collected).size()
 		var meal = state.get("meal_effect")
