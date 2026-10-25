@@ -21,7 +21,10 @@ var messages: Array[String] = []
 var action_controls: Dictionary = {}
 var ordered_controls: Array[Button] = []
 var root_box: VBoxContainer
-var header: HBoxContainer
+var header: BoxContainer
+var title: Label
+var toolbar: HFlowContainer
+var margin: MarginContainer
 var status: Label
 var phase_hint: Label
 var content: BoxContainer
@@ -38,18 +41,21 @@ var primary: Button
 var pause_button: Button
 var narrow = false
 var built = false
-var rebuild_queued = false
-var quit_after_save = false
+var refresh_serial = 0
+var save_path = "user://moonlantern.json"
+var clock_accumulator = 0.0
 
 func _ready():
 	get_tree().auto_accept_quit = false
+	# Lay out at the actual window size so narrow windows reflow rather than shrink.
+	get_window().content_scale_size = Vector2i.ZERO
 	_build_theme()
 	_configure_input()
 	_build_shell()
 	built = true
 	resized.connect(_resize_layout)
 	_resize_layout()
-	var saved = FileAccess.file_exists("user://moonlantern.json")
+	var saved = FileAccess.file_exists(save_path)
 	if saved:
 		_notice("发现本地存档。点击「恢复」继续上次经营；当前新开预览尚未覆盖存档。")
 	else:
@@ -61,6 +67,14 @@ func _notification(what):
 		_save(true)
 
 func _configure_input():
+	Input.emulate_mouse_from_touch = true
+	# Godot 4.7's effective built-in ui_accept here has only keyboard events.
+	# Bind the south face button explicitly rather than assuming a pad default.
+	var confirm = InputEventJoypadButton.new()
+	confirm.button_index = JOY_BUTTON_A
+	confirm.device = -1
+	if not InputMap.action_has_event("ui_accept",confirm):
+		InputMap.action_add_event("ui_accept",confirm)
 	if not InputMap.has_action("shop_pause"):
 		InputMap.add_action("shop_pause")
 		var key = InputEventKey.new()
@@ -77,13 +91,20 @@ func _unhandled_input(event):
 
 func _process(delta):
 	if not built or view.is_empty(): return
-	if view.phase == "trading" and not view.paused and view.pending.is_empty():
-		var result = game.advance(clampi(roundi(delta*1000),0,60000))
-		if not result.get("events",[]).is_empty():
-			_record_events(result.events)
-			_refresh()
-		elif game.view().phase != view.phase:
-			_refresh()
+	if view.phase != "trading" or view.paused or not view.pending.is_empty():
+		clock_accumulator = 0.0
+		return
+	# Preserve sub-millisecond time on fast hosts and avoid a core ledger entry
+	# for every rendered frame. The core still decides when a customer is served.
+	clock_accumulator += delta
+	if clock_accumulator < 0.1: return
+	var result = game.advance(clampi(roundi(clock_accumulator*1000),1,60000))
+	clock_accumulator = 0.0
+	if not result.get("events",[]).is_empty():
+		_record_events(result.events)
+		_refresh()
+	elif game.view().phase != view.phase:
+		_refresh()
 
 func _build_theme():
 	var ui_theme = Theme.new()
@@ -111,7 +132,7 @@ func _style(color: Color, border: Color, width: int = 1) -> StyleBoxFlat:
 	style.bg_color = color
 	style.border_color = border
 	style.set_border_width_all(width)
-	style.set_corner_radius_all(11)
+	style.set_corner_radius_all(0)
 	style.content_margin_left = 15
 	style.content_margin_right = 15
 	style.content_margin_top = 10
@@ -124,22 +145,26 @@ func _build_shell():
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
-	var margin = MarginContainer.new()
+	margin = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for edge in ["left","top","right","bottom"]: margin.add_theme_constant_override("margin_"+edge,16)
 	add_child(margin)
 	root_box = VBoxContainer.new()
 	margin.add_child(root_box)
-	header = HBoxContainer.new()
+	header = BoxContainer.new()
 	root_box.add_child(header)
-	var title = _label("咩咩与月灯巷",26,GOLD)
+	title = _label("咩咩与月灯巷",26,GOLD)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
+	toolbar = HFlowContainer.new()
+	toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar.alignment = FlowContainer.ALIGNMENT_END
+	header.add_child(toolbar)
 	pause_button = _button("pause","歇一歇",_toggle_pause)
-	header.add_child(pause_button)
-	header.add_child(_button("save","保存",func(): _save(false)))
-	header.add_child(_button("load","恢复",_load_game))
-	header.add_child(_button("quit","保存退出",func(): _save(true)))
+	toolbar.add_child(pause_button)
+	toolbar.add_child(_button("save","保存",func(): _save(false)))
+	toolbar.add_child(_button("load","恢复",_load_game))
+	toolbar.add_child(_button("quit","保存退出",func(): _save(true)))
 	status = _label("",21)
 	root_box.add_child(status)
 	content = BoxContainer.new()
@@ -147,14 +172,13 @@ func _build_shell():
 	root_box.add_child(content)
 	shop_column = VBoxContainer.new()
 	shop_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_column.size_flags_stretch_ratio = 0.95
+	shop_column.size_flags_stretch_ratio = 1.25
 	content.add_child(shop_column)
 	var art_panel = PanelContainer.new()
 	art_panel.add_theme_stylebox_override("panel",_style(Color("41435c"),Color("676076")))
 	art_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shop_column.add_child(art_panel)
 	illustration = ShopCanvas.new()
-	illustration.font = theme.default_font
 	art_panel.add_child(illustration)
 	shop_caption = _label("",18,MUTED)
 	shop_column.add_child(shop_caption)
@@ -162,7 +186,8 @@ func _build_shell():
 	shop_column.add_child(forecast)
 	notebook = VBoxContainer.new()
 	notebook.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	notebook.size_flags_stretch_ratio = 1.12
+	notebook.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	notebook.size_flags_stretch_ratio = 1.0
 	content.add_child(notebook)
 	tabs = HBoxContainer.new()
 	notebook.add_child(tabs)
@@ -191,16 +216,18 @@ func _build_shell():
 
 func _resize_layout():
 	if not built: return
+	header.vertical = size.x < 720
 	var should_narrow = size.x < 1050
 	if narrow != should_narrow or not content.has_meta("sized"):
 		narrow = should_narrow
 		content.vertical = narrow
-		illustration.custom_minimum_size.y = 170 if narrow else 280
+		illustration.custom_minimum_size.y = 160 if narrow else 280
 		shop_column.size_flags_vertical = Control.SIZE_FILL if narrow else Control.SIZE_EXPAND_FILL
-		shop_column.custom_minimum_size.y = 205 if narrow else 0
+		shop_column.custom_minimum_size.y = 160 if narrow else 0
 		forecast.visible = not narrow
 		shop_caption.visible = not narrow
-		header.add_theme_constant_override("separation",6 if narrow else 10)
+		header.add_theme_constant_override("separation",4 if narrow else 6)
+		for edge in ["left","top","right","bottom"]: margin.add_theme_constant_override("margin_"+edge,10 if narrow else 16)
 		content.set_meta("sized",true)
 
 func _label(value: String, font_size: int = 19, color: Color = CREAM) -> Label:
@@ -217,6 +244,7 @@ func _button(key: String, value: String, callback: Callable, enabled: bool = tru
 	button.name = key.replace(":","_")
 	button.set_meta("action_id",key)
 	button.text = value
+	button.mouse_filter = Control.MOUSE_FILTER_PASS
 	button.custom_minimum_size = Vector2(48,48)
 	button.focus_mode = Control.FOCUS_ALL
 	button.disabled = not enabled
@@ -243,10 +271,10 @@ func _refresh():
 	var old_scroll = scroll.scroll_vertical
 	for child in body.get_children():
 		body.remove_child(child)
-		child.free()
+		child.queue_free()
 	# Existing shell buttons survive; obsolete body references are discarded.
 	for key in action_controls.keys():
-		if not is_instance_valid(action_controls[key]): action_controls.erase(key)
+		if not is_instance_valid(action_controls[key]) or not action_controls[key].is_inside_tree(): action_controls.erase(key)
 	view = game.view()
 	status.text = "第 %d / 3 日  ·  %s  ·  金币 %d  ·  剩余顾客 %d%s" % [view.day,PHASES[view.phase],view.cash,view.customers_remaining,"  ·  已暂停" if view.paused else ""]
 	pause_button.text = "继续" if view.paused else "歇一歇"
@@ -273,18 +301,27 @@ func _refresh():
 	primary.text = {"shopping":"淘货完成，回店整备 →", "preparation":"开门营业 →", "trading":"等待特殊咨询" if not view.pending.is_empty() else "营业中 · 普通客自动结账", "closing":"收好招牌，查看日结 →", "settled":"保存三日回忆" if view.finished else "休息，迎接第 %d 日 →" % (int(view.day)+1)}[view.phase]
 	primary.disabled = view.phase == "trading"
 	feedback.text = messages.back() if not messages.is_empty() else ""
+	# Pausing freezes all economic input, including buttons shown by a pending order.
+	if view.paused:
+		for key in action_controls:
+			if key not in ["pause","save","load","quit"] and not key.begins_with("tab_"):
+				action_controls[key].disabled = true
 	_wire_focus()
-	call_deferred("_restore_focus",focus_id,old_scroll)
+	refresh_serial += 1
+	call_deferred("_restore_focus",focus_id,old_scroll,refresh_serial)
 
-func _restore_focus(focus_id: String, old_scroll: int):
+func _restore_focus(focus_id: String, old_scroll: int, serial: int):
+	if serial != refresh_serial: return
+	scroll.scroll_vertical = old_scroll
 	if action_controls.has(focus_id) and not action_controls[focus_id].disabled:
 		action_controls[focus_id].grab_focus()
 	else:
-		var fallback = "special_decline" if not view.pending.is_empty() else "primary"
+		var fallback = "pause" if view.paused else ("special_decline" if not view.pending.is_empty() else "primary")
 		if action_controls.has(fallback) and not action_controls[fallback].disabled:
 			action_controls[fallback].grab_focus()
 		elif not ordered_controls.is_empty(): ordered_controls[0].grab_focus()
-	scroll.scroll_vertical = old_scroll
+	var focused = get_viewport().gui_get_focus_owner()
+	if focused is Button: _focus_visible(focused)
 
 func _wire_focus():
 	ordered_controls.clear()
@@ -315,7 +352,7 @@ func _card() -> VBoxContainer:
 	return box
 
 func _batch_selector():
-	var row = HBoxContainer.new()
+	var row = HFlowContainer.new()
 	body.add_child(row)
 	var batch_label = _label("本次数量",18,MUTED)
 	batch_label.custom_minimum_size.x = 90
@@ -347,8 +384,12 @@ func _build_shopping():
 		var label = _label("%s  ·  %d 金 / 件\n今余 %d  ·  背包 %d" % [supply.name,supply.buy,supply.quantity,_inventory(supply.item_id).bag])
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
-		row.add_child(_button("buy_"+supply.item_id,"买 %d · %d 金" % [batch,batch*int(supply.buy)],_act.bind("buy",{"item_id":supply.item_id,"quantity":batch}),view.phase=="shopping" and supply.available))
-		if not supply.available: card.add_child(_label(supply.reason,17,MUTED))
+		row.add_child(_button("buy_"+supply.item_id,"买 %d · %d 金" % [batch,batch*int(supply.buy)],_act.bind("buy",{"item_id":str(supply.item_id),"quantity":batch}),view.phase=="shopping" and supply.available and batch<=supply.quantity and batch*int(supply.buy)<=view.cash))
+		if not supply.available or batch>supply.quantity or batch*int(supply.buy)>view.cash:
+			var reason = str(supply.reason)
+			if view.phase=="shopping":
+				reason = "今日余量不足，请调低本次数量。" if batch>supply.quantity else "金币不足，请调低本次数量或帮邻居回收。"
+			card.add_child(_label(reason,17,MUTED))
 	var recover_enabled = view.available_commands.recover.enabled
 	body.add_child(_button("recover","帮邻居回收旧纸 · +12 金（每日一次）",_act.bind("recover",{}),recover_enabled))
 	body.add_child(_label(view.available_commands.recover.reason,17,MUTED))
@@ -363,8 +404,8 @@ func _build_craft():
 		for id in recipe.inputs:
 			materials.append("%s ×%d（有%d）" % [_inventory(id).name,recipe.inputs[id],_inventory(id).bag])
 		card.add_child(_label(recipe.name+"  ←  "+" + ".join(materials),21))
-		card.add_child(_label("现在最多可做 %d 件。%s" % [recipe.max_quantity,recipe.reason],17,MUTED))
-		card.add_child(_button("craft_"+recipe.recipe_id,"批量制作 %d 件" % batch,_act.bind("craft",{"recipe_id":recipe.recipe_id,"quantity":batch}),view.phase=="preparation" and recipe.available))
+		card.add_child(_label("现在最多可做 %d 件。%s" % [recipe.max_quantity,"本次数量超过现有材料，请调低数量。" if batch>recipe.max_quantity and view.phase=="preparation" else recipe.reason],17,MUTED))
+		card.add_child(_button("craft_"+recipe.recipe_id,"批量制作 %d 件" % batch,_act.bind("craft",{"recipe_id":recipe.recipe_id,"quantity":batch}),view.phase=="preparation" and recipe.available and batch<=recipe.max_quantity))
 	body.add_child(_button("to_shelf","去货架安排陈列 →",_select_tab.bind("shelf")))
 
 func _build_shelf():
@@ -377,11 +418,12 @@ func _build_shelf():
 		if upgrade.upgrade_id == "shelf" and upgrade.owned: capacity = 3
 	body.add_child(_label("陈列 %d / %d 种  ·  装配槽独立于陈列槽" % [types,capacity],18,MUTED))
 	_batch_selector()
-	var selection = HBoxContainer.new()
+	var selection = HFlowContainer.new()
 	body.add_child(selection)
 	for id in ["pen","lamp","charm","bell"]:
 		var item = _inventory(id)
 		var button = _button("select_"+id,item.name+"\n包%d 架%d" % [item.bag,item.shelf],_select_item.bind(id))
+		button.custom_minimum_size.x = 112
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.modulate = GOLD if selected_item==id else Color.WHITE
 		selection.add_child(button)
@@ -397,13 +439,13 @@ func _build_shelf():
 			quantity += 1
 	var cost_text = "无可售库存" if quantity==0 else "平均成本 %.1f · 预计单件毛利 %.1f" % [float(total_cost)/quantity,price-float(total_cost)/quantity]
 	card.add_child(_label("现价 %d 金  ·  %s\n背包 %d / 货架 %d / 装配 %d" % [price,cost_text,current.bag,current.shelf,current.installed],18))
-	var moves = HBoxContainer.new()
+	var moves = HFlowContainer.new()
 	card.add_child(moves)
-	moves.add_child(_button("display_"+selected_item,"上架 %d"%batch,_act.bind("display",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation"))
-	moves.add_child(_button("undisplay_"+selected_item,"撤架 %d"%batch,_act.bind("undisplay",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation"))
-	moves.add_child(_button("recycle_"+selected_item,"回收 %d"%batch,_act.bind("recycle",{"item_id":selected_item,"quantity":batch}),view.phase in ["shopping","preparation"]))
+	moves.add_child(_button("display_"+selected_item,"上架 %d"%batch,_act.bind("display",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation" and current.bag>=batch and (current.shelf>0 or types<capacity)))
+	moves.add_child(_button("undisplay_"+selected_item,"撤架 %d"%batch,_act.bind("undisplay",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation" and current.shelf>=batch))
+	moves.add_child(_button("recycle_"+selected_item,"回收 %d"%batch,_act.bind("recycle",{"item_id":selected_item,"quantity":batch}),view.phase in ["shopping","preparation"] and current.bag>=batch))
 	card.add_child(_label("标价先匹配用途，再检查预算；精品档可能超过顾客预算。",17,MUTED))
-	var pricing = HBoxContainer.new()
+	var pricing = HFlowContainer.new()
 	card.add_child(pricing)
 	for tier in ["friendly","standard","premium"]:
 		var button = _button("price_"+tier,TIER_NAMES[tier],_act.bind("price",{"item_id":selected_item,"tier":tier}),view.phase=="preparation")
@@ -414,7 +456,7 @@ func _build_shelf():
 	card.add_child(_label("避雨铃：留用后，所有自写笔与暖月灯获得防水；也可上架换成金币。",18,GOLD))
 	for instance in bell.uids:
 		if instance.location=="bag":
-			card.add_child(_button("install_bell","留用：安装避雨铃",_act.bind("install",{"uid":instance.uid}),view.phase=="preparation"))
+			card.add_child(_button("install_bell","留用：安装避雨铃",_act.bind("install",{"uid":instance.uid}),view.phase=="preparation" and bell.installed==0))
 		elif instance.location=="installed":
 			card.add_child(_button("uninstall_bell","卸下避雨铃，移回背包",_act.bind("uninstall",{"uid":instance.uid}),view.phase=="preparation"))
 	var stock: Array[String] = []
@@ -478,6 +520,7 @@ func _effects(tags: Array) -> String:
 	return " / ".join(names)
 
 func _primary_action():
+	if game.view().paused: return
 	match view.phase:
 		"shopping":
 			tab = "craft"
@@ -493,6 +536,10 @@ func _primary_action():
 				_act("next_day",{})
 
 func _act(kind: String, args: Dictionary):
+	if game.view().paused:
+		_notice("小店已暂停，请先继续经营。")
+		_refresh()
+		return
 	request_serial += 1
 	var result = game.command(kind,args,request_prefix+":"+str(request_serial))
 	_notice(("✓ " if result.ok else "无法完成：")+str(result.message))
@@ -506,13 +553,13 @@ func _toggle_pause():
 	_refresh()
 
 func _save(exit_when_saved: bool):
-	var result = game.save_to()
+	var result = game.save_to(save_path)
 	_notice(("保存成功：" if result.ok else "保存失败：")+str(result.message))
 	_refresh()
 	if result.ok and exit_when_saved: get_tree().quit()
 
 func _load_game():
-	var result = game.load_from()
+	var result = game.load_from(save_path)
 	_notice(("恢复成功：" if result.ok else "恢复失败，当前经营未改变：")+str(result.message))
 	if result.ok:
 		request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
