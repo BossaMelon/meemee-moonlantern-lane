@@ -678,12 +678,24 @@ func _toggle_pause():
 	_refresh()
 
 func _save(exit_when_saved: bool):
+	# SceneTree.quit() completes at frame end. Freeze both session drivers before
+	# writing so the live state cannot advance beyond the successful save.
+	var main_was_processing=is_processing()
+	var battle_process_mode=battle_panel.process_mode if is_instance_valid(battle_panel) else Node.PROCESS_MODE_INHERIT
+	if exit_when_saved:
+		set_process(false)
+		if is_instance_valid(battle_panel): battle_panel.process_mode=Node.PROCESS_MODE_DISABLED
 	_release_battle_inputs()
 	var result = game.save_to(save_path)
+	if result.ok and exit_when_saved:
+		get_tree().quit()
+		return
+	if exit_when_saved:
+		set_process(main_was_processing)
+		if is_instance_valid(battle_panel): battle_panel.process_mode=battle_process_mode
 	_notice(("保存成功：" if result.ok else "保存失败：")+str(result.message))
 	_refresh()
-	if result.ok and exit_when_saved: get_tree().quit()
-	elif not result.ok:
+	if not result.ok:
 		game.set_paused(true)
 		_refresh()
 		var error_dialog=AcceptDialog.new()

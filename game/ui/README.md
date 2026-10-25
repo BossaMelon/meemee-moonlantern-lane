@@ -12,7 +12,7 @@
 
 E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`，发出 `returned`、`pause_requested`、`save_requested`、`save_quit_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
 
-动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；保存失败保持窗口、暂停并显示实际错误，只有保存成功才退出。
+动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；退出意图在释放输入与写文件前冻结经营及动作处理，成功后直接请求退出，避免帧末退出前再推进会话。失败时恢复处理、暂停并显示实际错误，保留窗口。
 
 ## 输入回归
 
@@ -26,6 +26,7 @@ Godot --path . --max-fps 60 --script game/ui/checks/advanced.gd
 Godot --path . --max-fps 60 --script game/ui/checks/restart.gd -- --advanced --portrait
 Godot --path . --max-fps 60 --script game/ui/checks/small_layout.gd
 Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd
+Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd -- --playing
 Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd -- --resume
 ```
 
@@ -35,6 +36,6 @@ Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd -- --resume
 
 PNG 通过 Godot ResourceLoader 加载，源码入口须先完成正式引擎导入前置；启动器归 H01 维护。已有缓存的渲染证据不证明冷启动。
 
-`small_layout.gd` 用真实触屏事件检查 1280×720 与 844×390 的采购、装备、备餐与营业。短横屏合并顶部状态栏、保留完整像素房间及可用滚动区；数量条标签不自动换行，按钮保持紧凑。`battle_exit.gd` 经 E01 产品按钮验证保存失败留窗和成功退出；再从新进程 `--resume` 核对完整动作存档。
+`small_layout.gd` 用真实触屏事件检查 1280×720 与 844×390 的采购、装备、备餐与营业。短横屏合并顶部状态栏、保留完整像素房间及可用滚动区；数量条标签不自动换行，按钮保持紧凑。`battle_exit.gd` 经 E01 产品按钮验证保存失败留窗、处理恢复和成功退出，在 `tree_exiting` 比对完整内存与文件快照；`--playing` 覆盖运行中退出，再从新进程 `--resume` 核对完整暂停动作存档。
 
 这些报告不替代仓库 prototype gate、系统窗口观察、iOS 真机、实体手柄或人类趣味验收。不调用 CUA/getApp，不生成 Computer Use 权限请求。旧通用 UI 恢复点仍在 PR 6，不在料理候选保留旧商品验收入口。

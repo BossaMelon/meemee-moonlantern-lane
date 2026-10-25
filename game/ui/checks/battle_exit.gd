@@ -7,7 +7,7 @@ func _initialize():
 	source_hashes["game/ui/checks/battle_exit.gd"]=FileAccess.get_sha256("res://game/ui/checks/battle_exit.gd")
 
 func run():
-	selected_routes=PackedStringArray(["battle-resume" if "--resume" in OS.get_cmdline_user_args() else "battle-exit"])
+	selected_routes=PackedStringArray(["battle-resume" if "--resume" in OS.get_cmdline_user_args() else ("battle-exit-playing" if "--playing" in OS.get_cmdline_user_args() else "battle-exit")])
 	mode="touch"
 	await fresh(Vector2i(844,390))
 	if not failures.is_empty(): return
@@ -41,6 +41,7 @@ func run():
 	await activate_control(ui.battle_panel.save_quit_button,"product_save_quit_failure")
 	var dialog=ui.get_node_or_null("SaveFailure")
 	expect(is_instance_valid(dialog) and dialog.visible,"failed save leaves engine open with visible explanation")
+	expect(ui.is_processing() and ui.battle_panel.process_mode!=Node.PROCESS_MODE_DISABLED,"failed exit restores both session drivers")
 	expect(ui.game.snapshot().cash==before.cash and ui.game.snapshot().items==before.items,"failed save preserves actual economy")
 	await RenderingServer.frame_post_draw
 	if is_instance_valid(dialog):
@@ -50,10 +51,28 @@ func run():
 	await key(KEY_ENTER,false)
 	await frames()
 	expect(not is_instance_valid(dialog) or not dialog.visible,"native confirmation dismisses save failure")
-	ui.save_path=folder+"/expedition.json"
+	if "--playing" in OS.get_cmdline_user_args():
+		await activate_control(ui.battle_panel.pause_button,"resume_before_product_quit")
+		expect(not ui.game.view().paused,"playing save-quit fixture is active")
+	ui.save_path=folder+("/expedition-playing.json" if "--playing" in OS.get_cmdline_user_args() else "/expedition.json")
+	ui.tree_exiting.connect(_observe_exit)
 	await screenshot("expedition-before-exit-844")
 	trace.append({"action":"product_save_quit_requested","path":ui.save_path,"phase":ui.game.view().phase,"paused":ui.game.view().paused})
 	write_report()
 	print("BATTLE EXIT checks ",checks," failures ",failures.size(),"; requesting actual product quit")
 	await activate_control(ui.battle_panel.save_quit_button,"product_save_quit_success")
 	expect(false,"product save-and-quit closes engine only after success")
+
+func _observe_exit():
+	var saved=JSON.parse_string(FileAccess.get_file_as_string(ui.save_path))
+	var actual=JSON.parse_string(JSON.stringify(ui.game.snapshot(),"",true,true))
+	var fields: Array[String]=[]
+	if saved is Dictionary:
+		for field in saved:
+			if saved[field]!=actual[field]: fields.append(field)
+	var observation={"equal":saved==actual,"different_fields":fields,"saved":saved,"at_tree_exit":actual}
+	var name="tree-exit-playing.json" if "--playing" in OS.get_cmdline_user_args() else "tree-exit-paused.json"
+	var file=FileAccess.open(folder+"/"+name,FileAccess.WRITE)
+	file.store_string(JSON.stringify(observation,"  "));file.close()
+	expect(saved==actual,"full live state equals written save at actual tree exit")
+	write_report()
