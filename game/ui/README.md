@@ -1,8 +1,8 @@
 # 饭店主 UI 接口
 
-主场景 `scenes/main.tscn` 使用 `main.gd`。经营与持久状态由 P01 `GameSession` 负责，动作模拟及动作控件由 E01 负责；UI 不写回 `view()`，每次提交意图使用新 request ID。料理/成长规则来源是冻结契约 `4d06f59` 的 docs05。
+主场景 `scenes/main.tscn` 使用 `main.gd`，显式选择 `rain-night-v1` Session。经营与持久状态由 P04 facade 负责，真实菇圃与动作控件由 E02 负责；UI 不写回 `view()`，每次提交意图使用新 request ID。当前规则来源是 `contracts/quality-slice-v1.json`，旧原型检查脚本保留历史用途。
 
-新雨夜切片的组件、控件定位与导航协议见 [雨夜呈现接口](rain_night/README.md)。P04/E02 正式依赖到齐前只做 typed-view 组件，不用旧 v2 Session 或 fixture 画面冒充新游戏。
+新雨夜切片的组件、控件定位、导航及真实主场景检查入口见 [雨夜呈现接口](rain_night/README.md)。typed-view 组件 fixture 只证明组件行为，不能充当真实 Session、菇圃或 Q06 证据。
 
 ## 场景交互接口
 

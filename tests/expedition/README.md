@@ -38,3 +38,7 @@ E02 使用相同 Godot，新增独立质量模型入口，保留全部旧入口�
 质量模型remaining_ms为null；动作HUD改读elapsed_ms。地形/水/资源/预警/硬直均从view绘制。面板输入与GUI路由继续由旧的gui_priority/touch_emulation/input_boundary_regressions覆盖；绘制及真实InputEvent不替代核心经济、完整保存退出、目标设备或人类趣味验收。
 
 `rain_runtime.gd` 复用原真实输入注入器，在仅持有质量动作模型的adapter上执行键鼠／触屏／合成手柄：两路、深处孢子、风清、实际月心掉落、暂停真实鼠标保存及窄屏。默认输出 `/tmp/e02-rain-runtime`，支持 `-- --output ABS_DIR`。用canonical渲染锁启动；传引擎 `--fullscreen` 时保留真实native/Retina viewport，窄屏段再明确切windowed。报告明确标为component，不冒充Session经济/Q06/新进程恢复或实体设备；NO_FOCUS及后台启动并不保证macOS不会取焦点，应以报告记录为准。
+
+A02正式场景接线仅更换绘制：全场/浅渠覆盖层均按manifest逻辑矩形1:1，两个连续长桩scale=1；背景、覆盖层、障碍共用WORLD_TINT。`stump_visibility.gd` 按实际pivot、缩放及round后的绘制原点采样PNG alpha，核验全部既有阻挡区域有可见实体覆盖（不把菌盖/树冠全部当碰撞）。输出 `/tmp/e02-stump-visibility.json`；它不能替代实际脚点/遮挡viewport检查。涟漪来自相邻view真实位置变化且位于水区，最多四处，不预铺网格。
+
+`rain_runtime.gd` 额外保存真实撞桩、水步、风清画面，报告含candidate dirty/HEAD、geometry/world/manifest/source SHA、窗口/viewport/rawPNG SHA、NO_FOCUS与实际focus。截图等待macOS呈现时明确暂挂panel process，稳定同一已观察模型状态；报告记`capture_process_suspended=true`，这不是玩家暂停行为证据。真实Esc暂停/保存仍由独立InputEvent步骤验证。

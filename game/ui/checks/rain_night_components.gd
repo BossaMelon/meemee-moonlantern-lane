@@ -90,6 +90,12 @@ func run():
 	await click("menu_priority_apply")
 	expect(received.back()=={"kind":"set_menu_priority","args":{"item_ids":["moon_stew","floating_pie"]}},"priority submits entire unique draft")
 	expect(view.service.menu_priority==["floating_pie","moon_stew"],"priority draft never writes source view")
+	panel.present(view,"menu","star_soup")
+	await frames()
+	await click("inventory_details_toggle")
+	var portion=panel.get_action_control("dish_uid_4")
+	expect(portion.get_meta("prepared_wave_id")=="n1-w1" and not "n1-w1" in portion.text,"player-facing source batch preserves exact read-only source metadata")
+	expect(not "浮送" in portion.text,"ordinary soup details do not invent floating delivery eligibility")
 	var trading=view.duplicate(true)
 	trading.phase="trading";trading.paused=true;trading.service.status="active"
 	trading.items[1].location="reserved"
@@ -100,7 +106,7 @@ func run():
 	var request_count=received.size()
 	await click("menu_priority_apply")
 	expect(received.size()==request_count,"real disabled button cannot emit a trading priority write")
-	expect("预留中" in panel.get_action_control("dish_uid_2").text,"same reserved UID is explicitly locked")
+	expect("正在送餐" in panel.get_action_control("dish_uid_2").text and panel.get_action_control("dish_uid_2").get_meta("item_uid")==2,"same reserved UID is read-only and explained as currently being delivered")
 	panel.present(trading,"service")
 	await frames()
 	expect(panel.get_action_control("start_wave")==null,"paused active service is not intermission")

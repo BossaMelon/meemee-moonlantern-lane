@@ -6,6 +6,7 @@ signal save_requested
 signal save_quit_requested
 signal action_events(events: Array)
 signal input_mode_changed(mode: String)
+const WORLD_TINT = Color(0.82,0.88,0.88)
 const EMPTY_INPUT = {"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}
 var session
 var state: Dictionary = {}
@@ -41,6 +42,10 @@ var _hint_run_id = ""
 var _hint_regions: Dictionary = {}
 var _region_hint = ""
 var _region_hint_until_tick = 0
+var _ripple_run_id = ""
+var _water_positions: Dictionary = {}
+var _ripple_next_tick: Dictionary = {}
+var _water_ripples: Array = []
 
 func _ready():
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -181,12 +186,33 @@ func refresh():
 	if session != null:
 		var view: Dictionary = session.view()
 		state = view.get("expedition",{})
+		_update_water_ripples()
 		_region_feedback()
 		if _paused != view.get("paused",false):
 			_paused = view.get("paused",false)
 			_layout()
 		if pause_button != null: pause_button.text = _pause_text(view.get("paused",false))
 	queue_redraw()
+
+func _update_water_ripples():
+	if state.get("version",1) != 2 or not state.has("player"): return
+	if _ripple_run_id != state.run_id:
+		_ripple_run_id = state.run_id; _water_positions.clear(); _ripple_next_tick.clear(); _water_ripples.clear()
+	_water_ripples = _water_ripples.filter(func(ripple): return ripple.until_tick > state.tick)
+	var actors: Array = [{"id":"player","x":state.player.x,"y":state.player.y}]
+	for enemy in state.enemies:
+		if enemy.hp > 0: actors.append(enemy)
+	for actor in actors:
+		var pos = Vector2(actor.x,actor.y)
+		var moved = _water_positions.has(actor.id) and pos.distance_squared_to(_water_positions[actor.id]) > 0.25
+		_water_positions[actor.id] = pos
+		if not moved or state.tick < _ripple_next_tick.get(actor.id,0): continue
+		for water in state.terrain.water_zones:
+			if _terrain_rect(water).has_point(pos):
+				_water_ripples.append({"x":pos.x,"y":pos.y,"until_tick":state.tick+12})
+				_ripple_next_tick[actor.id] = state.tick+12
+				if _water_ripples.size() > 4: _water_ripples.pop_front()
+				break
 
 func _region_feedback():
 	if state.get("version",1) != 2 or not state.has("player"): return
@@ -418,7 +444,7 @@ func _texture(id: String, background: bool = false) -> Texture2D:
 	textures[id] = texture
 	return texture
 
-func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float = 2.0):
+func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float = 2.0, modulate: Color = Color.WHITE):
 	var texture = _texture(id)
 	if texture == null:
 		draw_circle(position,14.0 if scale_value == 2.0 else 24.0,fallback)
@@ -427,44 +453,37 @@ func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float 
 	if manifest.get("sprites",{}).has(id):
 		var values = manifest.sprites[id].get("pivot",[pivot.x,pivot.y])
 		pivot = Vector2(values[0],values[1])
-	draw_texture_rect(texture,Rect2((position-pivot*scale_value).round(),texture.get_size()*scale_value),false)
+	draw_texture_rect(texture,Rect2((position-pivot*scale_value).round(),texture.get_size()*scale_value),false,modulate)
 
 func _terrain_rect(data: Dictionary) -> Rect2:
 	return Rect2(Vector2(data.x,data.y)-Vector2(data.width,data.height)*0.5,Vector2(data.width,data.height))
 
 func _draw_terrain_floor():
 	if not state.has("terrain"): return
-	for route in ["dry","wet","connector"]:
-		var points = PackedVector2Array()
-		for pair in state.terrain.routes[route]: points.append(Vector2(pair[0],pair[1]))
-		draw_polyline(points,Color(0.58,0.58,0.37,0.18),24 if route != "connector" else 18)
+	var routes = _texture("rain_ground_routes",true)
+	if routes != null: draw_texture_rect(routes,Rect2(0,0,960,540),false,WORLD_TINT)
+	var canal = _texture("rain_canal_shallow",true)
 	for water in state.terrain.water_zones:
-		var bounds = _terrain_rect(water)
-		draw_rect(bounds,Color(0.12,0.37,0.41,0.78))
-		draw_rect(bounds,Color(0.43,0.69,0.69,0.7),false,2)
-		for y in range(int(bounds.position.y)+20,int(bounds.end.y),30):
-			for x in range(int(bounds.position.x)+24,int(bounds.end.x),54):
-				if _texture("water_ripple") != null: _sprite("water_ripple",Vector2(x,y),Color("71b4b1"),1.0)
-				else: draw_arc(Vector2(x,y),9,0.15,PI-0.15,16,Color(0.56,0.79,0.77,0.38),1.5)
+		if canal != null: draw_texture_rect(canal,_terrain_rect(water),false,WORLD_TINT)
+	for ripple in _water_ripples:
+		var tint = WORLD_TINT
+		tint.a = clampf((ripple.until_tick-state.tick)/12.0,0,1)*0.65
+		_sprite("water_ripple",Vector2(ripple.x,ripple.y),Color("71b4b1"),1.0,tint)
+
+func _stump_visual(obstacle: Dictionary) -> Dictionary:
+	var pos = Vector2(obstacle.x,obstacle.y)
+	if obstacle.id == "north-west-stump": return {"id":"garden_root_log_50","position":pos,"scale":1.0,"sort_y":pos.y}
+	if obstacle.id == "deep-stump": return {"id":"garden_root_log_45","position":pos,"scale":1.0,"sort_y":pos.y}
+	if obstacle.shape == "circle":
+		return {"id":"garden_stump","position":pos+Vector2(0,roundf(obstacle.radius*0.9)),"scale":obstacle.radius/20.0,"sort_y":pos.y+obstacle.radius}
+	return {"id":"garden_stump","position":pos+Vector2(0,24),"scale":1.5,"sort_y":pos.y+obstacle.height*0.5}
 
 func _draw_stump(obstacle: Dictionary):
-	var pos = Vector2(obstacle.x,obstacle.y)
-	var bark = Color("675240")
-	var rim = Color("a6a27b")
-	if obstacle.shape == "circle":
-		draw_circle(pos+Vector2(0,3),obstacle.radius+2,Color(0.04,0.08,0.07,0.55))
-		draw_circle(pos,obstacle.radius,bark)
-		draw_arc(pos,obstacle.radius,0,TAU,48,rim,2)
-		if _texture("garden_stump") != null: _sprite("garden_stump",pos+Vector2(0,8),bark,1.25)
-		else: draw_arc(pos,obstacle.radius*0.62,0,TAU,32,Color("aa9063"),4)
-	else:
-		var bounds = _terrain_rect(obstacle)
-		draw_rect(bounds.grow(2),Color(0.04,0.08,0.07,0.55))
-		draw_rect(bounds,bark)
-		draw_rect(bounds,rim,false,2)
-		for y in range(int(bounds.position.y)+18,int(bounds.end.y),30):
-			if _texture("garden_stump") != null: _sprite("garden_stump",Vector2(pos.x,y+9),bark,0.9)
-			else: draw_arc(Vector2(pos.x,y),minf(obstacle.width*0.3,14),0,TAU,24,Color("aa9063"),3)
+	var visual = _stump_visual(obstacle)
+	if _texture(visual.id) != null:
+		_sprite(visual.id,visual.position,Color("675240"),visual.scale,WORLD_TINT)
+	elif obstacle.shape == "circle": draw_circle(Vector2(obstacle.x,obstacle.y),obstacle.radius,Color("675240"))
+	else: draw_rect(_terrain_rect(obstacle),Color("675240"))
 
 func _draw_hazards():
 	# These are ground effects. Sort their foot points within the floor pass;
@@ -490,7 +509,7 @@ func _draw():
 	if font == null or field.size.x <= 0: return
 	draw_set_transform(field.position,0,field.size/Vector2(960,540))
 	var background = _texture("mushroom-garden",true)
-	if background != null: draw_texture_rect(background,Rect2(0,0,960,540),false,Color(0.82,0.88,0.88))
+	if background != null: draw_texture_rect(background,Rect2(0,0,960,540),false,WORLD_TINT)
 	else: draw_rect(Rect2(0,0,960,540),Color("273d3f"))
 	_draw_terrain_floor()
 	draw_rect(Rect2(15,220,30,100),Color(0.75,0.92,0.72,0.16))
@@ -532,7 +551,7 @@ func _draw():
 		for obstacle in state.get("terrain",{}).get("obstacles",[]):
 			var item: Dictionary = obstacle.duplicate()
 			item.render_stump = true
-			item.sort_y = item.y+(item.radius if item.shape == "circle" else item.height*0.5)
+			item.sort_y = _stump_visual(item).sort_y
 			actors.append(item)
 		for enemy in state.enemies:
 			if enemy.hp > 0: actors.append(enemy)
