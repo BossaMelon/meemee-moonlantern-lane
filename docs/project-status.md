@@ -2,7 +2,7 @@
 
 更新：2026-10-25。本文件是唯一进度台账；owner、聊天、模型、路径与依赖以 [任务清单](../harness/tasks.json) 为准，平台与系统边界见 [技术决定](04-technical-decisions.md)。
 
-**三日魔法料理饭店原型尚未完成验收。** 目标仍为《哈利波特》背景、2D 像素三分之四斜俯视、Mac 单机离线与完整存档；真实动作采集、武器/技能/精英成长与经营互相供给。通用底座、像素包和源码冷首开已分别交付，不能据此宣称整三日、真实设备或趣味通过。
+**三日魔法料理饭店原型尚未完成用户视觉、真实全屏与完整三输入验收。** 目标仍为《哈利波特》背景、2D 像素三分之四斜俯视、Mac 单机离线与完整存档；真实动作采集、武器/技能/精英成长与经营互相供给。通用底座、像素包和源码冷首开已分别交付，不能据此宣称整三日、真实设备或趣味通过。
 
 ## 已验收交付
 
@@ -24,9 +24,9 @@ H02 [PR #9](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/9) 的原
 |---|---|---|
 | P01 料理核心 [PR #13](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/13) | 作者在 `82913c5` 报告真实临时组合 H02 + E01 `42988da` + P01：15 个自动 case P02–P13/P15–P17、48,631 断言通过；组合清单在 `/private/tmp/moonlantern-restaurant-delivery/combination-manifest.json` | 该组件证据不等于已合并候选的 prototype gate 或 UI 三日运行；新增 scope 主审已完成，支持问题仍待定向闭合 |
 | E01 动作与成长 [PR #10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10) | 保留原 `ea0783d` 恢复点的模块/临时组合证据：隔离模型 79 checks，真实渲染三输入 58 checks；报告 `/tmp/e01-real-core-runtime/runtime-inputs.json`。后续入口/输入修复不外推为该报告已覆盖 | 临时组合与合成输入不等于整餐厅、OS 进程重启或实体设备验收；正式依赖仍需同步 |
-| P02/P03 UI 与运行验收 | P02 [PR #15](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/15) `b32270c` 已交付小屏修复与 E01 `1746dd3` 退出信号接线；P03 草稿 [PR #16](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/16) `77dfe41` 绑定 P01 `82913c5`、E01 `1746dd3`、UI `346cc2f` 与 H01 首开修复 | 该 P03 head 的实际 scope 因 UI base 未同步而多带 H01 tools，被正确拒绝；待整 stack 一次同步 main 后重验。完整三输入/三日/恢复仍待完成 |
+| P02/P03 UI 与运行验收 | P02 [PR #15](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/15) `996d3f4`、P03 草稿 [PR #16](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/16) `2d9c5ca` 保留为功能恢复点；mouse 已在原功能候选完成六阶段 | 旧 UI 被用户否决，不能作为视觉交付。touch/start 的 primary/settle 失败由 P03 定位，完整三输入尚未通过；新版场景交互与真实全屏待验 |
 
-上述组件数据保留原候选与临时组合边界，不追新断言数，也不为状态更新重复运行。新增范围的一次独立主审已完成：冻结 `77dfe4178369e0850935aa61f1842bc89ff8252d` 对比 `c15faae`，新增启动覆盖存档 P1；root 已核原始报告与源码，未发现其他高可信新增阻断。此主审不代表问题修复已通过；修后由 root 定向验，不自动完整重审。
+上述组件数据保留原候选与临时组合边界，不追新断言数，也不为状态更新重复运行。新增范围的一次独立主审已完成：冻结 `77dfe4178369e0850935aa61f1842bc89ff8252d` 对比 `c15faae`，新增启动覆盖存档 P1；root 已核原始报告与源码，未发现其他高可信新增阻断。此主审覆盖原功能候选；已有修复由 root 定向闭合，新视觉与全屏范围仍待对应验收，不因新 SHA 自动完整重审。
 
 root 额外对旧冻结模拟做 33 次只读复算：现金=60+账本 delta、UID 出生唯一/消耗有来源、全程非负均 0 error。H02 只读确认两路线可持续，但热食样本收益更高；售锅 18 是资产变现，期末现金不能单独当平衡指标。这些是原样本的经济守恒/路线观察，不是新候选 gate 或人类趣味证据。
 
@@ -34,14 +34,15 @@ root 额外对旧冻结模拟做 33 次只读复算：现金=60+账本 delta、U
 
 - **冷缓存首开已定向闭合。** P03 在 `ac90449`（tree `507951bf`）的零 `.godot` 快照复现像素资源未加载；同快照先执行官方 import 后加载成功，支持导入前置原因。H01 `8a1a780` 将 headless import 统一放入源码启动器；原六项行为与新增导入失败阻断通过。P03 再用全新快照应用该实际两文件差异，组合 tree `cf47597b21699bc4f0ba53d60fc0d2990abd0d81`：exit 0、pixel_room_loaded=true，日志无引擎/脚本错误，root 已看中文及像素首屏。报告与 PNG：`/private/tmp/p03-source-launch-ac90449-h01-8a1a780/evidence.json`、同目录 `source-launch.png`。PR #12 同步 main 后仅合入已验收资产，修复字节未变，沿用有效复验。
 - **小屏布局定向修复已通过。** P02 PR #15 `b32270c` 修复原 1280×720 数量条与 844×390 超屏问题；P03 在 UI `346cc2f` 的绑定快照对真实 844×390 窗口/viewport 完成 28 项检查，exit 0、无失败且已查看同尺寸 PNG，报告 `/private/tmp/p03-layout-346cc2f-final/evidence-layout.json`。原 `ac90449` 的 3 项失败留作恢复证据，不再表述为当前缺陷；此定向结果不替代全三日。
-- **P1 启动覆盖旧进度仍未闭合。** 主审固定 `77dfe41`：已有第 2 日现金 56 的有效档，启动新 Session 未恢复旧档便保存退出/关闭，首次使主档变第 1 日现金 60，第二次又覆盖备份；两次产品退出均 0。原始结果 `/private/tmp/moonlantern-review-77dfe41-pymldjv6/review-startup-result.json`，复现源码同目录 `review-startup.gd`。root 已派 P02 启动自动恢复有效旧档、失败保护原文件并补真实退出回归；当前未宣称通过。
-- **退出入口已接线，严格保存/恢复仍失败。** E01 PR #10 `1746dd3` 已提供保存退出信号，P02 已接入产品路径。P03 鼠标与触屏在第三日战斗实际退出后精确比较失败：磁盘与退出时内存仅 `requests` 不同，新增全零 `expedition_input`；P02 新进程恢复探针也复现。未忽略该差异或把恢复判通过。证据 `/private/tmp/p03-three-day-eda9-touch-02/touch/after-hagrid-eb279736-report.json`，及 P02 `output/restaurant-ui/battle-exit/restore-differences.json`。
-- **手柄释放误触返店仍待修复。** P03 最小复现：左右摇杆 `(0.6,-0.8)`、按住 A 施法约 30 帧后释放，未点击返程却变为 shopping、`return_reason=retreat`；键鼠/触屏对照仍在 expedition。报告 `/private/tmp/p03-combat-focus-39846/evidence-battle-pause.json`。root 已派 E01 修复两项输入问题，P02 做最小接入并在保存退出失败时接 `cancel_save_quit` 解冻；与启动覆盖旧档 P1 合计三项支持问题均待固定修复候选定向复验。
+- **启动旧档 P1 已在修复候选定向闭合，未集成。** root 在 P02 `17ff937` 的全新 Git 快照 `/tmp/moonlantern-p1-acceptance.dFoPto` 复用未修改的 `review-startup.gd`，连续两个真实 OS 进程经正式启动器和实际 InputEvent 保存退出均 exit 0；主/备完整 JSON 均等于原 day2/cash56 snapshot，无引擎/脚本错误。原 `77dfe41` 失败证据保留，此闭合不等于 main 或新视觉候选已验收。
+- **功能输入与恢复证据按候选保留。** 原零输入附加断言已定位为 JSON int/float 字典比较，不能将表示差异重报为产品状态损坏；原手柄焦点失败与对照在 P03 固定功能候选定向复验通过。mouse 已完整六阶段通过；touch/start 的 primary/settle 失败仍由 P03 定位，不能拼接旧报告宣称三输入通过。完整运行证据目录 `/private/tmp/p03-final-d1ac1af-three-inputs`；旧 `996d3f4`/`2d9c5ca` 仅作功能恢复点。
+- **新用户视觉要求尚未交付。** 已收到用户对旧 UI“太丑、与游戏割裂”及战斗背景密纹理的否决。保留经营/动作/存档核心，重做以世界物件为入口、短浮层承载操作的交互；战斗背景改为大片安静地面、边缘细节。旧功能通过不等于视觉接受，更不等于人类游玩趣味验证。
+- **只读视觉审阅与真实全屏待验。** 用户可见聊天“月灯巷｜美术指导与视觉验收”（`01a17385-3ee4-7481-acc0-7eac726f5c9a`，GPT-6 Astra/high/Standard）仅作只读审美指导，不转派、不授实现路径或要求空 PR；登记在任务清单 coordination metadata，gate 不据此授予写权限。H01 正在本草稿准备源码入口默认全屏并尊重显式模式，尚未合并；P03 必须检查真实全屏窗口模式与尺寸，小窗测试显式 windowed，启动参数或旧窗口图不能替代。
 - **完整产品待验。** 三日经营、真实动作/成长、菜单回流、暂停、保存退出重启、坏档反馈和三种输入关键路径必须在同一固定组合完成；独立组件、冷首开或资产预览均不能替代。
 
 ## 下一步与交付边界
 
-H02 PR #9 继续作为 draft 集成根；新增 P15–P17 会使旧 runner 正确失败，不能单独合 main、降低 case 或用 harness 绿灯替代。P01 base=H02 branch，E01 base=新 P01，UI base=完整 E01；相应 owner 同步正式依赖时先核对实际 diff scope。本状态补丁保持草稿、暂不合入，待完整修复与运行验收到齐后更新冻结证据，由 root 决定合并，避免反复搅动集成。新增 scope 的一次主审已完成；三项支持问题修复、root 定向闭合、真实 gates 与 P03 完整运行验收到齐后，按 UI→E01→P01→H02→main 原生合并，父 PR 准确声明已验收依赖的联合 Task-IDs。
+H02 PR #9 继续作为 draft 集成根；新增 P15–P17 会使旧 runner 正确失败，不能单独合 main、降低 case 或用 harness 绿灯替代。P01 base=H02 branch，E01 base=新 P01，UI base=完整 E01；相应 owner 同步正式依赖时先核对实际 diff scope。本状态补丁保持草稿、暂不合入，待完整修复与运行验收到齐后更新冻结证据，由 root 决定合并，避免反复搅动集成。新增 scope 的一次主审已完成；支持问题定向闭合、新场景交互与背景视觉接受、真实全屏/完整三输入运行及 gates 到齐后，按 UI→E01→P01→H02→main 原生合并，父 PR 准确声明已验收依赖的联合 Task-IDs。A01 新素材分支/PR 以 P02 branch 为 base，仅改 assets/pixel；P02 消费新 manifest，父 PR 按实际 union 声明 A01，不冒领其素材实现。
 
 源码仓库 public；main 保持 required `harness`+`prototype`、strict/admin/PR 与禁止强推删除等保护。继续 exact-head guard，不 force/rebase、不在失败 gate 上 admin 绕过、不伪造 pass。所有实施仍为可见 chat/Standard，不创建 sub-agent；运行走 Godot CLI、实际 InputEvent 与引擎截图，不新增 Computer Use。
 

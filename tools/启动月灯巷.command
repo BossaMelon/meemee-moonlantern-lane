@@ -46,5 +46,19 @@ if ! "$task_engine" --headless --path "$task_project_root" --import; then
   task_fail "Godot 资源导入失败，请查看上方引擎日志。"
 fi
 
+# Only inspect engine arguments; mode-looking user arguments must stay untouched.
+task_window_mode_explicit=false
+for task_arg in "$@"; do
+  case "$task_arg" in
+    --|++) break ;;
+    -f|--fullscreen|-w|--windowed|-m|--maximized|--wid|--headless)
+      task_window_mode_explicit=true
+      break ;;
+  esac
+done
+if [[ "$task_window_mode_explicit" = false ]]; then
+  set -- --fullscreen "$@"
+fi
+
 print -- "正在用 Godot $task_version 启动《咩咩与月灯巷》本地源码原型。"
 exec "$task_engine" --path "$task_project_root" "$@"
