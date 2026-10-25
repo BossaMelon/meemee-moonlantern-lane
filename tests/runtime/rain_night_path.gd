@@ -3,10 +3,12 @@ extends "res://tests/runtime/critical_path.gd"
 const Controls = preload("res://tests/runtime/quality_controls.gd")
 const RainDriver = preload("res://tests/expedition/rain_driver.gd")
 const DEFAULT_SAVE = "user://profiles/rain-night-v1/moonlantern.json"
+const RAIN_STATIC_ASSETS = ["rain_ground_routes","rain_canal_shallow","garden_root_log_50","garden_root_log_45"]
 const RESTORES = {"after-spore":"spore-warning","after-intermission":"intermission","after-delivery":"delivery-in-flight","after-upgrade":"upgrade-pending","after-equipped":"next-morning-equipped"}
 var component_observations: Array=[]
 var default_profile: Dictionary={}
 var last_touch_positions: Dictionary={}
+var rain_visual_samples: Array=[]
 
 func emit_input(event: InputEvent, local: bool=false):
 	if event is InputEventScreenTouch or event is InputEventScreenDrag: last_touch_positions[event.index]=event.position
@@ -43,6 +45,10 @@ func release_combat():
 func screenshot(name: String):
 	if config.get("headless_diagnostic",false): return
 	await super.screenshot(name)
+	if visual_evidence.get("active_scene")=="expedition":
+		var sample=visual_evidence.duplicate(true)
+		sample.capture_name=name
+		rain_visual_samples.append(sample)
 
 func configure_save_path():
 	default_profile={"save_path":ui.save_path,"user_dir":OS.get_user_data_dir(),"absolute_save":ProjectSettings.globalize_path(ui.save_path),"custom_user_dir_name":ProjectSettings.get_setting("application/config/custom_user_dir_name")}
@@ -79,9 +85,51 @@ func inspect_visible_assets() -> Dictionary:
 			var texture=ui.battle_panel.textures[id]
 			if texture is Texture2D and texture.get_width()>0 and texture.get_height()>0: rendered[id]=[texture.get_width(),texture.get_height()]
 		evidence.rendered_textures=rendered
-		evidence.rain_assets_loaded=rendered.has("garden_stump") and rendered.has("water_ripple") and rendered.keys().any(func(id): return str(id).begins_with("sporecaster_"))
-		evidence.active_assets_loaded=evidence.active_assets_loaded and evidence.rain_assets_loaded
+		var state: Dictionary=ui.battle_panel.state
+		evidence.rain_static_required=RAIN_STATIC_ASSETS
+		evidence.rain_static_loaded=RAIN_STATIC_ASSETS.all(func(id): return rendered.has(id))
+		evidence.tick=state.tick
+		evidence.player=state.player.duplicate(true)
+		evidence.terrain=state.terrain.duplicate(true)
+		evidence.collision_records=state.collision_records.duplicate(true)
+		evidence.hazards=state.hazards.duplicate(true)
+		evidence.spore_poses=[]
+		for actor in state.enemies:
+			if actor.hp<=0 or actor.kind!="sporecaster": continue
+			var id="sporecaster_windup" if actor.state=="spore_windup" else ("sporecaster_release" if actor.state=="spore_release" else "sporecaster_idle")
+			evidence.spore_poses.append({"actor_id":actor.id,"state":actor.state,"texture_id":id,"loaded":rendered.has(id)})
+		# 345a904 draws water only at moving actors; no ambient grid is assumed.
+		var ripples=ui.battle_panel.get("_water_ripples") if ui.battle_panel.get_property_list().any(func(property): return property.name=="_water_ripples") else []
+		evidence.water_ripples=ripples.duplicate(true)
+		evidence.water_effect_loaded=rendered.has("water_ripple") if not ripples.is_empty() else null
+		evidence.active_spore_loaded=rendered.has("spore_cloud") if state.hazards.any(func(h): return h.state=="active") else null
+		evidence.stump_visuals=[]
+		if ui.battle_panel.has_method("_stump_visual"):
+			for obstacle in state.terrain.obstacles:
+				var visual: Dictionary=ui.battle_panel._stump_visual(obstacle) # Read the renderer's geometry only.
+				evidence.stump_visuals.append({"model":obstacle,"texture_id":visual.id,"foot":[visual.position.x,visual.position.y],"scale":visual.scale,"pivot":ui.battle_panel.manifest.sprites[visual.id].pivot})
+		evidence.active_assets_loaded=evidence.active_assets_loaded and evidence.rain_static_loaded and evidence.spore_poses.all(func(pose): return pose.loaded) and evidence.water_effect_loaded!=false and evidence.active_spore_loaded!=false
 	return evidence
+
+func observe_dynamic_rain(s: Dictionary, seen: Dictionary):
+	# The headless diagnostic makes no render/cache claim and skips this path.
+	if verification_kind!="rendered_runtime": return
+	var player=Vector2(s.player.x,s.player.y)
+	var in_water=s.terrain.water_zones.any(func(water): return Rect2(Vector2(water.x,water.y)-Vector2(water.width,water.height)*0.5,Vector2(water.width,water.height)).has_point(player))
+	var ripples=ui.battle_panel.get("_water_ripples") if ui.battle_panel.get_property_list().any(func(property): return property.name=="_water_ripples") else []
+	var player_ripple=ripples.any(func(ripple): return Vector2(ripple.x,ripple.y).distance_to(player)<30)
+	if not seen.get("visual_water",false) and in_water and player_ripple:
+		await screenshot(mode+"-rain-actual-wading-day%d"%s.day)
+		expect(not visual_evidence.water_ripples.is_empty() and visual_evidence.water_effect_loaded==true,"real moving-water checkpoint draws its ripple texture")
+		seen.visual_water=true
+	if not seen.get("visual_spore",false) and s.hazards.any(func(h): return h.state=="active"):
+		await screenshot(mode+"-rain-active-spore-day%d"%s.day)
+		expect(visual_evidence.active_spore_loaded==true,"real active spore checkpoint draws its cloud texture")
+		seen.visual_spore=true
+	if not seen.get("visual_collision",false) and not s.collision_records.is_empty():
+		await screenshot(mode+"-rain-obstacle-collision-day%d"%s.day)
+		expect(not visual_evidence.stump_visuals.is_empty(),"actual collision snapshot includes model obstacles and drawn stump geometry")
+		seen.visual_collision=true
 
 func buy_missing(needed: Dictionary):
 	await open_sheet("shopping")
@@ -223,6 +271,7 @@ func rain_battle(day: int, resume: bool=false):
 		for node in s.resource_nodes:
 			if node.get("collected",false) and node.id not in seen.routes: seen.routes.append(node.id)
 		battle_observed["combat_%d"%day]=seen
+		await observe_dynamic_rain(s,seen)
 		if day==1 and stage=="start" and s.hazards.any(func(h): return h.state=="warning"):
 			await combat_checkpoint(); return
 		var input: Dictionary=driver.next_input(s)
@@ -240,6 +289,8 @@ func rain_battle(day: int, resume: bool=false):
 	expect(ui.game.view().phase=="shopping","normal terrain driver returns to the restaurant within deadline")
 	if not failures.is_empty(): return
 	for action in ["movement","cast","dodge","skill","warning","active_spore"]: expect(seen[action],"observed real rain combat action: "+action)
+	if verification_kind=="rendered_runtime":
+		for kind in ["visual_water","visual_spore","visual_collision"]: expect(seen.get(kind,false),"actual rain drawing checkpoint was captured: "+kind)
 	if day==2: expect(seen.fan_projectiles,"acquired fan wand visibly produces multiple actual projectiles")
 	verify_rain_pickups()
 	await frames(5)
@@ -320,6 +371,7 @@ func write_report():
 	report.suite="p06-rain-night-main-scene-runtime"
 	report.default_profile=default_profile
 	report.component_observations=component_observations
+	report.rain_visual_samples=rain_visual_samples
 	report.human_status="not_assessed"
 	report.Q06_status="pending_combined_native_modes_layout_and_focus_evidence"
 	report.simulation_scale=Engine.time_scale
