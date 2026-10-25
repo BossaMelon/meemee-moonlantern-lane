@@ -59,7 +59,7 @@ func emit_input(event: InputEvent, local: bool = false):
 	if local: root.push_input(event,true)
 	else: Input.parse_input_event(event)
 
-func fresh(size: Vector2i):
+func fresh(size: Vector2i, restore_existing: bool = false):
 	# Godot desktop ScrollContainer enables the touchscreen drag path only
 	# with this runtime emulation flag; no project setting is saved.
 	Input.emulate_touch_from_mouse=(mode=="touch")
@@ -78,6 +78,11 @@ func fresh(size: Vector2i):
 	startup_feedback=ui.feedback.text
 	ui.tree_exiting.connect(_observe_product_exit)
 	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
+	# Match the parent helper's route/restart intent, but never move or reset a
+	# save here: every P03 route uses a distinct supervisor-owned directory.
+	var has_existing=startup_files.primary!="missing" or startup_files.backup!="missing"
+	expect(has_existing==restore_existing,"startup files match the new-route or real-restart stage")
+	if not failures.is_empty(): return
 	await frames(6)
 	await screenshot(mode+"-initial-viewport")
 	expect(ui.game.view().has("progression"),"restaurant core v2 exposes progression")
@@ -482,7 +487,8 @@ func run():
 	expect(not config.is_empty(),"supervisor config supplied")
 	var size=Vector2i(1280,800) if mode=="mouse" else Vector2i(960,640)
 	if config.has("size"): size=Vector2i(config.size[0],config.size[1])
-	await fresh(size)
+	await fresh(size,stage=="restore-smoke" or stage.begins_with("after-"))
+	if not failures.is_empty(): return
 	var hot=mode!="touch"
 	if stage=="exit-smoke":
 		await save_and_exit("smoke")
