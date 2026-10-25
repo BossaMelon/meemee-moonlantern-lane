@@ -42,3 +42,7 @@ E02 使用相同 Godot，新增独立质量模型入口，保留全部旧入口�
 A02正式场景接线仅更换绘制：全场/浅渠覆盖层均按manifest逻辑矩形1:1，两个连续长桩scale=1；背景、覆盖层、障碍共用WORLD_TINT。`stump_visibility.gd` 按实际pivot、缩放及round后的绘制原点采样PNG alpha，核验全部既有阻挡区域有可见实体覆盖（不把菌盖/树冠全部当碰撞）。输出 `/tmp/e02-stump-visibility.json`；它不能替代实际脚点/遮挡viewport检查。涟漪来自相邻view真实位置变化且位于水区，最多四处，不预铺网格。
 
 `rain_runtime.gd` 额外保存真实撞桩、水步、风清画面，报告含candidate dirty/HEAD、geometry/world/manifest/source SHA、窗口/viewport/rawPNG SHA、NO_FOCUS与实际focus。截图等待macOS呈现时明确暂挂panel process，稳定同一已观察模型状态；报告记`capture_process_suspended=true`，这不是玩家暂停行为证据。真实Esc暂停/保存仍由独立InputEvent步骤验证。
+
+`run_return_boundaries.gd` 默认要求正式rain-night-v1 Session，不会回退到adapter：公开指令右500ms→左1000ms，对比一次1000与20×50的**完整snapshot**（含requests），并核验真实暂停、磁盘保存/恢复、主动撤退与终态再次advance。`-- --component-only` 明确只跑组件；组件用有效受控战斗/清场夹具触发defeated/completed，入口由普通输入触发，retreat沿现有leave；各终止边界都必须丢弃未处理余帧，不得出现负余数。组件结果不冒充真实Session取得库存。47项组件回归已纳入rain_model_cases.gd，原run_rain_model.gd入口继续覆盖。
+
+本次主审回归在正式组合SHA `4cc5c2fa8765e4806f37098895f7a440122f5df4` 的独立临时归档 `/private/tmp/e02-return-boundary-4cc5c2f` 运行，仅覆盖本次E02模型/测试。红色 `/tmp/e02-return-red`、绿色 `/tmp/e02-return-green`；原主审探针在该新归档原样复跑，输出review-return-partition-result.json。原 `/private/tmp/moonlantern-review-4cc5c2f-ya1m9hvo` 保持只读。旧model v1与存档校验/迁移规则均未改；只对新发生的质量模型终止转换清零remainder_ms。

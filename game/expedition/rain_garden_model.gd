@@ -98,6 +98,8 @@ static func leave(s: Dictionary, reason: String = "retreat") -> Dictionary:
 	if s.status == "returned": return result
 	s.status = "returned"
 	s.return_reason = reason
+	# The terminal boundary discards unprocessed time from this advance call.
+	s.remainder_ms = 0
 	clear_input(s)
 	result.returned = true
 	result.reason = reason
