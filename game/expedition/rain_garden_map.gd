@@ -7,13 +7,13 @@ const EPSILON = 0.0001
 const GRID = 32
 const OBSTACLES = [
 	{"id":"entry-stump","shape":"circle","x":265.0,"y":270.0,"radius":30.0},
-	{"id":"north-west-stump","shape":"rect","x":370.0,"y":140.0,"width":50.0,"height":95.0},
+	{"id":"north-west-stump","shape":"rect","x":395.0,"y":187.5,"width":50.0,"height":95.0},
 	{"id":"north-east-stump","shape":"circle","x":585.0,"y":150.0,"radius":35.0},
-	{"id":"crossing-stump","shape":"rect","x":505.0,"y":275.0,"width":60.0,"height":45.0},
+	{"id":"crossing-stump","shape":"rect","x":535.0,"y":297.5,"width":60.0,"height":45.0},
 	{"id":"canal-stump","shape":"circle","x":450.0,"y":430.0,"radius":28.0},
-	{"id":"deep-stump","shape":"rect","x":705.0,"y":215.0,"width":45.0,"height":95.0}
+	{"id":"deep-stump","shape":"rect","x":727.5,"y":262.5,"width":45.0,"height":95.0}
 ]
-const WATER = [{"id":"south-canal","shape":"rect","x":340.0,"y":335.0,"width":340.0,"height":120.0,"speed_scale":0.65}]
+const WATER = [{"id":"south-canal","shape":"rect","x":510.0,"y":395.0,"width":340.0,"height":120.0,"speed_scale":0.65}]
 const SPAWNS = [
 	{"id":"entry-rush","kind":"sparkcap","x":335.0,"y":270.0,"encounter_id":"entry"},
 	{"id":"shelf-rush","kind":"sparkcap","x":540.0,"y":100.0,"encounter_id":"fork"},
@@ -35,7 +35,7 @@ static func data() -> Dictionary:
 			"wet":[[80,270],[230,365],[365,385],[520,375],[670,405],[820,365]],"connector":[[460,95],[470,260],[520,375]]}}
 
 static func _rect(o: Dictionary) -> Rect2:
-	return Rect2(o.x,o.y,o.width,o.height)
+	return Rect2(o.x-o.width*0.5,o.y-o.height*0.5,o.width,o.height)
 
 static func point_clear(p: Vector2, radius: float, obstacles: Array = OBSTACLES) -> bool:
 	if p.x < radius or p.y < radius or p.x > SIZE.x-radius or p.y > SIZE.y-radius: return false

@@ -1,8 +1,8 @@
 # E02：rain-garden-two-routes revision 1
 
-几何事实源为 `rain_garden_map.gd`，范围960×540；圆的x/y为圆心，rect的x/y为左上角。`data()` 返回独立JSON形状数据：map_id/map_revision/width/height/entry/obstacles/water_zones/spawns/resource_nodes/routes。revision数据在该模块常量中，A01只消费位置与footprint，不另设碰撞。
+几何事实源为 `rain_garden_map.gd`，范围960×540；圆与rect的x/y统一为中心；所有helper均消费同一语义，渲染Rect2左上角由中心减半宽高得到。`data()` 返回独立JSON形状数据：map_id/map_revision/width/height/entry/obstacles/water_zones/spawns/resource_nodes/routes。revision数据在该模块常量中，A01只消费位置与footprint，不另设碰撞。
 
-入口(80,270)；教学冲刺怪在(335,270)，桩在(265,270)，可从上下绕行。上路点(415,95)、下路点(375,395)/(560,440)；中段(470,260)可换路；两路都可到深处(805,225)/(850,380)。6个静态实体桩，一块水区(340,335,340,120)，水倍率0.65。5只有限敌人：入口rush、岔路rush+sporecaster、深处moonheart+sporecaster。3处有限sparkcap节点，另有敌人正常掉落；不刷新、不锁入口。具体值请读取data，文字不是第二份事实源。
+入口(80,270)；教学冲刺怪在(335,270)，桩在(265,270)，可从上下绕行。上路点(415,95)、下路点(375,395)/(560,440)；中段(470,260)可换路；两路都可到深处(805,225)/(850,380)。6个静态实体桩，一块水区中心(510,395)、宽340高120（实际左上340,335），水倍率0.65。5只有限敌人：入口rush、岔路rush+sporecaster、深处moonheart+sporecaster。3处有限sparkcap节点，另有敌人正常掉落；不刷新、不锁入口。具体值请读取data，文字不是第二份事实源。
 
 纯几何API（不读写会话/库存/文件）：
 
