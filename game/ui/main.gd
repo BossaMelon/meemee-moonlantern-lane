@@ -234,7 +234,7 @@ func _resize_layout():
 	feedback.custom_minimum_size.y = 24 if compact else 42
 	feedback.max_lines_visible = 1 if compact else -1
 	feedback.add_theme_font_size_override("font_size",16 if compact else 17)
-	phase_hint.max_lines_visible = 2 if compact else -1
+	phase_hint.max_lines_visible = 1 if compact else -1
 	phase_hint.add_theme_font_size_override("font_size",16 if compact else 17)
 	content.vertical = narrow
 	var zoom = maxi(1,floori(minf((size.x-490)/384.0,(size.y-190)/256.0)))
@@ -340,7 +340,8 @@ func _refresh():
 			"gear": _build_gear()
 			_: _build_journal()
 	var hints = {"shopping":"需求与天气在手账里。基础食材稳定供应，探险可跳过。","preparation":"先备好料理再放上菜单；保留或售回坩埚会改变可做的菜。","trading":"普通客自动成交。特殊委托停时，可切到菜单查看份数。","closing":"客流结束，日结后可用收入投资供货、菜单或探索套装。","settled":"三日旅程已完成，可以保存退出。" if view.finished else "升级次日生效；可在装备页查看明日的新选择。","expedition":"动作场景由 E01 推进，主界面不会重复计时。"}
-	phase_hint.text = "已暂停，经营与探险都在等你。" if view.paused else hints.get(view.phase,"")
+	var compact_hints={"shopping":"稳定供货 · 雨天备货见手账","preparation":"先上菜单，再营业；厨具扩展菜谱","trading":"自动出餐；委托停时可看菜单","closing":"客流结束，日结后投资明天","settled":"升级次日生效；可以保存退出","expedition":"探险暂停与保存在动作工具栏"}
+	phase_hint.text = ("已暂停，可以保存后继续。" if compact else "已暂停，经营与探险都在等你。") if view.paused else (compact_hints.get(view.phase,"") if compact else hints.get(view.phase,""))
 	primary.text = {"shopping":"采购完成，回厨房备餐 →","preparation":"开门营业 →","trading":"营业中 · 普通客自动点餐","closing":"收好招牌，查看日结 →","settled":"保存三日回忆" if view.finished else "休息，迎接第 %d 日 →" % (int(view.day)+1),"expedition":"返回饭店"}.get(view.phase,"")
 	primary.visible = view.pending.is_empty()
 	primary.disabled = view.paused or view.phase in ["trading","expedition"] or not view.has("progression")
