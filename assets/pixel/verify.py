@@ -4,7 +4,7 @@ from pathlib import Path
 import hashlib
 import json
 import sys
-from PIL import Image
+from PIL import Image, ImageDraw
 
 ROOT=Path(__file__).resolve().parent
 m=json.loads((ROOT/"manifest.json").read_text())
@@ -38,6 +38,10 @@ for kind in ("sprites","backgrounds"):
         require(all(p[:3] in asset_allowed for p in pixels if p[3]),f"Palette drift {name}")
         require(all(p==(0,0,0,0) for p in pixels if not p[3]),f"Hidden RGB fringe {name}")
         require(bool(im.getbbox()),f"Empty asset {name}")
+        if "export_palette_subset" in rec:
+            subset={tuple(bytes.fromhex(c[1:])) for c in rec["export_palette_subset"]}
+            require(subset <= allowed,f"Palette subset outside shared palette {name}")
+            require(all(p[:3] in subset for p in pixels if p[3]),f"Palette subset drift {name}")
         if kind=="sprites":
             require(im.getchannel("A").getextrema()[0]==0,f"Opaque background {name}")
             atlas=Image.open(ROOT/rec["atlas"])
@@ -46,6 +50,12 @@ for kind in ("sprites","backgrounds"):
             require(atlas.crop((x,y,x+w,y+h)).tobytes()==im.tobytes(),f"Atlas mismatch {name}")
             require(0<=rec["pivot"][0]<=w and 0<=rec["pivot"][1]<=h,f"Invalid pivot {name}")
             require(list(im.getbbox())==rec["opaque_bounds"],f"Stale bounds {name}")
+            if "footprint" in rec:
+                polygon=rec["footprint"]["polygon"]
+                require(len(polygon)>=3 and all(0<=x<w and 0<=y<h for x,y in polygon),f"Invalid footprint {name}")
+                mask=Image.new("1",im.size)
+                ImageDraw.Draw(mask).polygon([tuple(p) for p in polygon],fill=1)
+                require(all(not mask.getpixel((x,y)) or im.getpixel((x,y))[3] for y in range(h) for x in range(w)),f"Footprint extends outside visible base {name}")
             for margin_kind in ("nine_slice_margins","content_margins"):
                 if margin_kind in rec:
                     left,top,right,bottom=rec[margin_kind]

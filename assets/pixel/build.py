@@ -131,7 +131,7 @@ def palette_export(im, palette=PALETTE):
     return empty
 
 
-def export_region(source, box, size, method):
+def export_region(source, box, size, method, palette=PALETTE):
     assert box[2] <= source.width and box[3] <= source.height, box
     crop = hard_alpha(source.crop(box))
     bounds = crop.getbbox()
@@ -146,7 +146,7 @@ def export_region(source, box, size, method):
         assert small.width <= size[0] and small.height <= size[1], (box, size, small.size)
         out = Image.new("RGBA", size)
         out.paste(small, ((size[0]-small.width)//2,size[1]-2-small.height))
-    return palette_export(out), [box[0]+bounds[0],box[1]+bounds[1],box[0]+bounds[2],box[1]+bounds[3]]
+    return palette_export(out,palette), [box[0]+bounds[0],box[1]+bounds[1],box[0]+bounds[2],box[1]+bounds[3]]
 
 
 def sha(path):
@@ -185,6 +185,118 @@ def update_garden_only():
     (ROOT/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
     garden_preview(manifest)
     print("Updated mushroom-garden only; existing sprite/UI exports untouched.")
+
+
+def update_rain_assets():
+    """Append six mechanism assets; never re-export existing sprites or atlases."""
+    manifest=json.loads((ROOT/"manifest.json").read_text())
+    definitions=[
+        ("garden_stump", (64,64), "fit", [32,56]),
+        ("sporecaster_idle", (40,40), "scale:0.045", [20,36]),
+        ("sporecaster_windup", (40,40), "scale:0.045", [20,36]),
+        ("sporecaster_release", (40,40), "scale:0.045", [20,36]),
+        ("spore_cloud", (64,40), "fit", [32,33]),
+        ("water_ripple", (32,16), "fit", [16,8]),
+    ]
+    atlas=Image.new("RGBA",(192,128))
+    # Keep the hazard in the existing palette's plum/indigo family, not wood brown.
+    spore_colors=["25283f","202438","374568","596a88","c46588","ea9ab1","492f34","332d36"]
+    spore_palette=Image.new("P",(1,1))
+    values=[v for c in spore_colors for v in bytes.fromhex(c)]
+    spore_palette.putpalette(values+values[:3]*(256-len(spore_colors)))
+    for i,(name,size,method,pivot) in enumerate(definitions):
+        source_name="water-ripple-v2" if name=="water_ripple" else name.replace("_","-")
+        source_path=ROOT/"source"/(source_name+".png")
+        source=Image.open(source_path).convert("RGBA")
+        box=(0,0,*source.size)
+        sprite,bounds=export_region(source,box,size,method,spore_palette if name=="spore_cloud" else PALETTE)
+        if name=="water_ripple":
+            # Recenter the generated ring, preserving its pixels and open center.
+            ring=sprite.crop(sprite.getbbox())
+            sprite=Image.new("RGBA",size)
+            sprite.paste(ring,((size[0]-ring.width)//2,(size[1]-ring.height)//2))
+        path=ROOT/"sprites"/(name+".png")
+        sprite.save(path)
+        x,y=(i%3)*64,(i//3)*64
+        atlas.paste(sprite,(x,y))
+        record={"file":str(path.relative_to(ROOT)),"size":list(size),
+                "source":str(source_path.relative_to(ROOT)),"source_crop":list(box),
+                "source_opaque_bounds":bounds,"export_method":method,
+                "atlas":"atlases/rain_garden.png","region":[x,y,*size],
+                "pivot":pivot,"opaque_bounds":list(sprite.getbbox()),
+                "sha256":sha(path),"asset_set":"rain_garden"}
+        if name=="garden_stump":
+            record.update({"usage":"solid stump; sort at contact-base pivot",
+                           "footprint":{"space":"native sprite pixels; origin top-left",
+                                        "kind":"visible_contact_base_hint",
+                                        "polygon":[[9,51],[20,48],[43,48],[55,52],[46,57],[18,57]],
+                                        "authority":"visual base only; gameplay owner defines collision from visible base, never full canopy rectangle"}})
+        elif name.startswith("sporecaster_"):
+            record.update({"enemy_kind":"sporecaster","pose":name.removeprefix("sporecaster_"),
+                           "usage":"state-selected pose; shared foot pivot; gameplay owns telegraph/release timing"})
+        elif name=="spore_cloud":
+            record.update({"usage":"grounded hazardous spore cluster; never a collectible",
+                           "export_palette_subset":["#"+c for c in spore_colors],
+                           "motion_hint":"small grounded pulse with fixed pivot; spawn/dissolve by game hazard state, no floating pickup bob or glitter",
+                           "boundary_note":"scalloped lower contour is visible ground edge; art does not define damage radius or lifetime"})
+        else:
+            record.update({"usage":"reusable shallow-water footstep ring; transparent center reveals terrain below",
+                           "export_alignment":"centered after fit",
+                           "motion_hint":"brief expanding ring at foot contact; stop when step ends; no collision",
+                           "terrain_note":"water and light shoreline come from map implementation, not this effect"})
+        manifest["sprites"][name]=record
+        manifest["sources"][source_path.name]={"size":list(source.size),"mode":source.mode,"sha256":sha(source_path),"runtime":False}
+    recovery=ROOT/"source/water-ripple.png"
+    original=Image.open(recovery)
+    manifest["sources"][recovery.name]={"size":list(original.size),"mode":original.mode,"sha256":sha(recovery),"runtime":False}
+    atlas.save(ROOT/"atlases/rain_garden.png")
+    (ROOT/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+    rain_preview(manifest,[d[0] for d in definitions])
+    print("Exported six rain_garden assets and dedicated atlas; existing assets untouched.")
+
+
+def rain_preview(manifest,names):
+    # QA contact sheet uses native-size sprites, plus a nearest 4x inspection copy.
+    board=Image.new("RGB",(480,250),"#3c514c")
+    d=ImageDraw.Draw(board)
+    for i,name in enumerate(names):
+        x,y=(i%3)*160,(i//3)*125
+        rec=manifest["sprites"][name]; sprite=Image.open(ROOT/rec["file"])
+        # Light and dark backing exposes alpha fringes without changing assets.
+        d.rectangle((x,y,x+159,y+98),fill="#c3d1ad" if i%2 else "#374568")
+        p=(x+(160-sprite.width)//2,y+72-rec["pivot"][1])
+        board.paste(sprite,p,sprite)
+        d.text((x+3,y+103),name,fill="#f8e4b6")
+        d.text((x+3,y+115),f"{sprite.width}x{sprite.height}; pivot {rec['pivot']}",fill="#c3d1ad")
+    board.save(ROOT/"preview/rain-garden-contact-native.png")
+    board.resize((1920,1000),Image.Resampling.NEAREST).save(ROOT/"preview/rain-garden-contact-4x.png")
+    garden=Image.open(ROOT/"backgrounds/mushroom-garden.png").convert("RGBA")
+    entries=[("garden_stump",(111,155)),("sporecaster_idle",(216,149)),
+             ("sporecaster_windup",(278,149)),("sporecaster_release",(341,149)),
+             ("spore_cloud",(282,211)),("water_ripple",(162,217)),
+             ("meemee_walk_se",(162,217)),("sparkcap_idle",(390,194))]
+    for name,foot in entries:
+        rec=manifest["sprites"][name]; sprite=Image.open(ROOT/rec["file"]); pivot=rec["pivot"]
+        garden.alpha_composite(sprite,(foot[0]-pivot[0],foot[1]-pivot[1]))
+    garden.save(ROOT/"preview/rain-garden-concept-native.png")
+    garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/rain-garden-concept.png")
+    # Only the actual three discrete poses, aligned by the shared pivot; no runtime claim.
+    frames=[]
+    for pose in ("idle","windup","release","idle"):
+        frame=Image.new("RGB",(96,80),"#3c514c")
+        rec=manifest["sprites"]["sporecaster_"+pose]; sprite=Image.open(ROOT/rec["file"])
+        frame.paste(sprite,(48-rec["pivot"][0],60-rec["pivot"][1]),sprite)
+        frames.append(frame.resize((384,320),Image.Resampling.NEAREST))
+    frames[0].save(ROOT/"preview/sporecaster-poses.gif",save_all=True,append_images=frames[1:],duration=[600,600,300,600],loop=0)
+    rec=manifest["sprites"]["garden_stump"]
+    base=Image.new("RGBA",(64,64),"#3c514c")
+    base.alpha_composite(Image.open(ROOT/rec["file"]))
+    outline=ImageDraw.Draw(base)
+    outline.polygon([tuple(p) for p in rec["footprint"]["polygon"]],outline="#a9d6ce")
+    px,py=rec["pivot"]
+    outline.line((px-2,py,px+2,py),fill="#fff3d0")
+    outline.line((px,py-2,px,py+2),fill="#fff3d0")
+    base.resize((512,512),Image.Resampling.NEAREST).save(ROOT/"preview/garden-stump-footprint.png")
 
 
 def build():
@@ -286,6 +398,7 @@ def build():
     (ROOT/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
     preview(manifest)
     print(f"Exported {len(manifest['sprites'])} sprites and {len(manifest['backgrounds'])} backgrounds; 32-color palette.")
+    update_rain_assets()
 
 
 def preview(manifest):
@@ -335,7 +448,9 @@ def preview(manifest):
 if __name__=="__main__":
     if sys.argv[1:] == ["--garden-only"]:
         update_garden_only()
+    elif sys.argv[1:] == ["--rain-only"]:
+        update_rain_assets()
     elif not sys.argv[1:]:
         build()
     else:
-        raise SystemExit("Usage: build.py [--garden-only]")
+        raise SystemExit("Usage: build.py [--garden-only|--rain-only]")
