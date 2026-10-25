@@ -76,6 +76,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=["prototype", "quality-slice"], default="prototype")
     parser.add_argument("--legacy-evidence", action="append", default=[], metavar="MODE=PATH", help="Completed P03 evidence containing the selected mode's real archived save pair")
     parser.add_argument("--headless-diagnostic", action="store_true", help="Quality suite only: real input/restore diagnostic with no runtime, screenshot or Q06 pass")
+    parser.add_argument("--font-negative-data-sha", action="store_true", help="Headless font stage only: intentionally wrong expected SHA; must fail without changing the font")
     parser.add_argument("--seed-evidence", type=Path, help="Narrow only: native P06 evidence containing this mode's successful real spore-warning save")
     parser.add_argument("--stage", choices=sorted({x[0] for x in STAGES + quality_runtime.STAGES} | set(AUXILIARY_STAGES) | set(quality_runtime.AUXILIARY_STAGES)), help="Targeted continuation or fresh quality focus experiment")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
@@ -92,6 +93,8 @@ def main() -> int:
         parser.error("--stage does not belong to the selected suite")
     if args.headless_diagnostic and (not quality or args.fullscreen):
         parser.error("headless diagnostic requires quality-slice and cannot claim fullscreen")
+    if args.font_negative_data_sha and not (quality and args.stage == "font" and args.headless_diagnostic):
+        parser.error("negative font SHA is only allowed for the headless font stage")
     if quality and args.stage == "focus" and (args.headless_diagnostic or args.fullscreen):
         parser.error("focus experiment requires a real windowed display")
     if bool(args.seed_evidence) != bool(quality and args.stage == "narrow"):
@@ -138,6 +141,9 @@ def main() -> int:
                         headless_diagnostic=args.headless_diagnostic)
         if args.headless_diagnostic:
             evidence["suite"] = "P06 rain-night headless input diagnostic"
+        if args.stage == "font":
+            evidence.update(scope="Targeted font/page/scroll/resource acceptance only; not a repeated full night.",
+                            Q06_status="not_retested_by_font_stage")
     report_path = output / ("evidence.json" if args.stage is None else f"evidence-{args.stage}.json")
 
     def write_report() -> None:
@@ -181,10 +187,11 @@ def main() -> int:
                 probe = manifest["probe"]
                 settings.update(expected_user_dir=probe["user_dir"], expected_custom_dir=probe["custom_user_dir_name"],
                                 expected_save_path=probe["save_path"], headless_diagnostic=args.headless_diagnostic)
+                if stage == "font": settings["font_negative_data_sha"] = args.font_negative_data_sha
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
-            script = "tests/runtime/" + {"focus":"focus_boundary.gd","history":"history_boundary.gd","narrow":"narrow_boundary.gd"}.get(stage,"rain_night_path.gd") if quality else "tests/runtime/critical_path.gd"
+            script = "tests/runtime/" + {"focus":"focus_boundary.gd","history":"history_boundary.gd","narrow":"narrow_boundary.gd","font":"font_boundary.gd"}.get(stage,"rain_night_path.gd") if quality else "tests/runtime/critical_path.gd"
             command = [str(run_root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
                        "--script", script, "--", "--config", str(config)]
             if args.headless_diagnostic:
@@ -228,6 +235,9 @@ def main() -> int:
             run["active_scene"] = result.get("active_scene")
             run["active_assets_loaded"] = result.get("active_assets_loaded", False)
             run["display_samples"] = result.get("display_samples", [])
+            if stage == "font":
+                run["font_pages"] = result.get("font_pages", [])
+                run["batch_proof"] = result.get("batch_proof", {})
             # Read the actual PNG header independently of the driver's dimensions.
             # Never resize a screenshot to satisfy fullscreen evidence.
             display_valid = bool(run["display_samples"])
@@ -252,6 +262,7 @@ def main() -> int:
                     and len(dimensions) == 2 and all(x > 0 for x in dimensions)
                     and image_geometry_matches(sample, dimensions)
                     and (full_coverage if args.fullscreen else sample.get("viewport_size") == dimensions))
+                if stage == "font": display_valid = display_valid and sample.get("window_focused") is True
             run["display_verified"] = display_valid
             mechanics_passed = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
@@ -268,6 +279,8 @@ def main() -> int:
             if quality:
                 run["isolation_changes"] = quality_runtime.validate_manifest(manifest, evidence["candidate_commit"], evidence["candidate_tree"])
                 run["quality_errors"] = quality_runtime.result_errors(result, manifest, sources)
+                if stage == "font" and result.get("stage") != "font":
+                    run["quality_errors"].append("Font supervisor received a different stage report")
                 mechanics_passed = mechanics_passed and not run["isolation_changes"] and not run["quality_errors"]
             run["diagnostic_passed"] = bool(args.headless_diagnostic and mechanics_passed
                                              and result.get("display") == "headless"
