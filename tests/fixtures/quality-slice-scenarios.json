@@ -1,0 +1,787 @@
+{
+  "schema_version": 1,
+  "suite": "quality-slice",
+  "seeds": [
+    1,
+    7,
+    23,
+    99,
+    20261025
+  ],
+  "content_contract": "contracts/quality-slice-v1.json；高层steps由真实玩家规则适配，不提供游戏作弊入口。边界快照可构造，但后续操作/计时/断言必须执行真实模型与核心。",
+  "configuration": {
+    "profile_id": "rain-night-v1",
+    "map_options": {
+      "ruleset": "rain-night-v1",
+      "map_id": "rain-garden-two-routes",
+      "map_revision": 1,
+      "meal_effect": null
+    },
+    "night1": {
+      "day": 1,
+      "weather": "rain",
+      "event_id": "rain_return",
+      "budget_range": [
+        23,
+        30
+      ],
+      "budget_generation": "沿session持久化RNG，在当夜供货生成后按wave_index/customer_index顺序各取一次整数；保存全部队列，开波不重抽。",
+      "arrival_ms": 0,
+      "patience_ms": 20000,
+      "waves": [
+        {
+          "wave_index": 1,
+          "id": "n1-w1",
+          "customers": [
+            {
+              "id": "n1-w1-c01",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w1-c02",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w1-c03",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w1-c04",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w1-c05",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w1-c06",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            },
+            {
+              "id": "n1-w1-c07",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            },
+            {
+              "id": "n1-w1-c08",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            }
+          ]
+        },
+        {
+          "wave_index": 2,
+          "id": "n1-w2",
+          "customers": [
+            {
+              "id": "n1-w2-c01",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w2-c02",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w2-c03",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w2-c04",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            },
+            {
+              "id": "n1-w2-c05",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            },
+            {
+              "id": "n1-w2-c06",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            },
+            {
+              "id": "n1-w2-c07",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            },
+            {
+              "id": "n1-w2-c08",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            },
+            {
+              "id": "n1-w2-c09",
+              "required": [
+                "meal",
+                "hearty"
+              ]
+            }
+          ]
+        },
+        {
+          "wave_index": 3,
+          "id": "n1-w3",
+          "customers": [
+            {
+              "id": "n1-w3-c01",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w3-c02",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w3-c03",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w3-c04",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w3-c05",
+              "required": [
+                "meal",
+                "quick"
+              ]
+            },
+            {
+              "id": "n1-w3-c06",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            },
+            {
+              "id": "n1-w3-c07",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            },
+            {
+              "id": "n1-w3-c08",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            },
+            {
+              "id": "n1-w3-c09",
+              "required": [
+                "meal",
+                "warming",
+                "heat_hold"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "night2": {
+      "day": 2,
+      "weather": "rain",
+      "event_id": "rain_return",
+      "inherit_wave_structure": "night1; replace n1 identities with n2; same arrivals/patience/budget range and RNG draw order",
+      "order_overrides": [
+        {
+          "id": "n2-w1-c08",
+          "required": [
+            "meal",
+            "trail_light"
+          ]
+        },
+        {
+          "id": "n2-w3-c09",
+          "required": [
+            "meal",
+            "celebration"
+          ]
+        }
+      ],
+      "rules": "两个替换订单在采购前预告；缺稀有料可放弃且继续经营，不增加人数；静态几何revision不变。"
+    },
+    "counterexamples": {
+      "floating_throughput": {
+        "wave_id": "n1-w1",
+        "initial_cash": 60,
+        "recipes": {
+          "floating_pie": 5,
+          "ember_soup": 3
+        },
+        "ingredient_cost": 43,
+        "price_tier": "standard",
+        "menu_priority": [
+          "floating_pie",
+          "ember_soup"
+        ],
+        "fresh_branch": {
+          "pie_prepared_wave_id": "n1-w1",
+          "sold": 8,
+          "last_delivery_ms": 9000,
+          "c08_status": "delivered"
+        },
+        "carryover_branch": {
+          "pie_prepared_wave_id": "n0-w3",
+          "sold": 7,
+          "last_delivery_ms": 21000,
+          "c08_status": "left"
+        },
+        "expected_revenue_delta": 18,
+        "notes": "相同bag/价格/客流快照仅饼制作波不同；雨夜25%活动暖焰汤14按原half-up取18，c08被挽回。边界旧波标记仅用于测试余货，不把产品开成day0。"
+      },
+      "heat_capacity": {
+        "orders": [
+          {
+            "id": "n1-w3-c01",
+            "required": [
+              "meal",
+              "warming",
+              "heat_hold"
+            ],
+            "budget": 30,
+            "arrival_ms": 0,
+            "patience_ms": 20000
+          },
+          {
+            "id": "n1-w3-c02",
+            "required": [
+              "meal",
+              "warming",
+              "heat_hold"
+            ],
+            "budget": 30,
+            "arrival_ms": 0,
+            "patience_ms": 20000
+          },
+          {
+            "id": "n1-w3-c03",
+            "required": [
+              "meal",
+              "warming",
+              "heat_hold"
+            ],
+            "budget": 30,
+            "arrival_ms": 0,
+            "patience_ms": 20000
+          },
+          {
+            "id": "n1-w3-c04",
+            "required": [
+              "meal",
+              "warming",
+              "heat_hold"
+            ],
+            "budget": 30,
+            "arrival_ms": 0,
+            "patience_ms": 20000
+          }
+        ],
+        "leftover_item_uids": [
+          101,
+          102,
+          103,
+          104
+        ],
+        "item_id": "moon_stew",
+        "preserved_uids": [
+          101,
+          102,
+          103
+        ],
+        "cooled_uids": [
+          104
+        ],
+        "with_pot_warm_sales": 3,
+        "without_pot_warm_sales": 0,
+        "cooled_hearty_match": true,
+        "notes": "从波2尾的真实hot剩菜快照分叉installed/未装锅，执行波尾保温，再启动四暖身客边界波；不直接把结果写成held。"
+      }
+    },
+    "save_boundaries": [
+      "upper_route",
+      "lower_route",
+      "spore_warning",
+      "spore_active_after_hit",
+      "charge_stagger",
+      "intermission",
+      "delivery_in_flight",
+      "upgrade_pending",
+      "next_morning_equipped"
+    ],
+    "frame_partitions_ms": [
+      [
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50,
+        50
+      ],
+      [
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34
+      ],
+      [
+        250,
+        250,
+        250,
+        250
+      ]
+    ],
+    "meal_examples": [
+      {
+        "effect_id": "light_step",
+        "source_item_uid": 101,
+        "used": false
+      },
+      {
+        "effect_id": "clear_breath",
+        "source_item_uid": 102,
+        "used": false
+      },
+      null
+    ],
+    "upgrade_restock_tradeoff": {
+      "upgrade_ids": [
+        "field_kit",
+        "shelf"
+      ],
+      "price_source": "contracts/quality-slice-v1.json rules.economy.upgrade_cost",
+      "baseline_baskets": {
+        "hot_meals": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 12
+            },
+            {
+              "item_id": "cream",
+              "quantity": 12
+            }
+          ],
+          "cost": 60
+        },
+        "quick_service": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 12
+            },
+            {
+              "item_id": "flour",
+              "quantity": 8
+            },
+            {
+              "item_id": "ember_herb",
+              "quantity": 4
+            }
+          ],
+          "cost": 64
+        }
+      },
+      "rules": "全部五seed×standard/premium两档，正常不探险首晚到日结；每个单买/双买/采购分支均从真实同源快照起步，不改现金或库存。单买逐项完成原篮；两档热锅双买用原资金guard，完整篮失败不改变失败命令前状态；从双买后快照另走该档缩小篮并实际备餐营业。预算预测不作为passed报告。",
+      "price_tiers": [
+        "standard",
+        "premium"
+      ],
+      "reduced_hot_baskets": {
+        "standard": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 3
+            },
+            {
+              "item_id": "cream",
+              "quantity": 3
+            }
+          ],
+          "cost": 15
+        },
+        "premium": {
+          "buys": [
+            {
+              "item_id": "pumpkin",
+              "quantity": 10
+            },
+            {
+              "item_id": "cream",
+              "quantity": 10
+            }
+          ],
+          "cost": 50
+        }
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "id": "routes-and-solid-terrain",
+      "seed": 1,
+      "route": "map",
+      "acceptance_ids": [
+        "Q01",
+        "Q05"
+      ],
+      "steps": [
+        "在每seed创建rain-night-v1真实模型，沿上路/下路/连接到资源点和入口。",
+        "以步行/闪避/冲刺/双方弹体穿越菇桩和空地对照，并走湿渠与干地；用三种等时长帧切分比较。",
+        "资源领取一次后保存/恢复，再访问同节点，比较静态地形revision与动态collected。"
+      ],
+      "outcomes": [
+        "两路连通；实体阻挡与干地反例成立，无高速穿透；水只减步行。",
+        "几何不重抽，资源不复制，同输入分段推进等价。"
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "stump-spore-combination",
+      "seed": 1,
+      "route": "combat",
+      "acceptance_ids": [
+        "Q02",
+        "Q05"
+      ],
+      "steps": [
+        "通过真实move/aim/cast/dodge/skill输入经历冲刺+投手及盾精英+投手组合。",
+        "引冲撞桩/空地对照；对active区、warning区、飞行弹和环形波分别gust。",
+        "同孢子反复进入，击败投手/精英取材，重复攻击/离场/保存恢复。"
+      ],
+      "outcomes": [
+        "仅冲撞实体桩触发一次1200ms硬直/破盾；gust只清范围active区。",
+        "单危险区一次伤害、减速取最小值、掉落与领取一次；真实获得sparkcap/moonheart。"
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "three-wave-guards",
+      "seed": 1,
+      "route": "service",
+      "acceptance_ids": [
+        "Q03",
+        "Q05"
+      ],
+      "steps": [
+        "使用configuration.night1生成并保存完整队列，按玩家操作开三波，期间以合法菜单供餐。",
+        "active trading分别正常/暂停尝试craft/display/price；intermission执行批量补餐/菜单优先级。",
+        "重发request_id、旧wave_id/错误next_wave_id、大delta波尾；比较RNG/次数/供应与队列。"
+      ],
+      "outcomes": [
+        "只有冻结白名单阶段可写；第三波直接closing，预留为空才换波。",
+        "不跳波/重抽/刷新次数，波尾余帧为0，day1雨天不伪装day3，天气与活动保存。"
+      ]
+    },
+    {
+      "id": "floating-throughput-counterexample",
+      "seed": 1,
+      "route": "quick_service",
+      "acceptance_ids": [
+        "Q03"
+      ],
+      "steps": [
+        "读取counterexamples.floating_throughput：正常采购制作43成本，复制相同快照，仅将对照饼标为旧波余货。",
+        "两分支调用真实open_shop/advance，逐份记录预留/交付UID、订单时间与账本；不修改通道计时结果。"
+      ],
+      "outcomes": [
+        "fresh卖8，carryover卖7且c08于20s离开；c08挽回收入18。",
+        "fresh最后交付9s，对照最后已预留单21s；等待停止后不能取消在途已承诺订单。"
+      ],
+      "config_ref": "configuration.counterexamples.floating_throughput"
+    },
+    {
+      "id": "heat-and-uid-counterexample",
+      "seed": 1,
+      "route": "hot_meals",
+      "acceptance_ids": [
+        "Q03",
+        "Q05"
+      ],
+      "steps": [
+        "按heat_capacity构造合法波2尾hot库存，真实完成波尾并开四暖身客边界波。",
+        "对照未安装锅、冷菜重新display、held移出/拆锅、同SKU冷热交错UID；冷菜另配hearty订单。",
+        "在批次交付中保存恢复，并尝试移走/售回/自食已预留UID与重发请求。"
+      ],
+      "outcomes": [
+        "仅101/102/103保温，104冷；有锅暖身3单，无锅0单，冷菜仍可hearty。",
+        "固有tags/effect不因拆锅丢失；匹配UID=预留UID=扣除UID，容量含reserved，费用/成本无重复。"
+      ],
+      "config_ref": "configuration.counterexamples.heat_capacity"
+    },
+    {
+      "id": "rare-material-four-uses",
+      "seed": 1,
+      "route": "material",
+      "acceptance_ids": [
+        "Q04"
+      ],
+      "steps": [
+        "从真实战斗取得同一稀有料快照，分别走recycle、craft→display→成交、craft→consume、保存跨夜。",
+        "测sparkcap4/moonheart8、未知/超量/非bag售回、原料display/price/满足订单、免费掉落成本0。"
+      ],
+      "outcomes": [
+        "四支库存与现金守恒，原料售款不计菜品收入，不重复扣机会成本。",
+        "非法操作原子拒绝；没有免费抽料或强制稀有料门槛。"
+      ]
+    },
+    {
+      "id": "meal-atomic-transfer",
+      "seed": 1,
+      "route": "meal",
+      "acceptance_ids": [
+        "Q04",
+        "Q05"
+      ],
+      "steps": [
+        "分别正常制作floating_pie/star_soup，自食指定最小bag UID，尝试第二份/同request重发/菜单与预留自食。",
+        "成功/失败出发分别比较pending与model.meal_effect，再实际首次闪避/风咒与第二次动作。",
+        "在消费后/出发后/效果used后暂停保存恢复，离场未用也再出发比较。"
+      ],
+      "outcomes": [
+        "仅一个绑定来源UID的对象或null，失败出发保留pending；成功原子清pending。",
+        "首次300ms闪避或160风咒范围，后续恢复200/120；不变速度/推退、不叠加、不退还/刷新。"
+      ]
+    },
+    {
+      "id": "quick-service-five-seeds",
+      "seed": 1,
+      "route": "quick_service",
+      "acceptance_ids": [
+        "Q03",
+        "Q04",
+        "Q05"
+      ],
+      "steps": [
+        "对全部seeds从60现金与遗留锅正常开档，售锅可选；优先上路sparkcap/或不足即撤回，以饼+汤小批波间补做走三波。",
+        "不依赖委托/恢复；用真实菜品收入购买field_kit或shelf，记菜品成本/毛利/未售/机会成本，不用期末现金单项评价。",
+        "若买field_kit，next_day立即装备fan_wand并正式出发；保存后再装备/出发防复制。"
+      ],
+      "outcomes": [
+        "全部种子首晚至少可买一个选择并留基础补货资金；无负数、软锁、应急或强制清图。",
+        "首晚成长真实接次晨；两项任意买齐且无取舍要作为调参问题记录，不能换幸运seed。"
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "hot-meals-five-seeds",
+      "seed": 1,
+      "route": "hot_meals",
+      "acceptance_ids": [
+        "Q03",
+        "Q04",
+        "Q05"
+      ],
+      "steps": [
+        "与quick_service同seeds正常开档，保留锅、偏湿渠风咒清场取材，按真实预算备炖锅与饼/汤。",
+        "用锅批次与最多三份保温跨波供给，在intermission按实际库存调菜单；仍可提前撤回。",
+        "用菜品收入买首晚选择并进入次晨，记录与快餐不同的备餐/通道/余量轨迹。"
+      ],
+      "outcomes": [
+        "五seed可继续补货且首晚有成长，非负且不依赖恢复；区别是供餐/保温行为而非重命名。",
+        "真实成本与预算可复算；不要求两路线利润恰好相等。"
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "no-expedition-continuation",
+      "seed": 1,
+      "route": "no_expedition",
+      "acceptance_ids": [
+        "Q03",
+        "Q05"
+      ],
+      "steps": [
+        "对所有seeds完全跳过探险与海格，只靠稳定四基础料完成三波并进入次晨继续营业。",
+        "在正常现金下分别采用基础快餐/热食备货，不调用测试加钱/跳阶段。"
+      ],
+      "outcomes": [
+        "稀有料和随机结果不锁进度；无恢复依赖/负数/软锁。"
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "save-determinism-and-isolation",
+      "seed": 1,
+      "route": "save",
+      "acceptance_ids": [
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q04",
+        "Q05"
+      ],
+      "steps": [
+        "在configuration.save_boundaries的真实可达状态分叉连续/保存恢复，给相同后续输入和等时长不同帧切分。",
+        "暂停/失焦/加载清保持输入后显式重发输入；等待现实时间不推进。",
+        "临时独立user-data目录运行新旧默认入口，预建真实旧v2主备档并记录hash；新入口尝试旧v2、错profile/maprevision、坏JSON/备份。"
+      ],
+      "outcomes": [
+        "恢复分支状态/动作账本一致；HUD从模型读状态；不凭文件名声明隔离。",
+        "旧main/bak哈希不变；新默认进入rain-night-v1。版本错明确拒绝且不回退不匹配备份；损坏主档仅恢复有效同profile备份。"
+      ]
+    },
+    {
+      "id": "real-input-one-night",
+      "seed": 1,
+      "route": "runtime",
+      "acceptance_ids": [
+        "Q06"
+      ],
+      "steps": [
+        "同一产品候选三种真实InputEvent分别走探险/三波/购入/next_day装备，独立进程保存恢复。",
+        "持统一渲染锁运行Godot CLI，截图全屏实际尺寸与窄屏、孢子预警/桩碰撞/波间供应。"
+      ],
+      "outcomes": [
+        "记录exact SHA/实际版本/输入日志/截图/进程退出码；不以直接核心命令冒充UI，不宣称实体设备已验。"
+      ]
+    },
+    {
+      "id": "human-replay-observation",
+      "seed": 1,
+      "route": "human",
+      "acceptance_ids": [
+        "QH"
+      ],
+      "steps": [
+        "用户或咩咩自由玩一晚，记录选路、组合战斗、补餐、试杖与是否自愿继续的行为和原话。"
+      ],
+      "outcomes": [
+        "未试玩保持待验，单调反馈明确失败；自动runner不能报告QH passed，不外发招募邀请。"
+      ]
+    },
+    {
+      "id": "upgrade-restock-tradeoff",
+      "seed": 1,
+      "route": "economy",
+      "acceptance_ids": [
+        "Q04",
+        "Q05"
+      ],
+      "seed_policy": "all_seeds",
+      "config_ref": "configuration.upgrade_restock_tradeoff",
+      "steps": [
+        "全部seeds×standard/premium两档，按正常不探险quick_service/hot_meals完成首晚，保存真实日结快照；以合法price指令设置档位，不领取恢复/任务或注入资金。",
+        "每路线/seed/价格档从同源日结分别购买field_kit、shelf（契约候选价各110），next_day后逐项真实buy完整baseline_basket；记录每次请求、cash、UID库存和账本。",
+        "两档热锅各从日结依次合法购买两项，next_day后尝试完整60篮，验证不足资金的buy原子拒绝；从同一双买后快照另开分支，standard购买15篮、premium购买50篮（reduced_hot_baskets），制作并实际营业，记录采购量和结果。",
+        "快餐尝试第二项时若现金不足仅由原资金guard拒绝；现金足够的热锅双买须成功，不得新增升级互斥条件。"
+      ],
+      "outcomes": [
+        "五seed×两价格档×两路线单买任一项后均实际完成原篮且现金非负，不用恢复/加钱；field_kit沿next_day真实装备试用。",
+        "两价格档热锅双买合法，完整篮无法全部购齐而缩小篮可实际备餐经营，采购/库存真实缩减；没有硬禁双买或以算术代执行。",
+        "保留失败命令前后等价证据和所有分支账本；新110初值未执行前保持待验，不以旧60报告宣称通过。"
+      ]
+    }
+  ]
+}
