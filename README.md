@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-2026-10-25：已保留初步研究与设计，源码仓库现为 public；工程 harness 已验收合并，产品已转向魔法料理饭店；正在保留通用核心、UI、像素美术与原型 CI，等待 H02 冻结三日料理设计和验收。开发基线选用 Godot 4.7.2 标准版、GDScript 和 Compatibility 渲染器；本机引擎实际报告 `4.7.2.stable.official.ed1daf0bf`。
+2026-10-25：已保留初步研究与设计，源码仓库现为 public；工程 harness 已验收合并，产品已转向魔法料理饭店；正在保留通用核心、UI、像素美术与原型 CI，按 H02 已冻结的三日料理设计和验收推进实现。开发基线选用 Godot 4.7.2 标准版、GDScript 和 Compatibility 渲染器；本机引擎实际报告 `4.7.2.stable.official.ed1daf0bf`。
 
 **目前尚无已交付的可玩入口，三日原型仍在实现，未进行人类试玩或发布。** 实际进度、证据和风险以 [项目状态](docs/project-status.md) 为准。
 
@@ -35,7 +35,7 @@ python3 tools/gate.py --stage harness
 python3 tools/gate.py --stage prototype --godot /absolute/path/to/Godot --report output/prototype-gate.json
 ```
 
-这两个命令定义检查契约；`prototype` 在游戏或必需用例不存在时必须失败，`harness` 通过不能宣称游戏完成。Mac 源码启动器由工程 PR #7 提供，待该 PR 与 UI 主场景集成后使用 `./tools/启动月灯巷.command`；它依赖本地 Godot，不是独立导出的应用。实际可玩状态见项目状态，无需用户手动搭场景。
+这两个命令定义检查契约；`prototype` 在游戏或必需用例不存在时必须失败，`harness` 通过不能宣称游戏完成。Mac 源码启动器由工程 PR #7 提供，该 PR 已随底座合入 main；UI 主场景集成后使用 `./tools/启动月灯巷.command`；它依赖本地 Godot，不是独立导出的应用。实际可玩状态见项目状态，无需用户手动搭场景。
 
 ## 文档导航
 
