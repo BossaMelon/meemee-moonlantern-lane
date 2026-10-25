@@ -253,6 +253,23 @@
         "H02",
         "H03"
       ]
+    },
+    {
+      "id": "D01",
+      "owner": "engineering_delivery",
+      "allowed_paths": [
+        "tools/build_local_demo.py",
+        "tools/test_build_local_demo.py",
+        "tools/README.md"
+      ],
+      "depends_on": [
+        "H03",
+        "P06"
+      ],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     }
   ],
   "coordination": {
