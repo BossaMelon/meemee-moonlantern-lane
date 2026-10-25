@@ -7,7 +7,7 @@ func _initialize():
 	source_hashes["game/ui/checks/battle_exit.gd"]=FileAccess.get_sha256("res://game/ui/checks/battle_exit.gd")
 
 func run():
-	selected_routes=PackedStringArray(["battle-exit"])
+	selected_routes=PackedStringArray(["battle-resume" if "--resume" in OS.get_cmdline_user_args() else "battle-exit"])
 	mode="touch"
 	await fresh(Vector2i(844,390))
 	if not failures.is_empty(): return
