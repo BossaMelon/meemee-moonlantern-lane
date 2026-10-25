@@ -263,6 +263,20 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaises(gate.GateError):
                 gate.validate_runtime_workflow(root)
 
+    def test_pr_trigger_filters_cannot_skip_game_prs(self):
+        for filter_name in ("paths", "paths-ignore", "branches", "branches-ignore", "types"):
+            source = WORKFLOW.replace("on: [pull_request, push]", f"on:\n  pull_request:\n    {filter_name}: [docs/**]")
+            with self.subTest(filter_name=filter_name), self.assertRaisesRegex(gate.GateError, "no paths, branches, types"):
+                self.check_workflow(source)
+
+    def test_canonical_unfiltered_pr_trigger_required(self):
+        source = WORKFLOW.replace("on: [pull_request, push]", "on:\n  pull_request:\n  push:\n    branches: [main]")
+        self.assertEqual(self.check_workflow(source), 1)
+        with self.assertRaises(gate.GateError):
+            self.check_workflow(WORKFLOW.replace("on: [pull_request, push]", "on: [push]"))
+        with self.assertRaises(gate.GateError):
+            self.check_workflow(WORKFLOW.replace("on: [pull_request, push]", "on: {pull_request: {paths: [docs/**]}}"))
+
 
 class CommandTests(unittest.TestCase):
     def test_nonzero_exit_preserved(self):

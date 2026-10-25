@@ -72,6 +72,9 @@ PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分�
 它在所有 PR 和 `main` 推送上执行，无路径过滤。依赖的官方 Actions 固定到提交，
 证据保留 7 天。首个包含游戏源码的 PR 必须同时加入下列 **prototype job**；
 缺少 job、条件跳过、`continue-on-error` 或用 shell 吞掉 gate 退出码都会被拒绝。
+运行时 workflow 的 `pull_request` 触发还必须没有路径、分支或事件类型过滤，
+避免代码 PR 根本不触发检查。validator 只支持当前 canonical `on:` 事件块、
+`on: pull_request` 或无选项事件列表；其他 YAML 表达式必须先经过验证器适配。
 
 ```yaml
   prototype:

@@ -273,6 +273,31 @@ def validate_markdown_links(root: Path) -> int:
     return count
 
 
+def validate_pr_trigger(source: str) -> None:
+    """Support only canonical unfiltered PR event syntax, not general YAML."""
+    declarations = re.findall(r"^on:([^\n]*)$", source, re.M)
+    require(len(declarations) == 1, "runtime workflow needs exactly one canonical on: declaration")
+    declaration = declarations[0].strip()
+    if declaration == "pull_request":
+        return
+    if declaration.startswith("[") and declaration.endswith("]"):
+        events = [value.strip() for value in declaration[1:-1].split(",")]
+        require("pull_request" in events and all(ID_PATTERN.fullmatch(event) for event in events),
+                "runtime workflow requires unfiltered pull_request trigger")
+        return
+    require(not declaration or declaration.startswith("#"), "unsupported on: YAML; use canonical event block")
+    match = re.search(r"^on:[^\n]*\n((?:[ \t]*\n| {2}.+\n?)*)", source, re.M)
+    require(match is not None, "runtime workflow has no event block")
+    event_block = match.group(1)
+    pr_events = re.findall(r"^  pull_request:([^\n]*)\n((?:[ \t]*\n| {4}.+\n?)*)", event_block, re.M)
+    require(len(pr_events) == 1, "runtime workflow requires exactly one pull_request trigger")
+    value, options = pr_events[0]
+    require(not value.strip() or value.strip().startswith("#") or value.strip() == "{}",
+            "unsupported pull_request options; use an empty event declaration")
+    option_lines = [line.strip() for line in options.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    require(not option_lines, "pull_request trigger must have no paths, branches, types, or other filters")
+
+
 def validate_runtime_workflow(root: Path) -> int:
     runtime_files = []
     for folder, directories, files in os.walk(root):
@@ -284,6 +309,7 @@ def validate_runtime_workflow(root: Path) -> int:
     path = root / ".github/workflows/gate.yml"
     require(path.is_file(), "runtime files require .github/workflows/gate.yml prototype job")
     source = path.read_text(encoding="utf-8")
+    validate_pr_trigger(source)
     match = re.search(r"^  prototype:\s*\n((?:[ \t]*\n| {4}.+\n?)*)", source, re.M)
     require(match is not None, "runtime files require unconditional prototype job")
     block = match.group(1)
