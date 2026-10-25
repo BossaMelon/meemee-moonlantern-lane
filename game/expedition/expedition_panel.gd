@@ -448,10 +448,9 @@ func _input(event: InputEvent):
 func _texture(id: String, background: bool = false) -> Texture2D:
 	if textures.has(id): return textures[id]
 	var path = "res://assets/pixel/"+("backgrounds/" if background else "sprites/")+id+".png"
-	if not FileAccess.file_exists(path): return null
-	var image = Image.load_from_file(path)
-	if image == null or image.is_empty(): return null
-	var texture = ImageTexture.create_from_image(image)
+	if not ResourceLoader.exists(path,"Texture2D"): return null
+	var texture = ResourceLoader.load(path,"Texture2D") as Texture2D
+	if texture == null: return null
 	textures[id] = texture
 	return texture
 
