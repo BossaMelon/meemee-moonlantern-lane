@@ -22,4 +22,12 @@
 
 `release_inputs()` 总是清设备缓冲；只在核心实际保持输入非零时提交一次完整零输入，重复调用和绑定已清零的读档不会增加 requests。比较逐字段数值/布尔，不因 JSON int/float 表示不同再发请求；不删请求历史、不忽略 requests 验证。暂停后工具事件归 GUI，不进入战斗保持缓冲；playing 的移动/瞄准/施法/闪避/技能事件会标 handled，包含方向键/Space 和手柄摇杆/A 的按下与抬起，不能穿透激活工具按钮。键鼠/触摸工具按钮本身仍走真实 GUI；暂停时手柄可从面板焦点上/右进入四按钮循环并确认。缺少时在运行时补 `ui_accept` 的 JOY_BUTTON_A，保留已有绑定、不写 project 设置。
 
+## 全屏与输入 HUD（仅表现层）
+
+场地仍是960×540逻辑空间，`field:Rect2` 是 viewport 内的最大等比绘制区域，不再限制为1倍或为触控预留大块底栏；世界位置、瞄准和预警均使用该同一变换。若整数源像素缩放能保留至少97%的最大边长则吸附，否则以nearest取样最大铺开。HUD文字按viewport尺寸缩放，Retina全屏时最多2倍字号。消费 `mushroom-garden` 及可用的 `ui_paper_panel/ui_button_plain/ui_button_plain_focus`，不写资产。
+
+`input_mode:String` 为 `keyboard/gamepad/touch`，仅保存在面板。真实按键/鼠标、手柄、触屏事件自动切换；忽略系统生成的device=-1模拟事件，避免触屏被模拟鼠标抢回模式。`set_input_mode(mode)->bool`、`input_mode_changed(mode)` 可供P02/P03表现与检查使用，**不提交核心命令或存档字段**。键鼠/手柄只显示一行键位提示；touch显示完整移动/瞄准/施法/闪避/风咒触区和常驻暂停按钮。`_centers()` 继续提供当前局部触区中心，新增 `touch_radius(kind)` 提供随尺寸变化的半径，测试/宿主不要硬编码55像素拖动。
+
+playing 时只常驻 `pause_button`；**先通过暂停按钮、Esc或Start打开真实暂停浮层**，`save_button/save_quit_button/return_button` 此时才可见且可操作，公开对象及原信号保留。不要在playing时直接定位隐藏的保存按钮；P02/P03应先走暂停路径。浮层四按钮支持左右/上下/Tab循环。新HUD不改变退出冻结、清零幂等和cancel_save_quit协议，不调用OS退出，也不变更模型、经济、存档或数值。
+
 E01 只改 game/expedition/**、scenes/expedition/**、tests/expedition/**。P01 在 tests/run.gd 接入 `tests/expedition/prototype_cases.gd` 的 `run(session_factory, output_dir)`，实际返回 P16/P17 case 和模拟轨迹；不得在模块缺失时写假通过。模型独立检查入口另见 tests/expedition/run_model.gd。
