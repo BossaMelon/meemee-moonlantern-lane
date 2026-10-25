@@ -44,6 +44,11 @@ def stage_project(folder: Path) -> str:
             target = folder / "assets/pixel" / meta["file"]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / "assets/pixel" / meta["file"], target)
+    provider = Path("game/ui/portable_font.gd")
+    (folder / provider.parent).mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(ROOT / provider,folder / provider)
+    if (ROOT / (str(provider)+".uid")).is_file(): shutil.copyfile(ROOT / (str(provider)+".uid"),folder / (str(provider)+".uid"))
+    shutil.copytree(ROOT / "assets/fonts",folder / "assets/fonts")
     target_manifest = folder / "assets/pixel/manifest.json"
     shutil.copyfile(manifest_path, target_manifest)
     (folder / "project.godot").write_text('''config_version=5
@@ -60,7 +65,7 @@ name="E03 Resources"
 platform="Windows Desktop"
 runnable=false
 export_filter="all_resources"
-include_filter="assets/pixel/manifest.json"
+include_filter="assets/pixel/manifest.json,assets/fonts/font-manifest.json,assets/fonts/noto-sans-sc/OFL.txt,assets/fonts/noto-sans-sc/NOTICE.txt"
 exclude_filter="'''+excluded+'''"
 export_path=""
 script_export_mode=0
@@ -80,6 +85,7 @@ def main() -> int:
         output.mkdir(parents=True, exist_ok=False)
     project = output / "staging"
     manifest_sha = stage_project(project)
+    font_manifest_sha = sha(ROOT / "assets/fonts/font-manifest.json")
     empty = output / "empty-probe"
     empty.mkdir()
     version = execute([str(args.godot), "--version"], empty, output / "version.log")
@@ -108,7 +114,7 @@ def main() -> int:
         probe = execute([str(args.godot), "--headless", "--main-pack", str(pack),
                          "--log-file", str(output / (name + "-engine-probe.log")),
                          "--script", "res://"+PROBE.as_posix(), "--", "--report", str(report_path),
-                         "--manifest-sha", manifest_sha], empty, output / (name + "-probe.log"))
+                         "--manifest-sha", manifest_sha,"--font-manifest-sha",font_manifest_sha], empty, output / (name + "-probe.log"))
         case["probe"] = probe
         if probe.get("engine_error_logged",False):
             errors.append(name + ": engine/script error logged")
@@ -129,9 +135,11 @@ def main() -> int:
                 errors.append(name + ": negative fixture did not fail only for the intended reason")
     report = {"kind": "editor-pck-resource-regression", "claim": "Not Windows release/native validation",
               "source_sha256": {str(PANEL): sha(ROOT/PANEL), str(PROBE): sha(ROOT/PROBE),
-                                "manifest": manifest_sha, "tests/expedition/export_resources.py": sha(Path(__file__))}, "version": version, "engine_version": engine_version,
+                                "manifest": manifest_sha, "tests/expedition/export_resources.py": sha(Path(__file__)),
+                                "game/ui/portable_font.gd": sha(ROOT/"game/ui/portable_font.gd"),
+                                "assets/fonts/font-manifest.json":font_manifest_sha}, "version": version, "engine_version": engine_version,
               "editor_sha256": sha(args.godot), "cases": cases,
-              "errors": errors, "passed": not errors, "font_status": "pending_P07_provider"}
+              "errors": errors, "passed": not errors, "font_status": "actual_ready_panel_and_buttons_probed"}
     (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     print(json.dumps({"passed": not errors, "errors": errors, "report": str(output/"report.json")}))
     return 1 if errors else 0

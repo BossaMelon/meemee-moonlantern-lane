@@ -27,4 +27,8 @@
 
 质量模型的所有终止路径共用 `leave`：返店时清除尚未处理的 `remainder_ms`，不把本次advance剩余时间带入终态或下一阶段。扣步在 `_step` 前执行，终止清零后不会再扣成负数；已终止状态的重复advance/leave保持不变。旧model v1与已存数据的校验/迁移规则不变。
 
-动作纹理通过 `ResourceLoader.exists/load(...,"Texture2D")` 按原res路径读取，交由引擎解析导入映射；保留原本地缓存与可选缺图返回null行为。manifest是非资源JSON，仍由FileAccess读取，导出包必须显式包含它。PNG-only资源打包回归：`python3 tests/expedition/export_resources.py --godot /absolute/path/to/editor --output /new/temp/output`。脚本仅在临时项目生成专用Windows Desktop资源预设并调用真实`--export-pack`，随后从空目录新进程用editor `--main-pack` 验证全部84项纹理的原PNG不存在、导入资源可加载、尺寸和cache身份；缺纹理与缺manifest负例仅因指定缺失而退出1。报告记录源码/manifest/PCK/editor SHA、实际版本与退出码。这是editor/PCK资源回归，不是Windows release/native运行；字体消费待P07正式provider后补齐，不在PNG-only结果中冒充通过。
+动作纹理通过 `ResourceLoader.exists/load(...,"Texture2D")` 按原res路径读取，交由引擎解析导入映射；保留原本地缓存与可选缺图返回null行为。manifest是非资源JSON，仍由FileAccess读取，导出包必须显式包含它。动作字体类型为Font，`_ready` 统一消费正式 `preload("res://game/ui/portable_font.gd").get_font()`，不再创建SystemFont；按钮override与画布绘制使用同一返回对象。
+
+资源打包回归：`python3 tests/expedition/export_resources.py --godot /absolute/path/to/editor --output /new/temp/output`。脚本只读复制正式provider、字体/许可和PNG到临时项目，生成专用Windows Desktop资源预设并调用真实`--export-pack`；随后从空目录新进程用editor `--main-pack` 验证全部84项纹理的原PNG不存在、导入资源可加载、尺寸和cache身份。面板实际入树执行_ready，画布字段与四个真实Button绑定均须等于provider FontFile；导入FontFile.data的大小/SHA必须匹配固定字体清单，系统fallback与fallback数组关闭，许可/NOTICE字节完整。原始OTF不得作为普通文件兜底。
+
+缺纹理与缺manifest负例仅因指定缺失而退出1；报告记录源码/manifest/provider/PCK/editor SHA、实际版本、逐纹理与Ready字体绑定及退出码。这是editor/PCK资源回归，不是Windows release/native运行；--main-pack/--script不作为标准release探针能力声明。首次PNG-only与字体绑定修复前红色证据独立保留，不能把旧SHA的结果改标成组合验证。
