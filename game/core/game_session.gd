@@ -363,6 +363,12 @@ func validate_snapshot(data: Variant) -> String:
 	if equipped > 1 or shelf_types.size() > (3 if "shelf" in s.upgrades else 2): return "装配或陈列容量非法"
 	for id in s.known:
 		if not Catalog.RECIPES.has(id): return "未知配方"
+	var known_seen = {}
+	for id in s.known:
+		if known_seen.has(id): return "重复已知配方"
+		known_seen[id] = true
+	for text in s.read:
+		if not text is String: return "非法已读信息"
 	var upgrade_seen = {}
 	for id in s.upgrades:
 		if not Catalog.UPGRADES.has(id) or upgrade_seen.has(id): return "非法升级"
@@ -371,28 +377,67 @@ func validate_snapshot(data: Variant) -> String:
 		if not Catalog.ITEMS.has(id) or not Catalog.TIERS.has(s.tiers[id]): return "非法定价"
 	for id in s.supply:
 		if not Catalog.ITEMS.has(id) or not _whole(s.supply[id],0,40): return "非法货源"
+	var order_seen = {}
 	for i in range(7):
 		var order = s.customers[i]
 		if not order is Dictionary: return "非法顾客"
 		for key in ["id","special","required","budget"]:
 			if not order.has(key): return "不完整顾客"
 		if not order.id is String or not order.special is bool or not order.required is Array or order.required.is_empty() or not _whole(order.budget,0,100): return "非法需求"
+		if order_seen.has(order.id): return "重复顾客ID"
+		order_seen[order.id] = true
+		if order.special and (not order.has("text") or not order.text is String): return "特殊需求缺少说明"
+		if order.special != (i == 2): return "特殊需求位置非法"
 		for tag in order.required:
 			if tag not in ["writing","home","light","waterproof"]: return "未知需求效果"
 	if not s.pending.is_empty():
 		if s.phase != "trading" or s.cursor >= 7 or s.pending != s.customers[int(s.cursor)] or not s.pending.special: return "待处理需求游标不一致"
 	if s.phase in ["closing","settled"] and (s.cursor != 7 or not s.pending.is_empty()): return "日结客流不完整"
 	if s.phase in ["shopping","preparation"] and (s.cursor != 0 or not s.pending.is_empty()): return "准备阶段客流非法"
+	if s.phase == "trading" and s.cursor >= 7: return "营业游标已越界"
+	if s.phase in ["shopping","preparation","closing","settled"] and s.clock_ms != 0: return "非营业阶段时钟非法"
+	if s.phase == "trading" and s.pending.is_empty() and s.clock_ms >= 1000: return "营业时钟未处理"
+	var sale_seen = {}
+	var revenues = {}
+	var costs = {}
+	for sale in s.sales:
+		if not sale is Dictionary or not sale.has_all(["day","order_id","item_id","revenue","cost","reasons"]): return "不完整成交记录"
+		if not _whole(sale.day,1,int(s.day)) or not sale.order_id is String or sale.order_id.is_empty() or sale_seen.has(sale.order_id): return "重复或非法成交订单"
+		if not _whole(sale.revenue) or not _whole(sale.cost) or not sale.reasons is Array or sale.reasons.is_empty(): return "非法成交经济数据"
+		for reason in sale.reasons:
+			if not reason is String: return "非法成交原因"
+		if sale.revenue > 0:
+			if not Catalog.ITEMS.has(sale.item_id) or not sale.has("uid") or not _whole(sale.uid,1) or sale.uid >= s.next_uid: return "非法成交物品"
+		elif sale.item_id != "" or sale.cost != 0: return "未成交不能消耗商品成本"
+		sale_seen[sale.order_id] = true
+		revenues[str(int(sale.day))] = revenues.get(str(int(sale.day)),0)+int(sale.revenue)
+		costs[str(int(sale.day))] = costs.get(str(int(sale.day)),0)+int(sale.cost)
+		if not s.commits.has(sale.order_id): return "成交缺少提交记录"
+	for i in range(7):
+		var processed = i < s.cursor
+		if s.commits.has(s.customers[i].id) != processed or sale_seen.has(s.customers[i].id) != processed: return "顾客游标与提交记录不一致"
+	var expected_summaries = int(s.day) if s.phase == "settled" else int(s.day)-1
+	if s.summaries.size() != expected_summaries: return "日结数量不一致"
+	for i in range(s.summaries.size()):
+		var summary = s.summaries[i]
+		if not summary is Dictionary or not summary.has_all(["day","revenue","sold_cost","gross_profit","fee","cash"]): return "不完整日结"
+		if summary.day != i+1 or not s.commits.has("settle:%d" % (i+1)): return "日结日期或提交不一致"
+		for key in ["revenue","sold_cost","fee","cash"]:
+			if not _whole(summary[key]): return "非法日结数据"
+		if summary.revenue != revenues.get(str(i+1),0) or summary.sold_cost != costs.get(str(i+1),0) or summary.gross_profit != summary.revenue-summary.sold_cost or summary.fee > 4: return "日结与成交账不一致"
 	var cash = int(s.initial_cash)
 	var balance = {}
 	for i in range(s.ledger.size()):
 		var entry = s.ledger[i]
 		if not entry is Dictionary or not entry.has_all(["index","kind","day","cash_delta","moves","args","events"]): return "账本条目不完整"
 		if entry.index != i or not _whole(entry.cash_delta,-1000000) or not entry.moves is Dictionary: return "非法账本"
+		if not _whole(entry.day,1,int(s.day)) or not entry.kind is String or not entry.args is Dictionary or not entry.events is Array: return "非法账本元数据"
 		cash += int(entry.cash_delta)
+		if cash < 0: return "历史现金为负"
 		for id in entry.moves:
 			if not Catalog.ITEMS.has(id) or not _whole(entry.moves[id],-80,80): return "非法库存流水"
 			balance[id] = balance.get(id,0)+int(entry.moves[id])
+			if balance[id] < 0: return "历史库存为负"
 	if cash != s.cash: return "现金账本不守恒"
 	for id in Catalog.ITEMS:
 		if balance.get(id,0) != counts.get(id,0): return "库存账本不守恒："+id
