@@ -3005,15 +3005,49 @@
         480,
         270
       ],
-      "source": "source/mushroom-garden-v2.png",
-      "sha256": "434bcc1eabc5d8d310a5fa2381dc2e6ae8a41565bb952f253c7d56b1ed19dc5a",
+      "source": "source/mushroom-garden-v3.png",
+      "sha256": "4db645fe430ac54cf9e7c8479548c9285cc15a36ed151b83c2197de9b20c09a2",
       "purpose": "complete static environment; no collision implied",
-      "art_revision": 2,
+      "art_revision": 3,
       "logical_size": [
         960,
         540
       ],
-      "playfield": "large quiet low-contrast shapes; decoration at perimeter only"
+      "palette": [
+        "#304646",
+        "#364d4b",
+        "#3a514f",
+        "#3d5654",
+        "#465b53",
+        "#4c6156",
+        "#566650",
+        "#636b50",
+        "#080f28",
+        "#142344",
+        "#233657",
+        "#374568",
+        "#4e5d78",
+        "#6b7885",
+        "#2d4744",
+        "#4e6759",
+        "#708462",
+        "#9b9855",
+        "#302a37",
+        "#4d3940",
+        "#70483c",
+        "#93684c",
+        "#b38757",
+        "#d2a06d",
+        "#edc46e",
+        "#f8e4b6",
+        "#7e794b",
+        "#a79458",
+        "#c4a456",
+        "#3d405c",
+        "#596a88",
+        "#a1baa0"
+      ],
+      "playfield": "continuous quiet moss-earth plane; edge-cast shadows and source-linked lamp pools"
     }
   },
   "sources": {
@@ -3159,6 +3193,15 @@
       ],
       "mode": "RGBA",
       "sha256": "9fe08508c27bc50bc0bd69696e3d2cedb40fdd977628aafb7eab8ad58b1a93d0",
+      "runtime": false
+    },
+    "mushroom-garden-v3.png": {
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "sha256": "5b697bc9d30ab205d704650bf7bcc5d22c5b1c1200aa05eb70c0417b399eb7d1",
       "runtime": false
     }
   },

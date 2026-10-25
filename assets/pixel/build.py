@@ -7,6 +7,7 @@ export, one shared palette and binary alpha make the generated art game-ready.
 from pathlib import Path
 import hashlib
 import json
+import sys
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +19,13 @@ bf8a43 edc46e f8e4b6 fff3d0 3c514c 668578 a1baa0 c3d1ad
 RGB = [tuple(bytes.fromhex(c)) for c in COLORS]
 PALETTE = Image.new("P", (1, 1))
 PALETTE.putpalette([v for c in RGB for v in c] + list(RGB[0]) * (256-len(RGB)))
+GARDEN_COLORS = """304646 364d4b 3a514f 3d5654 465b53 4c6156 566650 636b50
+080f28 142344 233657 374568 4e5d78 6b7885 2d4744 4e6759
+708462 9b9855 302a37 4d3940 70483c 93684c b38757 d2a06d
+edc46e f8e4b6 7e794b a79458 c4a456 3d405c 596a88 a1baa0""".split()
+GARDEN_PALETTE = Image.new("P", (1,1))
+garden_values = [v for c in GARDEN_COLORS for v in bytes.fromhex(c)]
+GARDEN_PALETTE.putpalette(garden_values + garden_values[:3] * (256-len(GARDEN_COLORS)))
 
 # (id, original crop x0 y0 x1 y1, final canvas width height, fitting method)
 SHEETS = {
@@ -113,9 +121,9 @@ def hard_alpha(im):
     return im
 
 
-def palette_export(im):
+def palette_export(im, palette=PALETTE):
     alpha = im.getchannel("A")
-    out = im.convert("RGB").quantize(palette=PALETTE, dither=Image.Dither.NONE).convert("RGBA")
+    out = im.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
     out.putalpha(alpha)
     # Transparent RGB must be zero as well: avoids colored fringes in consumers.
     empty = Image.new("RGBA", out.size)
@@ -143,6 +151,40 @@ def export_region(source, box, size, method):
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def export_background(name):
+    is_garden = name == "mushroom-garden"
+    source_name = "mushroom-garden-v3" if is_garden else name
+    source = Image.open(ROOT/"source"/(source_name+".png")).convert("RGBA")
+    dimensions = (480,270) if is_garden else (384,256)
+    out = palette_export(source.resize(dimensions,Image.Resampling.NEAREST), GARDEN_PALETTE if is_garden else PALETTE)
+    path=ROOT/"backgrounds"/(name+".png"); out.save(path)
+    record={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+source_name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
+    if is_garden:
+        record.update({"art_revision":3,"logical_size":[960,540],"palette":["#"+c for c in GARDEN_COLORS],"playfield":"continuous quiet moss-earth plane; edge-cast shadows and source-linked lamp pools"})
+    return record
+
+
+def garden_preview(manifest):
+    garden=Image.open(ROOT/"backgrounds/mushroom-garden.png").convert("RGBA")
+    for name,foot in [("meemee_cast_se",(160,165)),("sparkcap_windup",(260,160)),("moonheart_guard",(355,170))]:
+        record=manifest["sprites"][name]; im=Image.open(ROOT/record["file"]); p=record["pivot"]
+        garden.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
+    scaled=garden.resize((1440,810),Image.Resampling.NEAREST)
+    scaled.save(ROOT/"preview/garden-composite.png")
+    scaled.save(ROOT/"preview/garden-v3-concept.png")
+
+
+def update_garden_only():
+    manifest=json.loads((ROOT/"manifest.json").read_text())
+    manifest["backgrounds"]["mushroom-garden"]=export_background("mushroom-garden")
+    path=ROOT/"source/mushroom-garden-v3.png"
+    im=Image.open(path)
+    manifest["sources"][path.name]={"size":list(im.size),"mode":im.mode,"sha256":sha(path),"runtime":False}
+    (ROOT/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+    garden_preview(manifest)
+    print("Updated mushroom-garden only; existing sprite/UI exports untouched.")
 
 
 def build():
@@ -215,14 +257,7 @@ def build():
             manifest["sprites"][name]=record
         sheet.save(ROOT/"atlases"/(group+".png"))
     for name in ["restaurant-interior","restaurant-lane","restaurant-shell","mushroom-garden"]:
-        source_name = "mushroom-garden-v2" if name == "mushroom-garden" else name
-        source=Image.open(ROOT/"source"/(source_name+".png")).convert("RGBA")
-        dimensions=(480,270) if name=="mushroom-garden" else (384,256)
-        out=palette_export(source.resize(dimensions,Image.Resampling.NEAREST))
-        path=ROOT/"backgrounds"/(name+".png"); out.save(path)
-        manifest["backgrounds"][name]={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+source_name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
-        if name == "mushroom-garden":
-            manifest["backgrounds"][name].update({"art_revision":2,"logical_size":[960,540],"playfield":"large quiet low-contrast shapes; decoration at perimeter only"})
+        manifest["backgrounds"][name]=export_background(name)
     for path in sorted((ROOT/"source").glob("*.png")):
         im=Image.open(path)
         manifest["sources"][path.name]={"size":list(im.size),"mode":im.mode,"sha256":sha(path),"runtime":False}
@@ -269,12 +304,7 @@ def preview(manifest):
         p=record["pivot"]; foot=entry["foot"]
         modular.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
     modular.resize((1152,768),Image.Resampling.NEAREST).save(ROOT/"preview/restaurant-layered.png")
-    garden=Image.open(ROOT/"backgrounds/mushroom-garden.png").convert("RGBA")
-    for name,foot in [("meemee_cast_se",(160,165)),("sparkcap_windup",(260,160)),("moonheart_guard",(355,170))]:
-        record=manifest["sprites"][name]; im=Image.open(ROOT/record["file"]); p=record["pivot"]
-        garden.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
-    garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/garden-composite.png")
-    garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/garden-v2-concept.png")
+    garden_preview(manifest)
     sprites=list(manifest["sprites"].items())
     cw,ch,cols=288,280,4
     board=Image.new("RGB",(cw*cols,ch*((len(sprites)+cols-1)//cols)),"#c5d0ca")
@@ -303,4 +333,9 @@ def preview(manifest):
 
 
 if __name__=="__main__":
-    build()
+    if sys.argv[1:] == ["--garden-only"]:
+        update_garden_only()
+    elif not sys.argv[1:]:
+        build()
+    else:
+        raise SystemExit("Usage: build.py [--garden-only]")

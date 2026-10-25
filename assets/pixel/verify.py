@@ -33,8 +33,9 @@ for kind in ("sprites","backgrounds"):
         im=Image.open(path)
         require(im.mode=="RGBA" and list(im.size)==rec["size"],f"Format/dimensions {name}")
         pixels={color for count,color in im.getcolors(maxcolors=im.width*im.height)}
+        asset_allowed={tuple(bytes.fromhex(c[1:])) for c in rec.get("palette",m["palette"])}
         require(all(p[3] in (0,255) for p in pixels),f"Soft alpha {name}")
-        require(all(p[:3] in allowed for p in pixels if p[3]),f"Palette drift {name}")
+        require(all(p[:3] in asset_allowed for p in pixels if p[3]),f"Palette drift {name}")
         require(all(p==(0,0,0,0) for p in pixels if not p[3]),f"Hidden RGB fringe {name}")
         require(bool(im.getbbox()),f"Empty asset {name}")
         if kind=="sprites":
