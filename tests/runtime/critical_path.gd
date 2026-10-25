@@ -5,6 +5,7 @@ const CombatDriver = preload("res://tests/expedition/action_driver.gd")
 var stage = "start"
 var attempt = ""
 var action_events: Array = []
+var economic_intents: Array = []
 var checkpoint = ""
 var input_file: FileAccess
 var pressed_keys: Dictionary = {}
@@ -67,6 +68,8 @@ func expect(value: bool, message: String):
 func emit_input(event: InputEvent, local: bool = false):
 	input_count+=1
 	var entry={"elapsed_ms":Time.get_ticks_msec()-started_ms,"sequence":input_count,"window_focused":root.has_focus(),"event":event.as_text(),"class":event.get_class(),"local":local,"pressed":event.is_pressed()}
+	entry.device=event.device
+	if event is InputEventJoypadButton: entry.button_index=event.button_index
 	if event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag: entry.position=[event.position.x,event.position.y]
 	if event is InputEventJoypadMotion: entry.axis=event.axis; entry.axis_value=event.axis_value
 	if event is InputEventScreenTouch or event is InputEventScreenDrag: entry.touch_index=event.index
@@ -123,7 +126,11 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 	startup_snapshot=ui.game.snapshot()
 	startup_feedback=ui.feedback.text
 	ui.tree_exiting.connect(_observe_product_exit)
-	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
+	ui.action_completed.connect(func(kind,args,result):
+		last_result=result
+		action_count+=1
+		economic_intents.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"input_sequence":input_count,"kind":kind,"args":args.duplicate(true),"ok":result.get("ok",false)})
+	)
 	expect(ui.has_method("get_open_sheet") and ui.has_method("get_world_view"),"published world/sheet read-only API is present")
 	# Match the parent helper's route/restart intent, but never move or reset a
 	# save here: every P03 route uses a distinct supervisor-owned directory.
@@ -146,6 +153,7 @@ func activate_visible(id: String):
 
 func close_sheet():
 	if ui.get_open_sheet()=="": return
+	var count_before=action_count
 	if ui.get_open_sheet()=="pause":
 		await activate_visible("resume")
 		expect(not ui.game.view().paused and ui.get_open_sheet()=="","resume closes real pause sheet")
@@ -159,6 +167,7 @@ func close_sheet():
 		await key(KEY_ESCAPE,true); await key(KEY_ESCAPE,false)
 	else: await activate_visible("sheet_close")
 	await frames(3)
+	expect(action_count==count_before,"closing a sheet emits no economic intent")
 	expect(ui.get_open_sheet()=="","real close input returns to world")
 	if origin!="": expect(root.gui_get_focus_owner()==ui.get_action_control(origin),"closing sheet restores actual object focus: "+origin)
 	sheet_origin=""
@@ -310,6 +319,7 @@ func activate_control(button: Button, id: String):
 	var economic=id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
 	if economic and action_count==count_before: await screenshot(mode+"-intent-failure-"+id)
 	if economic: expect(action_count==count_before+1,"one real control input emits exactly one economic intent: "+id)
+	if id.begins_with("world_") or id.begins_with("recipe_") or id=="sheet_close": expect(action_count==count_before,"presentation control emits no economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
 	if id.begins_with("craft_"):
@@ -610,7 +620,6 @@ func release_combat():
 
 func pause_combat():
 	if mode=="pad": await pad_button(JOY_BUTTON_START)
-	elif mode=="mouse": await key(KEY_ESCAPE,true); await key(KEY_ESCAPE,false)
 	else: await activate_control(ui.battle_panel.pause_button,"battle_pause")
 	await frames(3)
 
@@ -899,6 +908,7 @@ func write_report():
 	report["focus_events"]=focus_events
 	report["window_size_events"]=window_size_events
 	report["combat_input_samples"]=combat_input_samples
+	report["economic_intents"]=economic_intents
 	report["verification_kind"]=verification_kind
 	report["source_sha256"]=source_hashes
 	if verification_kind=="headless_navigation": report["suite"]="p03-headless-world-navigation"
