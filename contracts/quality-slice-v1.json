@@ -1,0 +1,529 @@
+{
+  "schema_version": 1,
+  "milestone": "quality-slice",
+  "suite": "quality-slice",
+  "design_source": "docs/06-quality-slice.md",
+  "fixtures": "tests/fixtures/quality-slice-scenarios.json",
+  "report_protocol": {
+    "schema_version": 1,
+    "suite": "quality-slice",
+    "runner": "tests/run.gd",
+    "runner_args": [
+      "--",
+      "--suite",
+      "quality-slice",
+      "--report",
+      "ABS_REPORT"
+    ],
+    "required_automated_ids": [
+      "Q01",
+      "Q02",
+      "Q03",
+      "Q04",
+      "Q05"
+    ],
+    "external_evidence_ids": [
+      "Q06",
+      "QH"
+    ],
+    "rules": [
+      "真实 Godot runner 写 cases:[{id,status,checks}]；checks 为大于0的整数，status 必须 passed。",
+      "缺失、重复、未知ID、failed/skipped、零检查、零用例、崩溃、超时、解析错、非零退出均失败。",
+      "Q06/QH 不进入自动 cases；不允许自动伪造人类通过。旧 suite=prototype 与旧用例保持独立，组合交付两套都执行。"
+    ]
+  },
+  "profiles": {
+    "default_profile_id": "rain-night-v1",
+    "legacy_profile_id": "prototype-v1",
+    "rain-night-v1": {
+      "save_version": 3,
+      "model_version": 2,
+      "default_save_path": "user://profiles/rain-night-v1/moonlantern.json",
+      "backup_suffix": ".bak",
+      "ruleset": "rain-night-v1",
+      "map_id": "rain-garden-two-routes",
+      "map_revision": 1
+    },
+    "prototype-v1": {
+      "save_version": 2,
+      "model_version": 1,
+      "default_save_path": "user://moonlantern.json"
+    },
+    "rules": [
+      "新 Session 默认与新 UI/启动器显式 profile 均为 rain-night-v1；旧回归显式选择 prototype-v1，旧包/tag保留。",
+      "新启动器使用独立用户数据目录；核心默认 save/load 也选新路径，不能只改UI路径。",
+      "不扫描、读取、迁移或覆盖旧包主档/备份；显式向新加载器提供旧v2也须拒绝且原文件不变。",
+      "profile/save/model版本、ruleset、map_id/revision不匹配，明确失败且不回退到不匹配备份或静默新档；普通坏JSON可恢复同profile有效备份并保留坏档。"
+    ]
+  },
+  "api": {
+    "session_constructor": "Session.new(seed_value: int = 1, profile_id: String = \"rain-night-v1\")",
+    "model_create": "Model.create(day, run_id, seed_value=1, weapon_id=\"bolt_wand\", skills=[], shield=false, options={}) -> Dictionary",
+    "model_options_example": {
+      "ruleset": "rain-night-v1",
+      "map_id": "rain-garden-two-routes",
+      "map_revision": 1,
+      "meal_effect": null
+    },
+    "model_options_rules": [
+      "options={} 保留旧 model v1 调用；新profile必须传四个完整字段，不能混用旧日数/180s限制。",
+      "新options的非法类型、未知规则/地图/revision或已used餐前效果须拒绝：create返回空Dictionary；Session验证后原子拒绝出发，不消耗待用槽/次数。"
+    ],
+    "commands": {
+      "start_wave": {
+        "args": {
+          "wave_id": "string"
+        },
+        "phase": [
+          "intermission"
+        ],
+        "rules": "必须等于service.next_wave_id；复用已生成队列；过期/错ID拒绝，不跳波、不重抽、不刷新供应/次数/RNG。"
+      },
+      "set_menu_priority": {
+        "args": {
+          "item_ids": "array<string>"
+        },
+        "phase": [
+          "preparation",
+          "intermission"
+        ],
+        "rules": "恰好覆盖当前菜单种类，重复/未知/遗漏原子拒绝。"
+      },
+      "consume": {
+        "args": {
+          "item_id": "floating_pie|star_soup",
+          "quantity": "integer=1"
+        },
+        "phase": [
+          "shopping"
+        ],
+        "rules": "按UID升序消耗bag一份并写pending_meal_effect；已有待用槽原子拒绝；不收款。"
+      },
+      "recycle": {
+        "args": {
+          "item_id": "string",
+          "quantity": "integer>=1"
+        },
+        "phase": [
+          "shopping",
+          "preparation"
+        ],
+        "rules": "真实bag实例足量才扣除；sparkcap固定4、moonheart固定8；材料不能display/price或响应顾客。"
+      }
+    },
+    "phase_guards": {
+      "craft": [
+        "shopping",
+        "preparation",
+        "intermission"
+      ],
+      "display": [
+        "preparation",
+        "intermission"
+      ],
+      "undisplay": [
+        "preparation",
+        "intermission"
+      ],
+      "price": [
+        "preparation",
+        "intermission"
+      ],
+      "buy": [
+        "shopping"
+      ],
+      "install": [
+        "preparation"
+      ],
+      "uninstall": [
+        "preparation"
+      ],
+      "open_shop": [
+        "preparation"
+      ],
+      "upgrade": [
+        "settled"
+      ],
+      "next_day": [
+        "settled"
+      ],
+      "equip_weapon": [
+        "shopping"
+      ]
+    },
+    "phase_rules": [
+      "intermission是核心phase；active trading即使paused也拒绝craft/display等经济修改。",
+      "初次open_shop开波1；只有所有订单已交付/离开且reservations为空才能进入intermission或第三波closing。",
+      "波尾/委托交互边界清掉余帧，不能流入下一波；不调用_begin_day换波；解除暂停不自动开波。",
+      "保留request_id防重、原子失败、同一订单至多成交一次、非负现金/库存/UID唯一与免费恢复每日上限。"
+    ]
+  },
+  "field_types": {
+    "notation": "字段表是小型公开数据约定，不是新类型运行时；integer接受JSON整数值但拒bool，number必须有限。?表示null可用，array<T>逐项满足。除明确optional外列出的新字段必需；未列旧字段沿原API。",
+    "meal_effect": {
+      "effect_id": "light_step|clear_breath",
+      "source_item_uid": "integer>=1",
+      "used": "boolean"
+    },
+    "meal_slots": {
+      "session.pending_meal_effect": "meal_effect?",
+      "model.meal_effect": "meal_effect?"
+    },
+    "model_options": {
+      "ruleset": "string=rain-night-v1",
+      "map_id": "string=rain-garden-two-routes",
+      "map_revision": "integer=1",
+      "meal_effect": "meal_effect?"
+    },
+    "model_state": {
+      "version": "integer=2",
+      "ruleset": "string=rain-night-v1",
+      "map_id": "string=rain-garden-two-routes",
+      "map_revision": "integer=1",
+      "elapsed_ms": "integer>=0",
+      "remaining_ms": "null",
+      "tick": "integer>=0",
+      "remainder_ms": "integer>=0,<50 while active",
+      "rng_state": "decimal integer string",
+      "meal_effect": "meal_effect?",
+      "terrain": "terrain",
+      "hazards": "array<hazard>",
+      "resource_nodes": "array<resource_node>"
+    },
+    "terrain": {
+      "obstacles": "array<obstacle>",
+      "water_zones": "array<water_zone>"
+    },
+    "obstacle": {
+      "id": "nonempty string",
+      "shape": "circle|rect",
+      "x": "number",
+      "y": "number",
+      "radius": "number>0 for circle only",
+      "width": "number>0 for rect only",
+      "height": "number>0 for rect only"
+    },
+    "water_zone": {
+      "id": "nonempty string",
+      "x": "number",
+      "y": "number",
+      "width": "number>0",
+      "height": "number>0",
+      "speed_scale": "number=0.65"
+    },
+    "hazard": {
+      "id": "nonempty string",
+      "source": "enemy id string",
+      "x": "number",
+      "y": "number",
+      "radius": "number=45",
+      "state": "warning|active",
+      "remaining_ms": "integer>=0",
+      "hit_player": "boolean",
+      "speed_scale": "number=0.65"
+    },
+    "resource_node": {
+      "id": "nonempty string",
+      "item_id": "ingredient catalog ID",
+      "x": "number",
+      "y": "number",
+      "quantity": "integer>=1",
+      "collected": "boolean"
+    },
+    "enemy_extensions": {
+      "kind": "sparkcap|moonheart|sporecaster",
+      "state": "idle|telegraph|dash|wave|stagger|spore_windup|spore_release|defeated",
+      "attack_index": "integer>=0",
+      "stagger_remaining_ms": "integer>=0",
+      "shielded": "boolean"
+    },
+    "event_extensions": {
+      "type": "obstacle_hit|enemy_staggered|spore_spawned|spore_cleared",
+      "tick": "integer>=0",
+      "run_id": "nonempty string",
+      "entity_id": "string for obstacle_hit/enemy_staggered",
+      "obstacle_id": "string for obstacle_hit/enemy_staggered",
+      "attack_index": "integer>=0 for obstacle_hit/enemy_staggered",
+      "hazard_id": "string for spore_spawned/spore_cleared"
+    },
+    "service": {
+      "night_id": "string n{day}",
+      "wave_id": "string n{day}-w{1..3} or null before first wave",
+      "next_wave_id": "string n{day}-w{1..3} or null after third wave",
+      "wave_index": "integer 0..3",
+      "status": "planned|active|intermission|complete",
+      "orders": "array<order>",
+      "reservations": "array<reservation>",
+      "menu_priority": "array<dish catalog ID>",
+      "held_uids": "array<positive integer>, unique"
+    },
+    "order": {
+      "id": "string n{day}-w{1..3}-c{01..09}",
+      "required": "array<catalog tag>",
+      "budget": "integer>=0",
+      "arrival_ms": "integer>=0",
+      "patience_ms": "integer>0",
+      "waited_ms": "integer>=0",
+      "status": "waiting|reserved|delivered|left",
+      "channel": "ordinary|floating|pot|null"
+    },
+    "reservation": {
+      "item_uid": "integer>=1",
+      "order_id": "order id string",
+      "channel": "ordinary|floating|pot",
+      "batch_id": "nonempty string for pot, null otherwise",
+      "remaining_ms": "integer>=0"
+    },
+    "item_extensions": {
+      "uid": "integer>=1",
+      "item_id": "catalog ID",
+      "cost": "integer>=0",
+      "location": "bag|shelf|installed|reserved",
+      "prepared_wave_id": "wave id string for dish, null otherwise",
+      "intrinsic_tags": "array<catalog tag> for dish",
+      "effect_id": "catalog effect string for dish",
+      "temperature": "hot|held|cooled for moon_stew, null otherwise"
+    },
+    "night": {
+      "weather": "rain|clear",
+      "event_id": "rain_return|none",
+      "day": "integer>=1, equal to session.day"
+    },
+    "field_rules": [
+      "地形x/y为中心，逻辑空间960x540；rect使用width/height，circle使用radius。几何由E02固定源数据确定，不在每次create随机重画revision1。",
+      "hazard hit_player在第一次伤害后持久为true；玩家离开再进入不可重伤。数组ID唯一；resource_node收集后保留collected状态，不能读档补出。",
+      "meal_effect null表示无效果；pending/传入create对象used必须false。首次对应动作后model对象used=true并保留来源UID；不得把string/bool当效果对象。",
+      "服务wave_index在开波前为0、其后为当前/已结束波；next_wave_id采购时为w1，波间为下一波，第三波尾为null。orders包含本波普通客，特殊委托单独沿pending并停时。",
+      "按SKU匹配后必须锁定同一item_uid再预留/扣除；reservation UID仍在items、计容量，不能双卖、移菜单、自食或售回。",
+      "intrinsic_tags/effect_id不随拆锅消失；只有temperature/本波浮空资格决定动态供应条件。",
+      "Model.advance的pickups沿用drop_id/item_id/quantity/cost；地面节点用稳定resource:{node_id}身份，敌人掉落沿run+enemy身份。Session同次成功推进原子入账，跨run也使用run_id隔离防重。"
+    ],
+    "pickup": {
+      "drop_id": "nonempty string unique within run",
+      "item_id": "ingredient catalog ID",
+      "quantity": "integer>=1",
+      "cost": "integer=0"
+    }
+  },
+  "rules": {
+    "timing": {
+      "fixed_step_ms": 50,
+      "obstacle_stagger_ms": 1200,
+      "spore_warning_ms": 800,
+      "spore_active_ms": 3000,
+      "spore_radius": 45,
+      "spore_damage_per_hazard": 1,
+      "spore_min_cast_interval_ms": 2500,
+      "water_walk_scale": 0.65,
+      "normal_dodge_ms": 200,
+      "light_step_dodge_ms": 300,
+      "normal_gust_range": 120,
+      "clear_breath_gust_range": 160,
+      "spore_walk_scale": 0.65
+    },
+    "terrain_combat": [
+      "菇桩阻挡玩家/敌人/闪避/冲刺/双方弹体；高速扫掠不穿透；同次冲刺撞桩只硬直一次，盾精英破盾。",
+      "水只减双方步行，闪避/冲刺/弹体不减；孢子对玩家一次伤害，对双方步行减速；多区减速取最小值。",
+      "gust清范围内已active孢子并推退；不清warning/飞行孢子弹、不反弹或取消精英环形波；推退撞桩不额外触发冲刺硬直。",
+      "地图两路与中段连接可走通，入口/岔路冲刺投手/深处盾精英投手三遭遇；有限掉落，击败sporecaster掉sparkcap，精英掉moonheart；没有180s自动返程。"
+    ],
+    "service": {
+      "ordinary": {
+        "capacity": 1,
+        "delivery_ms": 3000
+      },
+      "floating": {
+        "capacity": 2,
+        "delivery_ms": 1500,
+        "eligible": [
+          "floating_pie",
+          "comet_pie"
+        ],
+        "fresh_only": true
+      },
+      "pot": {
+        "batch_capacity": 3,
+        "delivery_ms": 4500,
+        "eligible": [
+          "moon_stew"
+        ],
+        "installed_cauldron_required": true
+      },
+      "patience_ms": 20000,
+      "rain_price_percent": 25,
+      "heat_capacity": 3,
+      "rules": [
+        "三个通道可并行；开波t0立即预留，之后每tick完成交付→离开到期客→按到达/订单ID及菜单优先/UID升序预留。无可服务订单不阻塞后续。",
+        "预留即停顾客耐心，交付原子收款/扣库存；未预留到期记原因，不收钱；无最低波长。",
+        "料理在采购/首波前制作归w1，波间制作归下一波；跨波/跨夜饼仍可卖但只走ordinary。",
+        "波尾已装锅按菜单顺序/UID升序将最多3份shelf上hot/held炖锅保温，其余含bag转cooled；cooled不能重新held。",
+        "uninstall、移出保温锅或售锅把held转cooled；重新display/读档不复热；next_day保留真实温度。",
+        "暖身客要求moon_stew为hot/held；cooled仍可匹配hearty。两种汤保留固有效果，无新增温度衰减。"
+      ]
+    },
+    "meal_effects": {
+      "light_step": {
+        "food": "floating_pie",
+        "trigger": "first_dodge",
+        "dodge_ms": 300
+      },
+      "clear_breath": {
+        "food": "star_soup",
+        "trigger": "first_gust",
+        "range": 160
+      },
+      "rules": [
+        "互斥单槽，实际消耗bag实例后存来源UID；成功进入正式探险时原子转移并清pending，失败不清。",
+        "离场未用不返还；暂停/保存不刷新；不新增practice模式或当晚重置次数。",
+        "只有通过冷却/可执行性校验并实际开始的对应动作才置used=true；无效输入/仍在冷却的请求不消耗。"
+      ]
+    },
+    "economy": {
+      "initial_cash": 60,
+      "inherited_cauldron_recycle": 18,
+      "replacement_cauldron_price": 30,
+      "rare_recycle": {
+        "sparkcap": 4,
+        "moonheart": 8
+      },
+      "upgrade_cost": {
+        "field_kit": 110,
+        "shelf": 110
+      },
+      "dish_income_gate": 24,
+      "stable_from_night1": [
+        "flour",
+        "pumpkin",
+        "cream",
+        "ember_herb"
+      ],
+      "starting_weapon": "bolt_wand",
+      "starting_skills": [
+        "gust"
+      ],
+      "rules": [
+        "配方与基础价沿既有五菜；supply_pass不作为新profile暖焰草前置。",
+        "field_kit日结合法购买，next_day激活fan_wand；shelf增加第三菜单槽。升级需实际菜品收入，原料售回/继承/恢复不充菜品收入。",
+        "五种子两条正常策略首晚至少能买一个选择且保留补基础料资金，不依赖恢复；任意买齐且无取舍时须调初值复验，不隐瞒失败。",
+        "两项各110仅为据P04五seed标准价现金热锅236/快餐178及高价热锅272/快餐202修订的候选初值；100预案下高价热锅仍可双买并完整补货。门槛24、配方/价格/预算/客流及legacy不变；Q05以两档真实命令验证单买完整补货与双买压缩采购。允许现金足够时双买，不增互斥限制，不用预算减法冒充执行。"
+      ]
+    },
+    "save": [
+      "同输入/同seed/等总时长不同帧切分等价；保存RNG、余帧、天气活动、全队列、UID、reservations、热状态、meal、地图revision、动态资源/敌人/孢子/已提交事务/成长。",
+      "暂停停止所有计时；加载/失焦清保持输入，再输入相同事件继续与连续分支一致；离线不推进。",
+      "运行新旧独立入口，比较旧主档/备份哈希未变；不以不同文件名代替隔离验证。"
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "Q01",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "两条可读路线与实体地形改变走位和取材。",
+      "evidence_kinds": [
+        "automated_case_report",
+        "action_trace"
+      ],
+      "pass_conditions": [
+        "两路/中段连接/入口返程实际可走；静态revision跨seed与读档不变，动态资源有限且一次领取。",
+        "菇桩对步行/闪避/冲刺/双方弹体的正反例与高速扫掠通过；水只影响双方步行。"
+      ]
+    },
+    {
+      "id": "Q02",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "冲撞与孢子组合产生可验证的不同战斗行为。",
+      "evidence_kinds": [
+        "automated_case_report",
+        "action_trace"
+      ],
+      "pass_conditions": [
+        "真实输入完成引冲撞桩硬直/盾破和gust清active孢子/推退；不撞桩、不在范围、飞弹/预警/环形波等反例不触发。",
+        "经历投手与精英组合；孢子伤害、攻击命中与敌人掉落防重，退出再进区/保存恢复不复制。"
+      ]
+    },
+    {
+      "id": "Q03",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "三波以真实供餐拥堵与UID热状态改变经营结果。",
+      "evidence_kinds": [
+        "automated_case_report",
+        "action_trace"
+      ],
+      "pass_conditions": [
+        "执行fixture三波与快慢对照，c08实际收入不同；保温最多三份能跨波满足暖身，第4份/无锅/移出为冷菜不能伪装。",
+        "匹配、预留、交付扣除同UID；成本/预算/收入/容量守恒，重复请求/开波/交付不得多收或跳波。",
+        "trading暂停仍拒craft/display，只有intermission可补餐；换波不刷新RNG/次数/供应，雨夜day1天气/活动明确持久化。"
+      ]
+    },
+    {
+      "id": "Q04",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "材料四用、互斥餐前效果与首晚成长真实可用。",
+      "evidence_kinds": [
+        "automated_case_report",
+        "action_trace"
+      ],
+      "pass_conditions": [
+        "同稀有材料快照分叉售回/加工出售/加工自食/保留，走合法操作且不双计成本；原料不能上菜单。",
+        "两种餐前效果绑定消耗UID、原子出发、只触发一次；失败出发/重发消费/叠加/读档均有反例。",
+        "首晚实际菜品收入购买field_kit，next_day立即装备fan_wand进入正式探险；无practice或虚假次数刷新。"
+      ]
+    },
+    {
+      "id": "Q05",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "五种子策略、确定性及新旧保存隔离成立。",
+      "evidence_kinds": [
+        "automated_case_report",
+        "action_trace"
+      ],
+      "pass_conditions": [
+        "五固定seed运行quick_service/hot_meals与不探险分支，无负数/软锁/恢复依赖；按真实菜单收入验证首晚升级与后续补货。",
+        "五seed分别以standard/premium标价正常经营首晚，从同源合法日结快照分别合法购买field_kit/shelf并next_day，用真实buy命令完成原备料篮。两档热锅双买合法后，完整篮出现资金不足原子拒绝，缩小篮分支可实际备餐经营；快餐不足第二项遵守资金guard。记录请求/现金/库存/账本，不能加钱、硬禁双买或只凭线性预算判通过。",
+        "保存边界与连续分支、不同帧切分等价；保持输入按规则清零，暂停和离线不推进。",
+        "旧包主备档哈希不变，新入口默认新profile；旧v2/错profile/ruleset/maprevision拒绝且不覆盖；坏档只回退同profile有效备份。"
+      ]
+    },
+    {
+      "id": "Q06",
+      "stage": "prototype",
+      "mode": "runtime",
+      "required": true,
+      "claim": "同一实际候选可由三种输入完整玩并恢复。",
+      "evidence_kinds": [
+        "runtime_log",
+        "screenshot",
+        "artifact_manifest"
+      ],
+      "pass_conditions": [
+        "真实Godot InputEvent分别覆盖鼠键、合成触屏/手柄一晚到次晨新武器试用、独立进程保存恢复。",
+        "验证释放/失焦、暂停GUI不施法、全屏实际尺寸/窄屏遮挡、地图视觉碰撞对应；记录候选SHA/版本/日志/截图。",
+        "不能用核心命令或按钮信号冒充UI，不能推断实体手柄、Windows或iOS已验。"
+      ]
+    },
+    {
+      "id": "QH",
+      "stage": "human",
+      "mode": "human",
+      "required": true,
+      "claim": "玩家是否产生具体策略与自愿再玩意愿有独立人类记录。",
+      "evidence_kinds": [
+        "human_observation"
+      ],
+      "pass_conditions": [
+        "用户或咩咩试玩，记录选路理由、战斗调整、补餐差异、成长期待与自主继续行为/原话。",
+        "无人试玩标待验；反馈仍单调则不合格，修薄弱环节；不以自动checks/时长/素材数替代，不宣称Steam商品品质已通过。"
+      ]
+    }
+  ]
+}

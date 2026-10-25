@@ -9,7 +9,7 @@ func check(value: bool, label: String):
 	if not value: failures.append(label)
 
 func _initialize():
-	var g = Session.new(7)
+	var g = Session.new(7,"prototype-v1")
 	check(g.snapshot().version == 2,"restaurant save uses v2")
 	check(g.view().cash == 60,"restaurant starts with 60 coins")
 	check(g.view().inventory.size() == 12,"twelve distinct restaurant SKUs")
