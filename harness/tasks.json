@@ -23,7 +23,9 @@
         "tests/fixtures/**",
         "docs/05-restaurant-prototype.md"
       ],
-      "depends_on": []
+      "depends_on": [],
+      "chat_id": "01a172cf-4b61-7862-84fb-8fc3f779723f",
+      "service_tier": "default"
     },
     {
       "id": "H03",
