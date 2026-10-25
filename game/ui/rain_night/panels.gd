@@ -23,8 +23,13 @@ var priority_source: Array=[]
 var details_open=false
 var history_open=false
 var wave_action_in_footer=false
+var updating_service=false
+var service_kept: Dictionary={}
+var service_position=0
 
 func present(value: Dictionary, section: String, item_id: String=""):
+	var incoming=value.get("service",{})
+	var same_live_service=page=="service" and section=="service" and state.get("phase")=="trading" and value.get("phase")=="trading" and incoming is Dictionary and _service().get("wave_id")==incoming.get("wave_id") and controls.has("service_status")
 	state=value.duplicate(true)
 	var source=_service().get("menu_priority",[])
 	if not source is Array: source=[]
@@ -33,7 +38,8 @@ func present(value: Dictionary, section: String, item_id: String=""):
 		priority_draft=priority_source.duplicate()
 	page=section
 	selected_item=item_id
-	_rebuild()
+	if same_live_service and _ready_view(): _update_service_page()
+	else: _rebuild()
 
 func get_action_control(id: String) -> Control:
 	return controls.get(id)
@@ -72,18 +78,27 @@ func _text(value: String, id: String="", color: Color=INK, font_size: int=18) ->
 		if color==INK: color=Color("f3ebcf")
 		elif color==MUTED: color=Color("bdc7ad")
 		elif color==ACCENT: color=Color("e6d39a")
-	var label=Label.new()
+	var label=controls.get(id) if updating_service else null
+	if not label is Label:
+		label=Label.new()
+		add_child(label)
 	label.text=value
 	label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
 	label.custom_minimum_size.x=220
 	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	label.add_theme_color_override("font_color",color)
 	label.add_theme_font_size_override("font_size",font_size)
-	add_child(label)
 	if not id.is_empty(): controls[id]=label
+	if updating_service: _keep_service_control(id,label)
 	return label
 
 func _button(id: String, caption: String, callback: Callable, enabled: bool=true) -> Button:
+	if updating_service and controls.get(id) is Button:
+		var existing: Button=controls[id]
+		existing.text=caption
+		existing.disabled=not enabled
+		_keep_service_control(id,existing)
+		return existing
 	var button=Button.new()
 	button.name=id.replace(":","_")
 	button.set_meta("action_id",id)
@@ -94,7 +109,26 @@ func _button(id: String, caption: String, callback: Callable, enabled: bool=true
 	button.pressed.connect(callback,CONNECT_DEFERRED)
 	add_child(button)
 	controls[id]=button
+	if updating_service: _keep_service_control(id,button)
 	return button
+
+func _keep_service_control(id: String, control: Control):
+	service_kept[id]=true
+	if control.get_index()!=service_position: move_child(control,service_position)
+	service_position+=1
+
+func _update_service_page():
+	# Reconcile this one read-only page; live buttons retain press/focus state.
+	updating_service=true
+	service_kept.clear()
+	service_position=0
+	_service_page()
+	for id in controls.keys():
+		if service_kept.has(id): continue
+		var control: Control=controls[id]
+		remove_child(control);control.queue_free();controls.erase(id)
+	updating_service=false
+	content_changed.emit()
 
 func _rebuild():
 	var focused=get_viewport().gui_get_focus_owner() if is_inside_tree() else null
@@ -197,21 +231,20 @@ func _service_page():
 				remaining.append(int(reservation.remaining_ms))
 		lanes.append("%s%d/%d%s" % [{"ordinary":"普通","floating":"浮空","pot":"热锅"}[channel],count,CHANNELS[channel].capacity,"（%.1f秒）"%(remaining.min()/1000.0) if not remaining.is_empty() else ""])
 	_text(" · ".join(lanes),"service_channels",MUTED,16)
+	var completed=service.orders.filter(func(order): return str(order.status) in ["delivered","left"])
+	if not completed.is_empty():
+		var delivered=completed.filter(func(order): return order.status=="delivered").size()
+		# Keep the interactive target above rows that can disappear on delivery.
+		_button("service_history_toggle","%s本批小结 · 送达%d / 离开%d"%["收起" if history_open else "展开",delivered,completed.size()-delivered],_toggle_history)
 	for reservation in service.reservations:
 		var label=_text("料理#%d → %s · %s · 剩%.1f秒（正送餐，暂不能取用）" % [reservation.item_uid,_order_name(str(reservation.order_id)),CHANNELS[reservation.channel].name,reservation.remaining_ms/1000.0],"reservation_%d"%reservation.item_uid,MUTED,16)
 		label.set_meta("order_id",reservation.order_id)
 		label.set_meta("item_uid",reservation.item_uid)
-	var completed=[]
 	for order in service.orders:
-		if str(order.status) in ["delivered","left"]:
-			completed.append(order)
-			continue
+		if str(order.status) in ["delivered","left"]: continue
 		_order_line(order)
-	if not completed.is_empty():
-		var delivered=completed.filter(func(order): return order.status=="delivered").size()
-		_button("service_history_toggle","%s本批小结 · 送达%d / 离开%d"%["收起" if history_open else "展开",delivered,completed.size()-delivered],_toggle_history)
-		if history_open:
-			for order in completed: _order_line(order)
+	if history_open:
+		for order in completed: _order_line(order)
 	if intermission and not wave_action_in_footer:
 		var next_id=service.get("next_wave_id")
 		var enabled=next_id is String and not next_id.is_empty() and service.reservations.is_empty() and _allowed("start_wave",["intermission"])
@@ -219,7 +252,7 @@ func _service_page():
 
 func _toggle_history():
 	history_open=not history_open
-	_rebuild()
+	_update_service_page()
 
 func _order_line(order: Dictionary):
 	var detail=""

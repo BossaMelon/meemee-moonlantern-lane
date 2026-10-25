@@ -517,10 +517,18 @@ func validate_snapshot(data: Variant) -> String:
 		if id == "stirring_cauldron" and (s.day == 1 or s.supply[id] > 1): return "替代厨具供货非法"
 	for id in s.tiers:
 		if not Catalog.ITEMS.has(id) or Catalog.ITEMS[id].kind != "dish" or not Catalog.TIERS.has(s.tiers[id]): return "非法定价"
-	var order_ids = {}; var processed = 0
+	var order_ids = {}; var processed = 0; var expected_customers = []
+	if night.queues.size() != 3: return "夜晚队列数量错误"
 	for wave in range(1,4):
 		var key = night.id+"-w%d" % wave
 		if not night.queues.get(key) is Array or night.queues[key].is_empty() or night.queues[key].size() > 9: return "夜晚队列缺失"
+		var summary = night.waves[wave-1]
+		if not summary is Dictionary or not summary.has_all(["id","index","ordinary_count","quick","warm","hearty","budget_min","budget_max"]): return "波次摘要字段缺失"
+		if not summary.id is String or summary.id != key or not _whole(summary.index,wave,wave) or not _whole(summary.ordinary_count,night.queues[key].size(),night.queues[key].size()): return "波次摘要身份或人数错误"
+		for field in ["quick","warm","hearty"]:
+			if not _whole(summary[field],0,night.queues[key].size()): return "波次摘要需求数量非法"
+		if not _whole(summary.budget_min,0,100) or not _whole(summary.budget_max,int(summary.budget_min),100): return "波次摘要预算范围非法"
+		var demand_counts = {"quick":0,"warm":0,"hearty":0}
 		for i in range(night.queues[key].size()):
 			var definition = night.queues[key][i]
 			if not definition is Dictionary or not definition.has_all(["id","wave_id","required","budget","special","text","status","arrival_ms","patience_ms","waited_ms","channel","character_id","quest_id","rewards"]): return "未来波次订单字段缺失"
@@ -529,6 +537,21 @@ func validate_snapshot(data: Variant) -> String:
 			if not definition.character_id is String or definition.character_id != "" or not definition.quest_id is String or definition.quest_id != "" or definition.rewards != []: return "普通队列混入人物委托"
 			for tag in definition.required:
 				if tag not in Catalog.TAGS: return "未来波次含未知需求"
+			if definition.budget < summary.budget_min or definition.budget > summary.budget_max: return "波次摘要预算与队列不一致"
+			if "quick" in definition.required: demand_counts.quick += 1
+			elif "hearty" in definition.required: demand_counts.hearty += 1
+			# Day-two rare orders replace warm slots in the existing forecast grouping.
+			elif "warming" in definition.required or "trail_light" in definition.required or "celebration" in definition.required: demand_counts.warm += 1
+			else: return "波次摘要遗漏队列需求"
+		for field in demand_counts:
+			if summary[field] != demand_counts[field]: return "波次摘要需求与队列不一致"
+		expected_customers.append_array(night.queues[key])
+	if s.customers.size() != expected_customers.size(): return "顾客列表数量与预生成队列不一致"
+	for i in range(expected_customers.size()):
+		var customer = s.customers[i]; var definition = expected_customers[i]
+		if not customer is Dictionary or customer.size() != definition.size(): return "顾客列表字段缺失"
+		for field in definition:
+			if not customer.has(field) or typeof(customer[field]) != typeof(definition[field]) or customer[field] != definition[field]: return "顾客列表与预生成队列不一致"
 	if service.orders.size() != (0 if wave_index == 0 else night.queues[service.wave_id].size()): return "本波订单数量错误"
 	for order in service.orders:
 		if not order is Dictionary or not order.has_all(["id","wave_id","required","budget","special","status","arrival_ms","patience_ms","waited_ms","channel","character_id","quest_id","rewards"]): return "订单字段缺失"

@@ -46,6 +46,17 @@ var _ripple_run_id = ""
 var _water_positions: Dictionary = {}
 var _ripple_next_tick: Dictionary = {}
 var _water_ripples: Array = []
+var _input_window: Window
+
+func _enter_tree():
+	_input_window = get_window()
+	if _input_window != null and not _input_window.focus_exited.is_connected(release_inputs):
+		_input_window.focus_exited.connect(release_inputs)
+
+func _exit_tree():
+	if is_instance_valid(_input_window) and _input_window.focus_exited.is_connected(release_inputs):
+		_input_window.focus_exited.disconnect(release_inputs)
+	_input_window = null
 
 func _ready():
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

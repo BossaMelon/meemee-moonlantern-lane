@@ -2,6 +2,7 @@ extends RefCounted
 const Model = preload("res://game/expedition/expedition_model.gd")
 const Rain = preload("res://game/expedition/rain_garden_model.gd")
 const Map = preload("res://game/expedition/rain_garden_map.gd")
+const ReturnBoundaries = preload("res://tests/expedition/return_boundary_cases.gd")
 var checks = 0
 var failures: Array = []
 func expect(ok: bool, message: String):
@@ -196,5 +197,8 @@ func run() -> Dictionary:
 				var target: Dictionary = bad if section == "" else (bad[section] if section == "player" else bad[section][0])
 				target[field] = null if source[field] is bool else false
 				expect(Model.validate(bad) != "","malformed persisted type rejected %s.%s" % [section,field])
+	var boundaries = ReturnBoundaries.new().run(Callable(),"/tmp/e02-rain-model-returns")
+	checks += boundaries.checks
+	failures.append_array(boundaries.failures)
 	print("E02 rain model: ",checks," checks, ",failures.size()," failures")
 	return {"checks":checks,"failures":failures.duplicate()}

@@ -138,14 +138,27 @@ func _process(delta):
 	clock_accumulator = 0.0
 	if not result.get("events",[]).is_empty():
 		_record_events(result.events)
-		_refresh()
-	elif game.view().phase != view.phase: _refresh()
+	var fresh=game.view()
+	if _refresh_live_counter(fresh): return
+	if not result.get("events",[]).is_empty() or fresh.phase!=view.phase: _refresh()
 	else:
-		view=game.view()
+		view=fresh
 		_update_status()
 		illustration.set_state(view)
-		if sheet_open and tab=="counter" and not rain_panels.is_empty():
-			rain_panels[0].present(view,"service")
+
+func _refresh_live_counter(fresh: Dictionary) -> bool:
+	if not sheet_open or tab!="counter" or rain_panels.is_empty(): return false
+	if view.phase!="trading" or fresh.phase!="trading" or fresh.paused or not fresh.pending.is_empty(): return false
+	if view.service.wave_id!=fresh.service.wave_id: return false
+	view=fresh
+	_update_status()
+	illustration.set_state(view)
+	rain_panels[0].present(view,"service")
+	feedback.text=messages.back() if not messages.is_empty() else ""
+	feedback.tooltip_text=feedback.text
+	sheet_feedback.text=feedback.text
+	_update_message_visibility()
+	return true
 
 func _style(color: Color, border: Color, width: int = 1, padding: int = 12) -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()

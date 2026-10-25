@@ -148,6 +148,7 @@ func heat_origin():
 	act(g,"finish_shopping"); act(g,"install",{"uid":1}); act(g,"open_shop"); advance_wave(g)
 	var boundary = g.snapshot(); boundary.next_uid = 101
 	for order in boundary.night.queues["n1-w2"]: order.budget = 0
+	boundary.night.waves[1].budget_min = 0; boundary.night.waves[1].budget_max = 0
 	for order in boundary.customers:
 		if order.wave_id == "n1-w2": order.budget = 0
 	g = fixture(boundary,"H04-heat-leftover-wave2")
@@ -158,6 +159,7 @@ func four_warm_orders(g, label: String):
 	var state = g.snapshot(); var queue = state.night.queues["n1-w3"].slice(0,4)
 	for order in queue: order.required = ["meal","warming","heat_hold"]; order.budget = 30
 	state.night.queues["n1-w3"] = queue; state.night.waves[2].ordinary_count = 4
+	state.night.waves[2].quick = 0; state.night.waves[2].warm = 4
 	state.customers = []
 	for orders in state.night.queues.values(): state.customers.append_array(orders.duplicate(true))
 	return fixture(state,label)
@@ -209,6 +211,7 @@ func test_cooling_and_day_boundary():
 	expect(mixed.snapshot().service.reservations.map(func(r): return r.item_uid) == [102,103],"cold lowest UID is skipped, not swapped in after matching another instance")
 	var state = g.snapshot()
 	for order in state.night.queues["n1-w3"]: order.budget = 0
+	state.night.waves[2].budget_min = 0; state.night.waves[2].budget_max = 0
 	for order in state.customers:
 		if order.wave_id == "n1-w3": order.budget = 0
 	g = fixture(state,"held-through-final-wave")
@@ -220,6 +223,9 @@ func test_cooling_and_day_boundary():
 	expect(g.snapshot().service.held_uids.is_empty() and g.snapshot().items.filter(func(i): return i.item_id == "moon_stew").all(func(i): return i.temperature == "cooled" and "warming" in i.intrinsic_tags and i.effect_id == "self_stir"),"legal uninstall cools held stock but does not erase intrinsic recipe effects")
 	state = g.snapshot()
 	for order in state.night.queues["n2-w1"]: order.required = ["meal","hearty"]
+	for order in state.customers:
+		if order.wave_id == "n2-w1": order.required = ["meal","hearty"]
+	state.night.waves[0].quick = 0; state.night.waves[0].warm = 0; state.night.waves[0].hearty = 8
 	g = fixture(state,"cooled-still-hearty")
 	act(g,"open_shop"); advance_wave(g)
 	expect(g.snapshot().sales.filter(func(s): return s.day == 2 and s.revenue > 0).size() == 4,"all four cooled meals remain sellable to hearty customers")
@@ -312,8 +318,80 @@ func test_saved_field_types():
 		purchase.args[field] = "wrong-number" if field == "quantity" else false
 		expect(g.validate_snapshot(corrupt) != "","malformed economic argument rejected: "+field)
 
+func _expect_metadata_view(restored, original, label: String):
+	var actual = restored.view(); var expected = original.view()
+	for field in ["demand_board","forecast","cash","inventory","requests","customers_remaining"]:
+		expect(actual.has(field) and actual[field] == expected[field],"restored view remains usable and exact: "+label+" "+field)
+
+func _check_metadata_recovery(source: Dictionary, corrupt: Dictionary, label: String) -> Dictionary:
+	serial += 1
+	var path = output_dir+"/metadata-%d.json" % serial
+	var original = fixture(source,"metadata-source")
+	expect(original.save_to(path).ok,"valid metadata backup created: "+label)
+	var backup_hash = FileAccess.get_sha256(path+".bak")
+	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(corrupt,"\t",true,true)); file.close()
+	var damaged_hash = FileAccess.get_sha256(path)
+	var validation = original.validate_snapshot(corrupt)
+	expect(validation != "","malformed forecast metadata rejected: "+label)
+	var restored = Session.new(99); var result = restored.load_from(path)
+	expect(result.ok and result.code == "recovered_backup","damaged forecast metadata falls back to valid backup: "+label)
+	var identical = restored.snapshot() == source
+	expect(identical,"recovery preserves complete state including cash, inventory and requests: "+label)
+	# The red regression must report failures without dereferencing the damaged view.
+	if identical: _expect_metadata_view(restored,original,label)
+	var files_unchanged = FileAccess.get_sha256(path) == damaged_hash and FileAccess.get_sha256(path+".bak") == backup_hash
+	expect(files_unchanged,"recovery preserves damaged primary and valid backup hashes: "+label)
+	return {"mutation":label,"validation":validation,"load_code":result.code,"restored_original":identical,"files_unchanged":files_unchanged}
+
+func test_saved_forecast_metadata():
+	var initial = Session.new(23); roundtrip(initial,"metadata-initial"); expect(initial.view().demand_board.size() == 26,"initial forecast view is usable")
+	var g = prepare_quick(); roundtrip(g,"metadata-preparation")
+	act(g,"open_shop",{},"metadata-open-first"); act(g,"advance",{"delta_ms":1500})
+	var source = g.snapshot(); var rows = []
+	var legacy_path = output_dir+"/metadata-legacy-v2.json"
+	expect(Session.new(23,"prototype-v1").save_to(legacy_path).ok,"legacy v2 baseline exists for metadata recovery")
+	var legacy_hashes = [FileAccess.get_sha256(legacy_path),FileAccess.get_sha256(legacy_path+".bak")]
+	for section in ["customers","waves"]:
+		var original = source.customers[0] if section == "customers" else source.night.waves[0]
+		for replacement in [null,false,42,"wrong-object",[]]:
+			var corrupt = source.duplicate(true); var target = corrupt.customers if section == "customers" else corrupt.night.waves
+			target[0] = replacement
+			rows.append(_check_metadata_recovery(source,corrupt,section+" nonobject "+str(replacement)))
+		for key in original:
+			for missing in [true,false]:
+				var corrupt = source.duplicate(true); var target = corrupt.customers[0] if section == "customers" else corrupt.night.waves[0]
+				if missing: target.erase(key)
+				else: target[key] = false if original[key] is String else "wrong-type"
+				rows.append(_check_metadata_recovery(source,corrupt,section+"."+str(key)+(" missing" if missing else " type")))
+	for mutation in ["customer-budget","customer-count","customer-order","wave-id","wave-index","wave-count","wave-mix","wave-budget","wave-fraction","wave-negative"]:
+		var corrupt = source.duplicate(true)
+		match mutation:
+			"customer-budget": corrupt.customers[0].budget += 1
+			"customer-count": corrupt.customers.pop_back()
+			"customer-order": corrupt.customers.reverse()
+			"wave-id": corrupt.night.waves[0].id = "n1-w2"
+			"wave-index": corrupt.night.waves[0].index = 2
+			"wave-count": corrupt.night.waves[0].ordinary_count += 1
+			"wave-mix": corrupt.night.waves[0].quick -= 1; corrupt.night.waves[0].warm += 1
+			"wave-budget": corrupt.night.waves[0].budget_min = 31
+			"wave-fraction": corrupt.night.waves[0].quick = 5.5
+			"wave-negative": corrupt.night.waves[0].hearty = -1
+		rows.append(_check_metadata_recovery(source,corrupt,mutation))
+	expect(legacy_hashes == [FileAccess.get_sha256(legacy_path),FileAccess.get_sha256(legacy_path+".bak")],"all metadata recovery attempts leave old v2 primary and backup hashes unchanged")
+	for wave in [1,2,3]:
+		if wave > 1: act(g,"start_wave",{"wave_id":"n1-w%d" % wave},"metadata-wave-%d" % wave)
+		var clone = roundtrip(g,"metadata-active-%d" % wave)
+		_expect_metadata_view(clone,g,"active wave %d" % wave)
+		advance_wave(g); clone = roundtrip(g,"metadata-after-%d" % wave)
+		_expect_metadata_view(clone,g,"completed wave %d" % wave)
+	act(g,"settle"); roundtrip(g,"metadata-settled"); act(g,"next_day")
+	var next = roundtrip(g,"metadata-next-day")
+	_expect_metadata_view(next,g,"next day")
+	expect(next.snapshot().night.queues["n2-w1"][7].required == ["meal","trail_light"] and next.snapshot().night.queues["n2-w3"][8].required == ["meal","celebration"],"next-day forecast including both rare-demand slots survives restore")
+	traces.append({"check":"saved-forecast-metadata","rows":rows,"legacy_hashes_unchanged":legacy_hashes == [FileAccess.get_sha256(legacy_path),FileAccess.get_sha256(legacy_path+".bak")]})
+
 func run(folder: String) -> Dictionary:
 	output_dir = folder+"/fixtures-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
-	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity(); test_optional_hagrid(); test_saved_field_types()
+	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity(); test_optional_hagrid(); test_saved_field_types(); test_saved_forecast_metadata()
 	var result = {"suite":"quality-service-focused","checks":checks,"failures":failures,"traces":traces}
 	return result
