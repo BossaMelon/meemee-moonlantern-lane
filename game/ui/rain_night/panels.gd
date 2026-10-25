@@ -279,7 +279,7 @@ func _rare():
 	_button("rare_keep","先保留，合上储藏柜",func(): world_requested.emit("world_storage"))
 
 func _growth():
-	_text("今晚的菜品收入：%d金" % state.get("dish_income",0),"growth_income",ACCENT)
+	_text("累计菜品收入：%d金" % state.get("dish_income",0),"growth_income",ACCENT)
 	for upgrade in state.get("upgrades",[]):
 		if upgrade.upgrade_id not in ["field_kit","shelf"]: continue
 		_text("%s · %d金\n%s" % [upgrade.name,upgrade.cost,upgrade.description],"growth_"+str(upgrade.upgrade_id))
