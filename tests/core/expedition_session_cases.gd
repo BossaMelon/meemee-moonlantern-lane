@@ -15,13 +15,13 @@ func restore(g, label: String):
 	var path = root+"/"+label+".json"
 	var started = Time.get_ticks_usec()
 	expect(g.save_to(path).ok,"save full action session "+label)
-	var clone = Session.new(1)
+	var clone = Session.new(1,"prototype-v1")
 	expect(clone.load_from(path).ok,"load full action session "+label)
 	metrics.append({"scenario":label,"save_and_load_us":Time.get_ticks_usec()-started,"save_bytes":FileAccess.get_file_as_bytes(path).size(),"ledger_rows":g.snapshot().ledger.size()})
 	return clone
 
 func persistence():
-	var g = Session.new(23)
+	var g = Session.new(23,"prototype-v1")
 	expect(g.command("start_expedition").ok,"start precision scenario")
 	expect(g.command("expedition_input",{"move_x":0.37,"move_y":-0.21,"aim_x":0.4,"aim_y":0.9,"cast":true}).ok,"fractional axes accepted")
 	expect(g.advance(137).ok,"partial fixed step accepted")
@@ -47,7 +47,7 @@ func persistence():
 	expect(not g.command("start_expedition").ok,"loaded retreat cannot reset daily attempt")
 
 func full_duration():
-	var g = Session.new(7)
+	var g = Session.new(7,"prototype-v1")
 	expect(g.command("start_expedition").ok,"start full 180-second simulation")
 	var corners = [Vector2(80,60),Vector2(880,60),Vector2(880,480),Vector2(80,480)]
 	var target = 0; var frames = 0; var max_step_us = 0
@@ -74,7 +74,7 @@ func full_duration():
 
 func pickup_resume():
 	var driver = load("res://tests/expedition/action_driver.gd")
-	var g = Session.new(99); g.command("start_expedition")
+	var g = Session.new(99,"prototype-v1"); g.command("start_expedition")
 	var resumed = false; var frames = 0; var max_pickup_rows = 0
 	while g.view().phase == "expedition" and frames < 3600:
 		g.command("expedition_input",driver.next_input(g.view().expedition)); g.advance(50); frames += 1

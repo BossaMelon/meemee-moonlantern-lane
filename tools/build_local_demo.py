@@ -330,7 +330,7 @@ def validate_probe(report, execution, mode, profile, build_id, executable, main_
             'actual UI/default path/assets not verified')
     for state in (report.get('snapshot'), report.get('saved_state')):
         require(isinstance(state, dict) and state.get('profile_id') == 'rain-night-v1'
-                and type(state.get('version')) is int and state['version'] == 3 and state.get('paused') is True,
+                and type(state.get('version')) in (int, float) and state['version'] == 3 and state.get('paused') is True,
                 'probe did not observe v3 runtime state and the non-default pause marker')
     require(same_snapshot(report['snapshot'], report['saved_state']), 'core default save differs from actual Main snapshot')
     require(all(isinstance(report.get(key), str) and re.fullmatch('[0-9a-f]{64}', report[key])

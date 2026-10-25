@@ -6,6 +6,7 @@ signal save_requested
 signal save_quit_requested
 signal action_events(events: Array)
 signal input_mode_changed(mode: String)
+const WORLD_TINT = Color(0.82,0.88,0.88)
 const EMPTY_INPUT = {"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}
 var session
 var state: Dictionary = {}
@@ -37,6 +38,25 @@ var _paused = false
 var hud_style: StyleBoxFlat
 var menu_style: StyleBox
 var _paper_available = false
+var _hint_run_id = ""
+var _hint_regions: Dictionary = {}
+var _region_hint = ""
+var _region_hint_until_tick = 0
+var _ripple_run_id = ""
+var _water_positions: Dictionary = {}
+var _ripple_next_tick: Dictionary = {}
+var _water_ripples: Array = []
+var _input_window: Window
+
+func _enter_tree():
+	_input_window = get_window()
+	if _input_window != null and not _input_window.focus_exited.is_connected(release_inputs):
+		_input_window.focus_exited.connect(release_inputs)
+
+func _exit_tree():
+	if is_instance_valid(_input_window) and _input_window.focus_exited.is_connected(release_inputs):
+		_input_window.focus_exited.disconnect(release_inputs)
+	_input_window = null
 
 func _ready():
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -165,15 +185,69 @@ func bind_session(value):
 	release_inputs()
 	refresh()
 
+func _feedback(events: Array):
+	for event in events:
+		match event.type:
+			"pickup_blocked": message = event.message
+			"drop_collected": message = "采得月心菇" if event.item_id == "moonheart" else "采得星火菇"
+			"enemy_staggered": message = "撞桩破绽！" if event.entity_id == "deep-elite" else "撞桩硬直，趁现在施法"
+			"spore_cleared": message = "风咒吹散了孢子"
+
 func refresh():
 	if session != null:
 		var view: Dictionary = session.view()
 		state = view.get("expedition",{})
+		_update_water_ripples()
+		_region_feedback()
 		if _paused != view.get("paused",false):
 			_paused = view.get("paused",false)
 			_layout()
 		if pause_button != null: pause_button.text = _pause_text(view.get("paused",false))
 	queue_redraw()
+
+func _update_water_ripples():
+	if state.get("version",1) != 2 or not state.has("player"): return
+	if _ripple_run_id != state.run_id:
+		_ripple_run_id = state.run_id; _water_positions.clear(); _ripple_next_tick.clear(); _water_ripples.clear()
+	_water_ripples = _water_ripples.filter(func(ripple): return ripple.until_tick > state.tick)
+	var actors: Array = [{"id":"player","x":state.player.x,"y":state.player.y}]
+	for enemy in state.enemies:
+		if enemy.hp > 0: actors.append(enemy)
+	for actor in actors:
+		var pos = Vector2(actor.x,actor.y)
+		var moved = _water_positions.has(actor.id) and pos.distance_squared_to(_water_positions[actor.id]) > 0.25
+		_water_positions[actor.id] = pos
+		if not moved or state.tick < _ripple_next_tick.get(actor.id,0): continue
+		for water in state.terrain.water_zones:
+			if _terrain_rect(water).has_point(pos):
+				_water_ripples.append({"x":pos.x,"y":pos.y,"until_tick":state.tick+12})
+				_ripple_next_tick[actor.id] = state.tick+12
+				if _water_ripples.size() > 4: _water_ripples.pop_front()
+				break
+
+func _region_feedback():
+	if state.get("version",1) != 2 or not state.has("player"): return
+	if _hint_run_id != state.run_id:
+		_hint_run_id = state.run_id; _hint_regions.clear(); _region_hint = ""; _region_hint_until_tick = 0
+	if state.tick < _region_hint_until_tick: return
+	var pos = Vector2(state.player.x,state.player.y)
+	var near_shelf = false
+	for node in state.resource_nodes:
+		if node.id == "shelf-patch" and pos.distance_to(Vector2(node.x,node.y)) <= 115: near_shelf = true
+	var near_water = false
+	for water in state.terrain.water_zones:
+		if _terrain_rect(water).grow(25).has_point(pos): near_water = true
+	var near_deep = false
+	for enemy in state.enemies:
+		if enemy.encounter_id == "deep" and pos.distance_to(Vector2(enemy.x,enemy.y)) <= 200: near_deep = true
+	for region in [
+		["deep",near_deep,"盾菇和投手守着深处，留意破绽。"],
+		["water",near_water,"浅渠会拖慢步子，风咒能吹散孢子。"],
+		["shelf",near_shelf,"绕过棚架的菇桩，可以先采一点返店。"]]:
+		if region[1] and not _hint_regions.has(region[0]):
+			_hint_regions[region[0]] = true
+			_region_hint = region[2]; _region_hint_until_tick = state.tick+60
+			return
 
 func _command(kind: String, args: Dictionary = {}):
 	if session == null: return {}
@@ -181,9 +255,7 @@ func _command(kind: String, args: Dictionary = {}):
 	var result: Dictionary = session.command(kind,args,session_prefix+"-"+str(serial))
 	if not result.get("events",[]).is_empty(): action_events.emit(result.events)
 	if not result.ok: message = result.message
-	for event in result.get("events",[]):
-		if event.type == "pickup_blocked": message = event.message
-		elif event.type == "drop_collected": message = "采得月心菇" if event.item_id == "moonheart" else "采得星火菇"
+	_feedback(result.get("events",[]))
 	refresh()
 	return result
 
@@ -252,9 +324,7 @@ func _process(delta: float):
 	if elapsed > 0:
 		var result: Dictionary = session.advance(mini(elapsed,60000))
 		if not result.get("events",[]).is_empty(): action_events.emit(result.events)
-		for event in result.get("events",[]):
-			if event.type == "drop_collected": message = "采得月心菇" if event.item_id == "moonheart" else "采得星火菇"
-			elif event.type == "pickup_blocked": message = event.message
+		_feedback(result.get("events",[]))
 		refresh()
 		if session.view().get("phase","") != "expedition":
 			release_inputs()
@@ -385,7 +455,7 @@ func _texture(id: String, background: bool = false) -> Texture2D:
 	textures[id] = texture
 	return texture
 
-func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float = 2.0):
+func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float = 2.0, modulate: Color = Color.WHITE):
 	var texture = _texture(id)
 	if texture == null:
 		draw_circle(position,14.0 if scale_value == 2.0 else 24.0,fallback)
@@ -394,19 +464,70 @@ func _sprite(id: String, position: Vector2, fallback: Color, scale_value: float 
 	if manifest.get("sprites",{}).has(id):
 		var values = manifest.sprites[id].get("pivot",[pivot.x,pivot.y])
 		pivot = Vector2(values[0],values[1])
-	draw_texture_rect(texture,Rect2((position-pivot*scale_value).round(),texture.get_size()*scale_value),false)
+	draw_texture_rect(texture,Rect2((position-pivot*scale_value).round(),texture.get_size()*scale_value),false,modulate)
+
+func _terrain_rect(data: Dictionary) -> Rect2:
+	return Rect2(Vector2(data.x,data.y)-Vector2(data.width,data.height)*0.5,Vector2(data.width,data.height))
+
+func _draw_terrain_floor():
+	if not state.has("terrain"): return
+	var routes = _texture("rain_ground_routes",true)
+	if routes != null: draw_texture_rect(routes,Rect2(0,0,960,540),false,WORLD_TINT)
+	var canal = _texture("rain_canal_shallow",true)
+	for water in state.terrain.water_zones:
+		if canal != null: draw_texture_rect(canal,_terrain_rect(water),false,WORLD_TINT)
+	for ripple in _water_ripples:
+		var tint = WORLD_TINT
+		tint.a = clampf((ripple.until_tick-state.tick)/12.0,0,1)*0.65
+		_sprite("water_ripple",Vector2(ripple.x,ripple.y),Color("71b4b1"),1.0,tint)
+
+func _stump_visual(obstacle: Dictionary) -> Dictionary:
+	var pos = Vector2(obstacle.x,obstacle.y)
+	if obstacle.id == "north-west-stump": return {"id":"garden_root_log_50","position":pos,"scale":1.0,"sort_y":pos.y}
+	if obstacle.id == "deep-stump": return {"id":"garden_root_log_45","position":pos,"scale":1.0,"sort_y":pos.y}
+	if obstacle.shape == "circle":
+		return {"id":"garden_stump","position":pos+Vector2(0,roundf(obstacle.radius*0.9)),"scale":obstacle.radius/20.0,"sort_y":pos.y+obstacle.radius}
+	return {"id":"garden_stump","position":pos+Vector2(0,24),"scale":1.5,"sort_y":pos.y+obstacle.height*0.5}
+
+func _draw_stump(obstacle: Dictionary):
+	var visual = _stump_visual(obstacle)
+	if _texture(visual.id) != null:
+		_sprite(visual.id,visual.position,Color("675240"),visual.scale,WORLD_TINT)
+	elif obstacle.shape == "circle": draw_circle(Vector2(obstacle.x,obstacle.y),obstacle.radius,Color("675240"))
+	else: draw_rect(_terrain_rect(obstacle),Color("675240"))
+
+func _draw_hazards():
+	# These are ground effects. Sort their foot points within the floor pass;
+	# all actors draw afterwards so the cloud/fill never paints over a body.
+	var hazards: Array = state.get("hazards",[]).duplicate()
+	hazards.sort_custom(func(a,b): return a.y < b.y)
+	for hazard in hazards:
+		var pos = Vector2(hazard.x,hazard.y)
+		if hazard.state == "warning":
+			draw_circle(pos,hazard.radius,Color(0.88,0.54,0.29,0.10))
+			draw_arc(pos,hazard.radius,0,TAU,48,Color("ffd394"),2.5)
+			var progress = 1.0-hazard.remaining_ms/800.0
+			draw_arc(pos,hazard.radius-5,-PI/2,-PI/2+TAU*progress,48,Color("fff0c7"),3)
+			draw_line(pos-Vector2(6,0),pos+Vector2(6,0),Color("ffd394"),2)
+			draw_line(pos-Vector2(0,6),pos+Vector2(0,6),Color("ffd394"),2)
+		else:
+			draw_circle(pos,hazard.radius,Color(0.48,0.48,0.69,0.14))
+			if _texture("spore_cloud") != null: _sprite("spore_cloud",pos+Vector2(0,16),Color("c2addd"),1.25)
+			draw_arc(pos,hazard.radius,0,TAU,48,Color("c7b5df"),1.5)
 
 func _draw():
 	draw_rect(Rect2(Vector2.ZERO,size),Color("102326"))
 	if font == null or field.size.x <= 0: return
 	draw_set_transform(field.position,0,field.size/Vector2(960,540))
 	var background = _texture("mushroom-garden",true)
-	if background != null: draw_texture_rect(background,Rect2(0,0,960,540),false,Color(0.82,0.88,0.88))
+	if background != null: draw_texture_rect(background,Rect2(0,0,960,540),false,WORLD_TINT)
 	else: draw_rect(Rect2(0,0,960,540),Color("273d3f"))
+	_draw_terrain_floor()
 	draw_rect(Rect2(15,220,30,100),Color(0.75,0.92,0.72,0.16))
 	draw_line(Vector2(28,248),Vector2(20,270),Color(0.9,0.93,0.75,0.8),2)
 	draw_line(Vector2(20,270),Vector2(28,292),Color(0.9,0.93,0.75,0.8),2)
 	if state.has("player"):
+		_draw_hazards()
 		for enemy in state.enemies:
 			if enemy.hp <= 0: continue
 			var pos = Vector2(enemy.x,enemy.y)
@@ -415,6 +536,8 @@ func _draw():
 				if warning.shape == "ring":
 					draw_arc(pos,warning.radius,0,TAU,80,Color(0.12,0.1,0.08,0.8),7)
 					draw_arc(pos,warning.radius,0,TAU,80,Color("ffd08a"),3)
+				elif warning.shape == "spore":
+					draw_arc(pos,25,0,TAU,32,Color("dfb7e6"),2)
 				else:
 					var direction = Vector2(warning.direction_x,warning.direction_y)
 					var points = PackedVector2Array([pos])
@@ -429,20 +552,38 @@ func _draw():
 				draw_circle(drop_pos,14,Color(1,0.85,0.42,0.16))
 				draw_arc(drop_pos,14,0,TAU,24,Color("ffe594"),1.5)
 				_sprite(drop.item_id,drop_pos,Color("ffe594"),1.0)
+		for node in state.get("resource_nodes",[]):
+			if node.collected: continue
+			var node_pos = Vector2(node.x,node.y)
+			draw_circle(node_pos,17,Color(0.87,0.75,0.37,0.15))
+			draw_arc(node_pos,17,0,TAU,24,Color("dfcb8c"),1.5)
+			_sprite(node.item_id,node_pos,Color("ffe594"),1.2)
 		var actors: Array = []
+		for obstacle in state.get("terrain",{}).get("obstacles",[]):
+			var item: Dictionary = obstacle.duplicate()
+			item.render_stump = true
+			item.sort_y = _stump_visual(item).sort_y
+			actors.append(item)
 		for enemy in state.enemies:
 			if enemy.hp > 0: actors.append(enemy)
 		actors.append(state.player)
-		actors.sort_custom(func(a,b): return a.y < b.y)
+		actors.sort_custom(func(a,b): return a.get("sort_y",a.y) < b.get("sort_y",b.y))
 		for actor in actors:
 			var pos = Vector2(actor.x,actor.y)
-			if actor.has("kind"):
+			if actor.get("render_stump",false):
+				_draw_stump(actor)
+			elif actor.has("kind"):
 				var id = "moonheart_guard" if actor.kind == "moonheart" else "sparkcap_idle"
 				if actor.kind == "moonheart" and not actor.shielded: id = "moonheart_exposed"
 				elif actor.kind == "sparkcap" and actor.state == "telegraph": id = "sparkcap_windup"
+				elif actor.kind == "sporecaster":
+					id = "sporecaster_windup" if actor.state == "spore_windup" else ("sporecaster_release" if actor.state == "spore_release" else "sporecaster_idle")
 				_sprite(id,pos,Color("ef8a63"))
 				draw_rect(Rect2(pos+Vector2(-16,5),Vector2(32,4)),Color("442c45"))
 				draw_rect(Rect2(pos+Vector2(-16,5),Vector2(32.0*actor.hp/(4 if actor.kind == "moonheart" else 2),4)),Color("f8ad60"))
+				if actor.state == "stagger":
+					draw_arc(pos,24,-PI,-PI+PI*actor.stagger_remaining_ms/1200.0,24,Color("fff0a6"),3)
+					draw_string(font,pos+Vector2(-15,-43),"破绽",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("ffe3a4"))
 				if actor.shielded:
 					var angle = Vector2(actor.direction_x,actor.direction_y).angle()
 					draw_arc(pos,25,angle-PI/3,angle+PI/3,14,Color("97e9fa"),4)
@@ -456,13 +597,14 @@ func _draw():
 				draw_line(pos,pos+Vector2(actor.aim_x,actor.aim_y)*35,Color("bce7e8"),2)
 				if actor.shield: draw_arc(pos,24,0,TAU,40,Color("faf4c0"),2)
 				if actor.skill_flash_ms > 0:
-					draw_arc(pos,120,0,TAU,48,Color(0.6,1,0.9,0.75),3)
+					draw_arc(pos,actor.get("skill_range",120.0),0,TAU,48,Color(0.6,1,0.9,0.75),3)
 					_sprite("gust_large",pos,Color("a4f0cf"))
 		for projectile in state.projectiles:
 			var point = Vector2(projectile.x,projectile.y)
 			draw_circle(point,7,Color(0.15,0.17,0.11,0.7))
-			draw_circle(point,4.5,Color("ffe99b"))
-			draw_circle(point,2.3,Color("fffbea"))
+			var enemy_spore = projectile.get("owner","") == "enemy"
+			draw_circle(point,5.5 if enemy_spore else 4.5,Color("c4a3df") if enemy_spore else Color("ffe99b"))
+			draw_circle(point,2.3,Color("f5e4ff") if enemy_spore else Color("fffbea"))
 	draw_set_transform(Vector2.ZERO)
 	_draw_hud()
 	if input_mode == "touch" and not _paused: _draw_touch()
@@ -483,10 +625,22 @@ func _draw_hud():
 		if i < state.player.hp: draw_circle(center+Vector2(-2,-2)*u,1.5*u,Color("fff0c8"))
 	if state.player.shield: draw_arc(inset+Vector2(92,46)*u,8*u,0,TAU,24,Color("b3e3cc"),2*u)
 	_text(inset+Vector2(116,51)*u,"散射魔杖" if state.weapon_id == "fan_wand" else "直线魔杖",14)
-	var seconds = ceili(state.remaining_ms/1000.0)
-	var timer_rect = Rect2(Vector2((size.x-104*u)/2.0,18*u),Vector2(104,42)*u)
+	var quality = state.get("version",1) == 2
+	var seconds = floori(state.elapsed_ms/1000.0) if quality else ceili(state.remaining_ms/1000.0)
+	var timer_width = 144 if quality else 104
+	var timer_rect = Rect2(Vector2((size.x-timer_width*u)/2.0,18*u),Vector2(timer_width,42)*u)
 	draw_style_box(hud_style,timer_rect)
-	_text(timer_rect.position+Vector2(21,29)*u,"%d:%02d" % [seconds/60,seconds%60],22)
+	if quality: _text(timer_rect.position+Vector2(12,27)*u,"用时",12,Color("c7d4c7"))
+	_text(timer_rect.position+Vector2(54 if quality else 21,29)*u,"%d:%02d" % [seconds/60,seconds%60],22)
+	if quality:
+		var collected = state.resource_nodes.filter(func(node): return node.collected).size()+state.drops.filter(func(drop): return drop.collected).size()
+		var meal = state.get("meal_effect")
+		var note = "已采 %d · 可随时返店" % collected
+		if meal != null: note += " · "+("轻步" if meal.effect_id == "light_step" else "清息")+("已用" if meal.used else "待用")
+		var width = minf(size.x-36*u,font.get_string_size(note,HORIZONTAL_ALIGNMENT_LEFT,-1,roundi(13*u)).x+24*u)
+		var box = Rect2(Vector2((size.x-width)/2,68*u),Vector2(width,26*u))
+		draw_style_box(hud_style,box)
+		_text(box.position+Vector2(12,18)*u,note,13,Color("d0d8bc"))
 	if not _paused:
 		if input_mode != "touch":
 			var hint = "WASD 移动  ·  鼠标 / 方向键 瞄准  ·  J / 空格 施法  ·  K 闪避  ·  L 风咒"
@@ -496,6 +650,7 @@ func _draw_hud():
 			draw_style_box(hud_style,strip)
 			_text(strip.position+Vector2(16,21)*u,hint,14,Color("c7d4c7"))
 		var note = "清场了，靠近拾取材料" if state.status == "cleared" else message
+		if state.get("tick",0) < _region_hint_until_tick: note = _region_hint
 		if note != "":
 			var width = minf(size.x-36*u,font.get_string_size(note,HORIZONTAL_ALIGNMENT_LEFT,-1,roundi(16*u)).x+32*u)
 			var at = Vector2((size.x-width)/2,size.y-(92 if input_mode != "touch" else 44)*u)

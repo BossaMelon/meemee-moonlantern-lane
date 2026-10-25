@@ -27,3 +27,26 @@ HUD改版后 `--active-exit` 走「实际按住动作→真实Esc暂停→浮层
 `--headless --script tests/expedition/touch_emulation.gd` 是叠加触控HUD的输入回归，不开原生窗口：开启实际引擎双向鼠标/触屏模拟，确认只移动不自动施法、不注入鼠标瞄准，显式触屏施法仍工作并能松开；真实鼠标不会控制隐藏虚拟摇杆。报告写到 `/tmp/e01-hud-touch-emulation.json`，红色对照保留为同目录 `e01-hud-touch-emulation-red.json`。它不替代原生全屏/设备证据。
 
 `--headless --script tests/expedition/gui_priority.gd -- --output ABS_JSON` 用真实Viewport事件检查场地覆盖GUI时的点击优先级：暂停鼠标按下不施法、抬起只发一次暂停，暂停保存不改完整状态/requests，Esc可恢复，普通场地仍真正施法，场地按下后在GUI上抬起只清施法。默认报告 `/tmp/e01-gui-priority.json`；红色对照 `/tmp/e01-gui-priority-red.json`。独立reviewer原始probe保持不改，在临时项目原样复跑，不占原生slot；其修复后Esc步骤会变成恢复，所以末尾旧的paused-save标签不再代表暂停状态，该分支由此回归单独覆盖。
+
+E02 使用相同 Godot，新增独立质量模型入口，保留全部旧入口：
+
+- `run_geometry.gd`：中心坐标公开数据重建、薄体连续碰撞、圆角反例、两路与连接可达。
+- `run_rain_model.gd`：typed options/meal、自然入口撞桩、组件边界反例（精英/推退/弹体/水/孢子）、有限节点、五种子两夜帧切分/JSON、持久化字段损坏类型拒绝。组件夹具清楚标记，不冒充正常路线。
+- `run_rain_routes.gd`（可追加 `-- --day2`）：五固定种子、两条 normal-input 路线实际取材/入口返程。`rain_driver.gd` 只读取公开位置并提交标准输入，绝不修改敌人、HP、材料、装备或模型时钟；脚本选择武器仅代表独立动作组件配置，装备合法获取由真实Session验证。旧E01 driver原样比较并记录实际结果，不断言它必须失败。轨迹在 `/tmp/e02-rain-routes-day1.json` / `day2.json`。
+- `run_rain_deep.gd`：两种武器由普通输入真正进入深处，在活盾精英旁经历投手warning/active、风咒清真实区，击败精英并拾取moonheart后返程；保留组合状态JSON续跑比较、输入/事件/路径。输出 `/tmp/e02-deep-shelf.json` 与 `canal.json`。
+
+质量模型remaining_ms为null；动作HUD改读elapsed_ms。地形/水/资源/预警/硬直均从view绘制。面板输入与GUI路由继续由旧的gui_priority/touch_emulation/input_boundary_regressions覆盖；绘制及真实InputEvent不替代核心经济、完整保存退出、目标设备或人类趣味验收。
+
+`rain_runtime.gd` 复用原真实输入注入器，在仅持有质量动作模型的adapter上执行键鼠／触屏／合成手柄：两路、深处孢子、风清、实际月心掉落、暂停真实鼠标保存及窄屏。默认输出 `/tmp/e02-rain-runtime`，支持 `-- --output ABS_DIR`。用canonical渲染锁启动；传引擎 `--fullscreen` 时保留真实native/Retina viewport，窄屏段再明确切windowed。报告明确标为component，不冒充Session经济/Q06/新进程恢复或实体设备；NO_FOCUS及后台启动并不保证macOS不会取焦点，应以报告记录为准。
+
+A02正式场景接线仅更换绘制：全场/浅渠覆盖层均按manifest逻辑矩形1:1，两个连续长桩scale=1；背景、覆盖层、障碍共用WORLD_TINT。`stump_visibility.gd` 按实际pivot、缩放及round后的绘制原点采样PNG alpha，核验全部既有阻挡区域有可见实体覆盖（不把菌盖/树冠全部当碰撞）。输出 `/tmp/e02-stump-visibility.json`；它不能替代实际脚点/遮挡viewport检查。涟漪来自相邻view真实位置变化且位于水区，最多四处，不预铺网格。
+
+`rain_runtime.gd` 额外保存真实撞桩、水步、风清画面，报告含candidate dirty/HEAD、geometry/world/manifest/source SHA、窗口/viewport/rawPNG SHA、NO_FOCUS与实际focus。截图等待macOS呈现时明确暂挂panel process，稳定同一已观察模型状态；报告记`capture_process_suspended=true`，这不是玩家暂停行为证据。真实Esc暂停/保存仍由独立InputEvent步骤验证。
+
+`run_return_boundaries.gd` 默认要求正式rain-night-v1 Session，不会回退到adapter：公开指令右500ms→左1000ms，对比一次1000与20×50的**完整snapshot**（含requests），并核验真实暂停、磁盘保存/恢复、主动撤退与终态再次advance。`-- --component-only` 明确只跑组件；组件用有效受控战斗/清场夹具触发defeated/completed，入口由普通输入触发，retreat沿现有leave；各终止边界都必须丢弃未处理余帧，不得出现负余数。组件结果不冒充真实Session取得库存。47项组件回归已纳入rain_model_cases.gd，原run_rain_model.gd入口继续覆盖。
+
+本次主审回归在正式组合SHA `4cc5c2fa8765e4806f37098895f7a440122f5df4` 的独立临时归档 `/private/tmp/e02-return-boundary-4cc5c2f` 运行，仅覆盖本次E02模型/测试。红色 `/tmp/e02-return-red`、绿色 `/tmp/e02-return-green`；原主审探针在该新归档原样复跑，输出review-return-partition-result.json。原 `/private/tmp/moonlantern-review-4cc5c2f-ya1m9hvo` 保持只读。旧model v1与存档校验/迁移规则均未改；只对新发生的质量模型终止转换清零remainder_ms。
+
+`window_focus_boundaries.gd` 是F04的**headless信号边界组件**：在实际4.7.2引擎上用真实InputEvent建立四种设备保持，再显式触发所属Window的focus_exited/focus_entered信号，断言本地与真实模型input同步清零、无新输入不重放、新输入仍有效、Control焦点变化不清零、重复信号不重复写、返店不发非法命令、离树/换Window正确断开重连。显式信号是逻辑夹具，不冒充OS最小化；不调用产品_notification、不补发release事件。红色/tmp/e02-f04-red，绿色/tmp/e02-f04-green，实际OS原生复验归P06，勿因此占渲染槽或修改tests/runtime。
+
+公开契约：[Window.focus_exited](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-signal-focus-exited)、[Node.get_window](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-method-get-window) 与 [Window/应用通知的区分](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-constant-notification-wm-window-focus-out)。面板只增加所属Window的生命周期绑定，复用原release_inputs；公共接口、自动暂停与时间语义不变。

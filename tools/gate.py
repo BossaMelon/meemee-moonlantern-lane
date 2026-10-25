@@ -20,6 +20,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_VERSION = "4.7.2"
 CASE_STATUSES = {"passed", "failed", "skipped"}
+SUITES = ("prototype", "quality-slice")
 MODES = {"automated", "runtime", "human"}
 STAGES = {"prototype", "platform", "human"}
 ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
@@ -54,10 +55,14 @@ def nonempty_strings(value: object) -> bool:
     )
 
 
-def validate_contract(data: dict) -> list[dict]:
+def validate_contract(data: dict, suite: str = "prototype") -> list[dict]:
+    require(suite in SUITES, f"unknown contract suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "contract schema_version must be integer 1")
-    require(data.get("milestone") == "three-day-prototype", "unknown contract milestone")
+    require(data.get("milestone") == ("three-day-prototype" if suite == "prototype" else "quality-slice"),
+            f"unknown {suite} contract milestone")
+    if suite == "quality-slice":
+        require(data.get("suite") == suite, "quality-slice contract suite must be quality-slice")
     cases = data.get("acceptance")
     require(isinstance(cases, list) and bool(cases), "contract acceptance cannot be empty")
     seen = set()
@@ -78,12 +83,34 @@ def validate_contract(data: dict) -> list[dict]:
         require(case["mode"] != "human" or case["stage"] == "human", f"invalid human stage: {case_id}")
     automated = [case for case in cases if case["mode"] == "automated" and case["required"]]
     require(bool(automated), "contract has zero required automated cases")
+    if suite == "quality-slice":
+        roles = {**{f"Q{i:02d}": ("prototype", "automated") for i in range(1, 6)},
+                 "Q06": ("prototype", "runtime"), "QH": ("human", "human")}
+        require(seen == set(roles), "quality-slice requires exactly Q01–Q06 and QH")
+        for case in cases:
+            require((case["stage"], case["mode"]) == roles[case["id"]] and case["required"],
+                    f"quality-slice required evidence role changed: {case['id']}")
+        protocol = data.get("report_protocol")
+        require(isinstance(protocol, dict), "quality-slice report_protocol missing")
+        require(type(protocol.get("schema_version")) is int and protocol["schema_version"] == 1
+                and protocol.get("suite") == suite and protocol.get("runner") == "tests/run.gd"
+                and protocol.get("runner_args") == ["--", "--suite", suite, "--report", "ABS_REPORT"],
+                "quality-slice runner protocol mismatch")
+        require(protocol.get("required_automated_ids") == [f"Q{i:02d}" for i in range(1, 6)]
+                and protocol.get("external_evidence_ids") == ["Q06", "QH"],
+                "quality-slice report evidence IDs mismatch")
     return cases
 
 
-def validate_fixtures(data: dict, cases: list[dict]) -> int:
+def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype") -> int:
+    require(suite in SUITES, f"unknown fixture suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "fixtures schema_version must be integer 1")
+    if suite == "quality-slice":
+        require(data.get("suite") == suite, "quality-slice fixtures suite must be quality-slice")
+        require(data.get("seeds") == [1, 7, 23, 99, 20261025]
+                and all(type(seed) is int for seed in data["seeds"]),
+                "quality-slice fixtures require the five frozen seeds")
     scenarios = data.get("scenarios")
     require(isinstance(scenarios, list) and bool(scenarios), "fixtures scenarios cannot be empty")
     ids = {case["id"] for case in cases}
@@ -96,6 +123,10 @@ def validate_fixtures(data: dict, cases: list[dict]) -> int:
         require(scenario_id not in seen, f"duplicate scenario id: {scenario_id}")
         seen.add(scenario_id)
         require(integer(scenario.get("seed")), f"invalid scenario seed: {scenario_id}")
+        if suite == "quality-slice":
+            require(scenario["seed"] in data["seeds"], f"scenario seed outside quality-slice seeds: {scenario_id}")
+            require("seed_policy" not in scenario or scenario["seed_policy"] == "all_seeds",
+                    f"unknown quality-slice seed_policy: {scenario_id}")
         require(isinstance(scenario.get("route"), str) and bool(scenario["route"].strip()),
                 f"scenario route missing: {scenario_id}")
         require(nonempty_strings(scenario.get("acceptance_ids")), f"scenario acceptance_ids missing: {scenario_id}")
@@ -335,7 +366,9 @@ def run_command(command: list[str], cwd: Path, timeout: float) -> dict:
     result = {"command": command, "exit_code": completed.returncode,
               "elapsed_seconds": round(time.monotonic() - started, 3),
               "stdout_sha256": hashlib.sha256(completed.stdout.encode()).hexdigest(),
-              "stdout": completed.stdout[-16000:], "stderr": completed.stderr[-16000:]}
+              "stdout": completed.stdout[-16000:], "stderr": completed.stderr[-16000:],
+              "engine_error_logged": bool(re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR):",
+                                                     completed.stdout + "\n" + completed.stderr))}
     return result
 
 
@@ -348,27 +381,28 @@ def validate_test_report(data: dict) -> int:
     return data["tests_run"]
 
 
-def validate_case_report(data: dict, cases: list[dict]) -> int:
+def validate_case_report(data: dict, cases: list[dict], suite: str = "prototype") -> int:
+    require(suite in SUITES, f"unknown report suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
-            "prototype report schema_version must be integer 1")
-    require(data.get("suite") == "prototype", "prototype report suite must be prototype")
+            f"{suite} report schema_version must be integer 1")
+    require(data.get("suite") == suite, f"{suite} report suite must be {suite}")
     rows = data.get("cases")
-    require(isinstance(rows, list) and bool(rows), "prototype report executed zero cases")
+    require(isinstance(rows, list) and bool(rows), f"{suite} report executed zero cases")
     automated = {case["id"]: case for case in cases if case["mode"] == "automated"}
     required_ids = {case_id for case_id, case in automated.items() if case["required"]}
-    require(bool(required_ids), "prototype contract has zero required automated cases")
+    require(bool(required_ids), f"{suite} contract has zero required automated cases")
     seen, checks = set(), 0
     for row in rows:
-        require(isinstance(row, dict), "prototype case must be an object")
+        require(isinstance(row, dict), f"{suite} case must be an object")
         case_id = row.get("id")
         require(isinstance(case_id, str) and case_id in automated, f"unknown or nonautomated report case: {case_id}")
         require(case_id not in seen, f"duplicate report case: {case_id}")
         seen.add(case_id)
         require(row.get("status") in CASE_STATUSES, f"invalid case status: {case_id}")
-        require(row["status"] == "passed", f"prototype case not passed: {case_id}: {row['status']}")
-        require(integer(row.get("checks"), 1), f"prototype case executed zero checks: {case_id}")
+        require(row["status"] == "passed", f"{suite} case not passed: {case_id}: {row['status']}")
+        require(integer(row.get("checks"), 1), f"{suite} case executed zero checks: {case_id}")
         checks += row["checks"]
-    require(required_ids <= seen, f"missing required prototype cases: {sorted(required_ids - seen)}")
+    require(required_ids <= seen, f"missing required {suite} cases: {sorted(required_ids - seen)}")
     return checks
 
 
@@ -400,11 +434,16 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
     result = {"schema_version": 1, "gate": stage, "status": "failed", "checks_executed": 0,
               "candidate": git_candidate(root), "commands": [], "errors": [],
               "claim": "Harness infrastructure only; no game, platform, or fun validation." if stage == "harness"
-              else "Required automated prototype contracts only; runtime/platform/human evidence is separate."}
+              else "Required automated prototype and quality-slice contracts only; runtime/platform/human evidence is separate."}
     try:
-        cases = validate_contract(read_json(root / "contracts/prototype-v1.json"))
-        result["checks_executed"] += len(cases)
-        result["checks_executed"] += validate_fixtures(read_json(root / "tests/fixtures/prototype-scenarios.json"), cases)
+        cases_by_suite = {}
+        for suite, contract_path, fixture_path in (
+                ("prototype", "contracts/prototype-v1.json", "tests/fixtures/prototype-scenarios.json"),
+                ("quality-slice", "contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json")):
+            cases = validate_contract(read_json(root / contract_path), suite)
+            cases_by_suite[suite] = cases
+            result["checks_executed"] += len(cases)
+            result["checks_executed"] += validate_fixtures(read_json(root / fixture_path), cases, suite)
         task_data = read_json(root / "harness/tasks.json")
         result["checks_executed"] += validate_tasks(task_data)
         if scope:
@@ -435,15 +474,21 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
             result["engine_version"] = version["stdout"].strip()
             require(re.match(r"^4\.7\.2(?:\.|$)", result["engine_version"]) is not None,
                     f"Godot 4.7.2 required, found {result['engine_version']!r}")
-            with tempfile.TemporaryDirectory(prefix="prototype-", dir=report_dir) as folder:
-                case_report = Path(folder) / "cases.json"
-                command = [str(engine), "--headless", "--path", str(root), "--script", "tests/run.gd",
-                           "--", "--report", str(case_report)]
-                execution = run_command(command, root, timeout)
-                result["commands"].append(execution)
-                require(execution["exit_code"] == 0, "prototype test command exited nonzero")
-                result["checks_executed"] += validate_case_report(read_json(case_report), cases)
-                result["case_report"] = read_json(case_report)
+            result["case_reports"] = {}
+            for suite in SUITES:
+                with tempfile.TemporaryDirectory(prefix=suite + "-", dir=report_dir) as folder:
+                    case_report = Path(folder) / "cases.json"
+                    command = [str(engine), "--headless", "--path", str(root), "--script", "tests/run.gd",
+                               "--", "--suite", suite, "--report", str(case_report)]
+                    execution = run_command(command, root, timeout)
+                    result["commands"].append(execution)
+                    require(execution["exit_code"] == 0, f"{suite} test command exited nonzero")
+                    require(not execution["engine_error_logged"], f"{suite} runner logged an engine/script error")
+                    report = read_json(case_report)
+                    result["checks_executed"] += validate_case_report(report, cases_by_suite[suite], suite)
+                    result["case_reports"][suite] = report
+                    if suite == "prototype":
+                        result["case_report"] = report  # Preserve the original report field for existing consumers.
         result["status"] = "passed"
     except (GateError, OSError, UnicodeError) as exc:
         result["errors"].append(str(exc))
