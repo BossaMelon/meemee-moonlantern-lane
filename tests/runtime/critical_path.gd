@@ -8,6 +8,8 @@ var action_events: Array = []
 var checkpoint = ""
 var input_file: FileAccess
 var pressed_keys: Dictionary = {}
+var pad_axes: Dictionary = {}
+var pad_buttons: Dictionary = {}
 var active_touches: Dictionary = {}
 var screenshots: Array = []
 var observations: Array = []
@@ -301,9 +303,13 @@ func inject_combat(input: Dictionary):
 		var motion=InputEventMouseMotion.new(); motion.position=point; motion.global_position=point; emit_input(motion,true)
 	elif mode=="pad":
 		for pair in [[JOY_AXIS_LEFT_X,input.move_x],[JOY_AXIS_LEFT_Y,input.move_y],[JOY_AXIS_RIGHT_X,input.aim_x],[JOY_AXIS_RIGHT_Y,input.aim_y]]:
-			var e=InputEventJoypadMotion.new(); e.axis=pair[0]; e.axis_value=pair[1]; emit_input(e)
+			if not is_equal_approx(pad_axes.get(pair[0],0.0),pair[1]):
+				var e=InputEventJoypadMotion.new(); e.axis=pair[0]; e.axis_value=pair[1]; emit_input(e)
+			pad_axes[pair[0]]=pair[1]
 		for pair in [[JOY_BUTTON_A,input.cast],[JOY_BUTTON_B,input.dodge],[JOY_BUTTON_X,input.skill]]:
-			var e=InputEventJoypadButton.new(); e.button_index=pair[0]; e.pressed=pair[1]; emit_input(e)
+			if pad_buttons.get(pair[0],false)!=pair[1]:
+				var e=InputEventJoypadButton.new(); e.button_index=pair[0]; e.pressed=pair[1]; emit_input(e)
+			pad_buttons[pair[0]]=pair[1]
 	else:
 		var centers: Dictionary=panel._centers() # Read geometry only.
 		var values={"move":Vector2(input.move_x,input.move_y),"aim":Vector2(input.aim_x,input.aim_y),"cast":input.cast,"dodge":input.dodge,"skill":input.skill}
@@ -320,7 +326,7 @@ func inject_combat(input: Dictionary):
 			index+=1
 
 func release_combat():
-	inject_combat({"move_x":0.0,"move_y":0.0,"aim_x":1.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false})
+	inject_combat({"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false})
 	await frames(2)
 
 func pause_combat():
@@ -448,6 +454,24 @@ func run():
 	elif stage=="restore-smoke":
 		await restore("smoke")
 		checkpoint="complete"; write_report(); quit(0 if failures.is_empty() else 1)
+	elif stage=="battle-pause":
+		await activate("tab_gear"); await activate("start_expedition")
+		ui.battle_panel.pause_requested.connect(func(): trace.append({"pause_signal":true,"paused_before_callback":ui.game.view().paused}))
+		for _i in range(30):
+			inject_combat({"move_x":0.6,"move_y":-0.8,"aim_x":0.6,"aim_y":-0.8,"cast":true,"dodge":false,"skill":false})
+			await process_frame
+		await release_combat()
+		var released: Dictionary=ui.game.view()
+		trace.append({"phase_after_action_release":released.phase,"paused_after_action_release":released.paused,"return_reason":released.expedition.get("return_reason","")})
+		await screenshot(mode+"-after-action-release")
+		expect(released.phase=="expedition","combat stick/cast input does not activate return-to-restaurant control")
+		expect(not ui.game.view().paused,"releasing combat actions does not activate a focused toolbar button")
+		if not failures.is_empty(): return
+		await pause_combat()
+		await screenshot(mode+"-pause-input")
+		trace.append({"pause_result":ui.game.view().paused,"ui_accept_events":str(InputMap.action_get_events("ui_accept"))})
+		expect(ui.game.view().paused,"published device pause input pauses actual combat")
+		checkpoint="pause-checked"; write_report(); quit(0 if failures.is_empty() else 1)
 	elif stage=="layout":
 		for id in ["pause","save","load","quit","primary","tab_gear"]:
 			var control=ui.get_action_control(id)

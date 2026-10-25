@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -17,7 +18,7 @@ from pathlib import Path
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
           ("after-collected", "finished"), ("after-finished", "complete")]
-AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete"}
+AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
 
 
 def command_output(*cmd: str, cwd: Path) -> str:
@@ -93,6 +94,15 @@ def main() -> int:
                         run["exit_code"] = proc.wait()
                         run["timeout"] = True
             run["elapsed_seconds"] = round(time.monotonic() - started, 3)
+            # Keep the product's exact bytes before a later stage overwrites the
+            # primary/backup; an expected snapshot is not a saved-file artifact.
+            run["product_save_artifacts"] = []
+            for suffix in ("", ".bak"):
+                source = folder / ("restaurant-save.json" + suffix)
+                if source.is_file():
+                    saved = folder / (attempt + "-product-save.json" + suffix)
+                    shutil.copyfile(source, saved)
+                    run["product_save_artifacts"].append({"path": str(saved), "sha256": hashlib.sha256(saved.read_bytes()).hexdigest()})
             run["log"] = str(log_path)
             text = log_path.read_text(errors="replace")
             run["engine_errors"] = re.findall(r"^(?:SCRIPT ERROR:|ERROR:).*$", text, re.MULTILINE)[:20]
@@ -108,7 +118,7 @@ def main() -> int:
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
-                             and (expected in ("complete", "layout-complete") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
+                             and (expected in ("complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
                              and result.get("pixel_room_loaded") is True
                              and result.get("display") not in (None, "headless"))
             write_report()
