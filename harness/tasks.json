@@ -124,8 +124,13 @@
         "tests/runtime/**"
       ],
       "depends_on": [
-        "P02"
-      ]
+        "P02",
+        "E01"
+      ],
+      "chat_id": "01a17302-168c-7d22-90fd-9633ccf7e434",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
     }
   ],
   "coordination": {

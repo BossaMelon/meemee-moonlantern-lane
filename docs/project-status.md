@@ -36,11 +36,12 @@ H01 最终候选为 `e12c76c82afad87ddbec37fd8408b4793f8281bb`，本地报告记
 | P02 UI | `01a172c8-4c24-7dc1-bb64-307423676621` | GPT-6.1 Sol / high | [PR #6](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/6) 为早期候选；新 UI 正式 base 应为完整 E01 候选，按固定 API 接入厨房/用餐区/上菜柜台，实际三日与输入待验 |
 | E01 动作探险与成长 | `01a172d3-48a0-74d1-a9ff-5c30499d3760` | GPT-6.1 Sol / high / Standard | [PR #10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10) 已建立；root 已派按冻结 `4d06f59` 接口实现，正式 base 待接新 P01 料理 branch；不得用旧 catalog 结果替代新动作验收 |
 | A01 像素美术 | `01a172c8-6555-7a91-938b-e0f6d239133b` | GPT-6 Astra / high | [PR #11](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/11) 固定 `41770a1b9626e4f927dea22ec1cede775fb484f8`；60 sprites、4 背景、9 图集、801 资产检查，root 已查看预览；正式 scope/当前 CI 与最终资产验收待 H03 合入 |
+| P03 真实运行与恢复验收 | `01a17302-168c-7d22-90fd-9633ccf7e434` | GPT-6 Astra / xhigh / Standard | 已创建并 active；只写 tests/runtime，依赖 P02/E01 实际候选，准备全三日真实 InputEvent 与保存退出重启路径，root 查看证据 |
 | H01 工程、CI、启动器与 H03 文档维护 | `01a172c8-6d55-7282-84dc-4926245636c6` | GPT-6.1 Sol / high | [PR #7](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/7) 已合入底座并随 PR #5 入 main；H03 [PR #8](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/8) 已建立，作者不自行合并 |
 
 以上均要求 Standard，禁止 Fast/Ultrafast。本机只读配置 `service_tier=default`，工程 chat turn_context 实测模型/推理为 `gpt-6.1-sol` / `high`；工具未暴露逐请求服务端 tier，未推定或修改全局设置。其余 chat 的指定配置由总协调提供，不冒充本工程 chat 的逐请求实测。
 
-P03 运行验证尚待总协调派发；不为此自行创建 chat。H01/H02/H03 初始 harness 已全部合并，文档状态更新 [PR #4](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/4) 也已合并（`1b80020e60e6d7a130d09bcda8fa15cdd6f40ff3`）。各实施 chat 在独立工作树/任务分支接续，旧内部 agent 已停止，旧工作树保留为恢复点。
+P03 已由总协调派发，只写任务清单中的 `tests/runtime/**`，不修改 UI/core/E01/assets；运行结果与独立 review 仍为不同证据，不使用 Computer Use。H01/H02/H03 初始 harness 已全部合并，文档状态更新 [PR #4](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/4) 也已合并（`1b80020e60e6d7a130d09bcda8fa15cdd6f40ff3`）。各实施 chat 在独立工作树/任务分支接续，旧内部 agent 已停止，旧工作树保留为恢复点。
 
 ## 产品转向与当前依赖
 
