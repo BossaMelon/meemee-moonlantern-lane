@@ -336,7 +336,19 @@ func quantity(value: int):
 func screenshot(name: String):
 	expect(DisplayServer.get_name()!="headless","runtime screenshot requires rendered display")
 	if DisplayServer.get_name()=="headless": return
-	await RenderingServer.frame_post_draw
+	# An unfocused native window may stop drawing while process frames continue.
+	# Keep this boundary finite and report the real state instead of hanging until
+	# the OS-process supervisor kills the only in-memory diagnostic evidence.
+	var drawn={"ready":false}
+	var on_draw=func(): drawn.ready=true
+	RenderingServer.frame_post_draw.connect(on_draw,CONNECT_ONE_SHOT)
+	var deadline=Time.get_ticks_msec()+5000
+	while not drawn.ready and Time.get_ticks_msec()<deadline: await process_frame
+	if not drawn.ready:
+		if RenderingServer.frame_post_draw.is_connected(on_draw): RenderingServer.frame_post_draw.disconnect(on_draw)
+		trace.append({"render_wait_timeout":name,"input_state":observe_input_state()})
+		expect(false,"viewport did not draw within 5 seconds: "+name)
+		return
 	var path=folder+"/"+attempt+"-"+name+".png"
 	var texture=root.get_texture()
 	var picture=texture.get_image()
@@ -410,6 +422,7 @@ func record_focus(focused: bool):
 	sample.signal_focused=focused
 	sample.observed_at="window_focus_signal"
 	focus_events.append(sample)
+	persist_focus_events()
 	# Application/window notification order is not assumed. A second read on
 	# the next frame records whether the product actually released held input.
 	await process_frame
@@ -417,6 +430,14 @@ func record_focus(focused: bool):
 	sample.signal_focused=focused
 	sample.observed_at="frame_after_window_focus_signal"
 	focus_events.append(sample)
+	persist_focus_events()
+
+func persist_focus_events():
+	# Preserve focus evidence even when no further draw/report checkpoint arrives.
+	if input_file!=null: input_file.flush()
+	var file=FileAccess.open(folder+"/"+attempt+"-focus.json",FileAccess.WRITE)
+	if file!=null:
+		file.store_string(JSON.stringify(focus_events,"  ")); file.close()
 
 func observe_combat_input(requested: Dictionary):
 	var sample=observe_input_state()
