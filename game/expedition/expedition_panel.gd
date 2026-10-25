@@ -113,6 +113,9 @@ func _process(delta: float):
 	if input != last_input:
 		var result = _command("expedition_input",input)
 		if result.get("ok",false): last_input = input.duplicate(true)
+	if view.get("paused",false):
+		refresh()
+		return
 	# Accumulate fractional milliseconds; don't round every rendered frame.
 	frame_ms += delta*1000.0
 	var elapsed = int(frame_ms)
