@@ -5,6 +5,16 @@ const FONT_PATH = "res://assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf"
 var font_pages: Array=[]
 var batch_proof: Dictionary={}
 
+func screenshot(name: String):
+	if not config.get("headless_diagnostic",false):
+		# macOS can deliver the first draw before initial window focus. Wait for
+		# the real signal/state, without grabbing focus or discarding a sample.
+		var deadline=Time.get_ticks_msec()+5000
+		while not root.has_focus() and Time.get_ticks_msec()<deadline: await process_frame
+		expect(root.has_focus(),"native font screenshot receives OS focus within five seconds")
+		if not failures.is_empty(): return
+	await super.screenshot(name)
+
 func observed_font(value: Font) -> Dictionary:
 	var row={"class":value.get_class() if value!=null else "null","instance":str(value.get_instance_id()) if value!=null else "","path":value.resource_path if value!=null else ""}
 	expect(value is FontFile and not value is SystemFont,"actual text consumer uses packaged FontFile")
