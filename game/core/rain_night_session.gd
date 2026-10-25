@@ -4,6 +4,7 @@ const PROFILE_ID = "rain-night-v1"
 const SAVE_PATH = "user://profiles/rain-night-v1/moonlantern.json"
 const STEP_MS = 50
 const WAIT_MS = 20000
+const MAP_ID = "rain-garden-two-routes"
 const DELIVERY_MS = {"ordinary":3000,"floating":1500,"pot":4500}
 const QUALITY_UPGRADES = {
 	"field_kit":{"name":"散射魔杖","cost":60,"description":"菜品收入达到24后投资，次晨可装备散射杖"},
@@ -21,7 +22,7 @@ func _init(seed_value: int = 1):
 	super(seed_value)
 	_s.version = 3; _s.profile_id = PROFILE_ID; _s.rules_version = 1
 	_s.erase("next_expedition_shield")
-	_s.pending_meal_effect = null; _s.night = {}; _s.service = {}
+	_s.pending_meal_effect = null; _s.expedition_meals = {}; _s.night = {}; _s.service = {}
 	_s.progression.skills = ["gust"]
 	var rng = RandomNumberGenerator.new(); rng.seed = seed_value; _s.rng_state = str(rng.state)
 	_begin_night(_s)
@@ -209,10 +210,39 @@ func _apply(s: Dictionary, kind: String, a: Dictionary) -> Dictionary:
 		"equip_weapon":
 			if a.get("weapon_id","") not in s.progression.owned_weapons: return _fail("weapon_locked","未取得该武器")
 			s.progression.equipped_weapon = a.weapon_id
-		"start_expedition","leave_expedition":
-			return _fail("module_unavailable","新规则动作接口等待正式集成，进度未改变")
+		"start_expedition":
+			if s.expedition_attempts.has(str(s.day)): return _fail("daily_limit","今日探险次数已使用")
+			if _expedition_model() == null: return _fail("module_unavailable","动作模块尚未集成")
+			var run_id = "n%d-expedition" % s.day
+			var options = {"ruleset":PROFILE_ID,"map_id":MAP_ID,"map_revision":1,"meal_effect":s.pending_meal_effect}
+			var created: Dictionary = _model.create(int(s.day),run_id,int(s.seed),s.progression.equipped_weapon,s.progression.skills,false,options)
+			if created.is_empty() or created.get("version") != 2 or _model.validate(created) != "": return _fail("invalid_expedition","新规则探索创建失败，次数与餐前效果已保留")
+			s.expedition = created; s.expedition_attempts[str(s.day)] = run_id
+			s.expedition_meals[run_id] = s.pending_meal_effect.duplicate(true) if s.pending_meal_effect != null else null
+			s.pending_meal_effect = null; s.phase = "expedition"
+		"leave_expedition":
+			var ended = _model.leave(s.expedition)
+			if not ended.ok: return ended
+			_model.set_input(s.expedition,{}); s.phase = "shopping"
+			return _result(true,"ok","已返回采购，保留已拾取食材",ended.events)
 		"fulfill","decline":
-			return _fail("no_pending_order","当前没有待处理人物委托")
+			if s.pending.is_empty(): return _fail("no_pending_order","当前没有待处理人物委托")
+			if a.get("order_id") != s.pending.id: return _fail("stale_order","委托已处理或身份不匹配")
+			var row: Dictionary
+			if kind == "fulfill":
+				var candidates = _instances(s,id,"shelf").filter(func(item): return _match_instance(s,item,s.pending).is_empty())
+				if candidates.is_empty(): return _fail("unmatched","菜单上没有满足委托的未预留料理")
+				if s.items.size()-1+2 > CAPACITY: return _fail("capacity","储藏不足以接收全部委托奖励")
+				var item = _remove_item(s,int(candidates[0].uid)); var price = _price(s,id)
+				s.cash += price; row = _sale_row(s,s.pending,id,price,item.cost,["matched","hagrid_patrol"])
+				row.uid = item.uid; row.prepared_wave_id = item.prepared_wave_id; row.temperature = item.temperature
+				for n in range(2): _add(s,"ember_herb",0)
+				s.quests.hagrid_patrol = "completed"
+			else:
+				row = _sale_row(s,s.pending,"",0,0,["玩家跳过特殊需求"]); s.quests.hagrid_patrol = "declined"
+			row.wave_id = null; row.channel = null; row.delivered_ms = s.service.elapsed_ms
+			s.sales.append(row); s.commits[s.pending.id] = true; s.pending = {}; _sync_priority(s); _schedule(s)
+			return _result(true,"ok","人物委托已处理",[row])
 	return _result(true,"ok","操作完成")
 
 func _recycle_value(item: Dictionary) -> int:
@@ -234,6 +264,11 @@ func _cool_held(s: Dictionary):
 		if not item.is_empty(): item.temperature = "cooled"
 	s.service.held_uids = []
 
+func _hagrid_order() -> Dictionary:
+	var order = _order("n2-hagrid-patrol",["meal","warming","heat_hold","portable"],30,true,"海格：巡护时想带一份始终温暖的料理")
+	order.character_id = "hagrid"; order.quest_id = "hagrid_patrol"; order.rewards = [{"item_id":"ember_herb","quantity":2}]
+	return order
+
 func _start_wave(s: Dictionary, wave_id: String) -> Dictionary:
 	if s.commits.has("wave:"+wave_id): return _fail("wave_started","该波已提交，不能重开")
 	if not s.service.reservations.is_empty(): return _fail("in_flight","尚有在途料理")
@@ -245,6 +280,8 @@ func _start_wave(s: Dictionary, wave_id: String) -> Dictionary:
 	for order in s.service.orders:
 		if order.wave_id == wave_id: order.status = "waiting"
 	_schedule(s)
+	if s.day == 2 and s.service.wave_index == 2 and s.quests.hagrid_patrol == "not_offered":
+		s.pending = _hagrid_order(); s.quests.hagrid_patrol = "pending"
 	return _result(true,"ok","本波开始",[{"type":"wave_started","wave_id":wave_id}])
 
 func _schedule(s: Dictionary):
@@ -330,6 +367,7 @@ func _end_wave(s: Dictionary, events: Array):
 
 func _advance(delta_ms: Variant) -> Dictionary:
 	if not _whole(delta_ms,0,60000): return _fail("invalid_time","时间须为0至60000整数毫秒")
+	if _s.phase == "expedition": return _advance_expedition(int(delta_ms))
 	if _s.paused or _s.phase != "trading" or not _s.pending.is_empty(): return _result(true,"idle","当前时钟冻结")
 	var candidate = _s.duplicate(true); var events = []
 	candidate.service.remainder_ms += int(delta_ms)
@@ -339,6 +377,39 @@ func _advance(delta_ms: Variant) -> Dictionary:
 	_s = candidate
 	_action_trace.append({"kind":"advance","args":{"delta_ms":int(delta_ms)}})
 	return _result(true,"ok","营业已推进",events)
+
+func _drop_key(run_id: String, drop_id: String) -> String:
+	return run_id+"|"+drop_id
+
+func _advance_expedition(delta_ms: int) -> Dictionary:
+	if _s.paused: return _result(true,"idle","暂停中")
+	var next = _s.expedition.duplicate(true)
+	var result = _model.advance(next,delta_ms,CAPACITY-_s.items.size(),false)
+	if not result.ok: return result
+	var seen = {}; var quantity = 0
+	for pickup in result.pickups:
+		if not pickup is Dictionary or not pickup.has_all(["drop_id","item_id","quantity","cost"]) or not pickup.drop_id is String or pickup.drop_id.is_empty() or pickup.item_id not in ["sparkcap","moonheart"] or not _whole(pickup.quantity,1,CAPACITY) or pickup.cost != 0:
+			return _fail("invalid_pickup","动作模块返回了非法掉落")
+		var key = _drop_key(next.run_id,pickup.drop_id)
+		if _s.collected_drops.has(key) or seen.has(key): return _fail("duplicate_pickup","该次探索的掉落已领取")
+		seen[key] = true; quantity += int(pickup.quantity)
+	if _s.items.size()+quantity > CAPACITY: return _fail("capacity","动作拾取超出储藏容量")
+	# Copy the economy only when the model actually acquired inventory.
+	var candidate = _s.duplicate(true) if quantity > 0 else _s
+	var old_items = _s.items if quantity > 0 else []
+	candidate.expedition = next
+	for pickup in result.pickups:
+		var uids = []
+		for n in range(int(pickup.quantity)):
+			_add(candidate,pickup.item_id,0); uids.append(candidate.next_uid-1)
+		candidate.collected_drops[_drop_key(next.run_id,pickup.drop_id)] = {"run_id":next.run_id,"drop_id":pickup.drop_id,"item_id":pickup.item_id,"quantity":int(pickup.quantity),"uids":uids,"day":candidate.day}
+	if quantity > 0:
+		var economic_events = result.events.filter(func(event): return event.get("type","") == "drop_collected")
+		_record_economy(candidate,"pickup",{"run_id":next.run_id,"pickups":result.pickups},economic_events,int(_s.cash),old_items)
+	if result.returned: candidate.phase = "shopping"
+	_s = candidate
+	_action_trace.append({"kind":"advance","args":{"delta_ms":delta_ms},"events":result.events.duplicate(true)})
+	return _result(true,"ok",result.message,result.events)
 
 func save_to(path: String = SAVE_PATH) -> Dictionary:
 	if ProjectSettings.globalize_path(path).simplify_path() == ProjectSettings.globalize_path("user://moonlantern.json").simplify_path():
@@ -370,8 +441,9 @@ func validate_snapshot(data: Variant) -> String:
 	if s.next_uid < 1 or s.daily_recovery > 1: return "非法实例序号或恢复次数"
 	for key in ["items","ledger","known","upgrades","active_upgrades","sales","summaries","customers","read"]:
 		if not s[key] is Array: return "非法数组："+key
-	for key in ["night","service","pending","progression","commits","requests","supply","tiers","quests","expedition","expedition_attempts","collected_drops"]:
+	for key in ["night","service","pending","progression","commits","requests","supply","tiers","quests","expedition","expedition_attempts","expedition_meals","collected_drops"]:
 		if not s[key] is Dictionary: return "非法对象："+key
+	if not s.expedition.is_empty() and (s.expedition.get("version") != 2 or s.expedition.get("ruleset") != PROFILE_ID or s.expedition.get("map_id") != MAP_ID or s.expedition.get("map_revision") != 1): return "不支持的存档规则"
 	var night = s.night; var service = s.service
 	if not night.has_all(["id","day","weather","event_id","waves","queues"]) or night.id != "n%d" % s.day or night.day != s.day or not night.queues is Dictionary or night.weather != "rain" or night.event_id != "rain_return" or not night.waves is Array or night.waves.size() != 3: return "非法夜晚规则"
 	if not service.has_all(["night_id","wave_id","next_wave_id","wave_index","status","orders","reservations","menu_priority","held_uids","elapsed_ms","remainder_ms"]): return "波次字段缺失"
@@ -384,7 +456,7 @@ func validate_snapshot(data: Variant) -> String:
 	if service.wave_id != (null if wave_index == 0 else night.id+"-w%d" % wave_index): return "当前波ID错误"
 	var next_id = night.id+"-w%d" % (wave_index+1) if wave_index < 3 else null
 	if service.next_wave_id != next_id: return "下一波ID错误"
-	if s.phase in ["shopping","preparation"] and wave_index != 0: return "开夜前波次已推进"
+	if s.phase in ["shopping","preparation","expedition"] and wave_index != 0: return "开夜前波次已推进"
 	if s.phase == "intermission" and wave_index not in [1,2]: return "波间位置错误"
 	if s.phase in ["closing","settled"] and wave_index != 3: return "尚未完成三波"
 	var expected_status = "active" if s.phase == "trading" else ("intermission" if s.phase == "intermission" else ("complete" if s.phase in ["closing","settled"] else "planned"))
@@ -493,11 +565,19 @@ func validate_snapshot(data: Variant) -> String:
 		if sale.revenue > 0:
 			if not Catalog.ITEMS.has(sale.item_id) or Catalog.ITEMS[sale.item_id].kind != "dish" or not _whole(sale.get("uid"),1) or sale.effect_id != Catalog.ITEMS[sale.item_id].effect_id: return "成交菜品不一致"
 		elif sale.item_id != "" or sale.cost != 0: return "未成交不能扣菜"
-		if sale.wave_id == service.wave_id and (not order_ids.has(sale.order_id) or order_ids[sale.order_id].status != ("delivered" if sale.revenue > 0 else "left")): return "本夜成交与订单不一致"
-		if sale.day == s.day: night_processed += 1
-		if sale.wave_id == service.wave_id: wave_processed += 1
+		if sale.wave_id != null and sale.wave_id == service.wave_id and (not order_ids.has(sale.order_id) or order_ids[sale.order_id].status != ("delivered" if sale.revenue > 0 else "left")): return "本夜成交与订单不一致"
+		if sale.wave_id == null and (sale.day != 2 or sale.order_id != "n2-hagrid-patrol" or sale.get("quest_id") != "hagrid_patrol"): return "人物成交身份错误"
+		if sale.day == s.day and sale.wave_id != null: night_processed += 1
+		if sale.wave_id != null and sale.wave_id == service.wave_id: wave_processed += 1
 		sale_ids[sale.order_id] = sale; revenues[str(sale.day)] = revenues.get(str(sale.day),0)+sale.revenue; costs[str(sale.day)] = costs.get(str(sale.day),0)+sale.cost
 	if night_processed != s.cursor or wave_processed != processed: return "处理计数与成交记录不一致"
+	if s.quests != {"hagrid_patrol":s.quests.get("hagrid_patrol")} or s.quests.hagrid_patrol not in ["not_offered","pending","completed","declined"]: return "人物委托状态非法"
+	if s.quests.hagrid_patrol == "pending":
+		if s.day != 2 or s.phase != "trading" or wave_index != 2 or s.pending != _hagrid_order() or sale_ids.has("n2-hagrid-patrol"): return "待处理人物委托不一致"
+	elif not s.pending.is_empty(): return "游离人物委托"
+	if s.quests.hagrid_patrol in ["completed","declined"]:
+		if not sale_ids.has("n2-hagrid-patrol") or (sale_ids["n2-hagrid-patrol"].revenue > 0) != (s.quests.hagrid_patrol == "completed"): return "人物委托结果未对账"
+	elif sale_ids.has("n2-hagrid-patrol"): return "人物委托结果缺失"
 	if "field_kit" in s.upgrades and _dish_income(s) < 24: return "装备缺少营业收入来源"
 	var error = _validate_economy(s,uids,sale_ids)
 	if error != "": return error
@@ -511,11 +591,29 @@ func validate_snapshot(data: Variant) -> String:
 	for key in s.commits:
 		if not key is String or s.commits[key] != true: return "非法提交记录"
 	if s.daily_recovery != (1 if s.commits.has("recover:%d" % int(s.day)) else 0): return "恢复次数不一致"
-	if not s.expedition.is_empty() or not s.expedition_attempts.is_empty() or not s.collected_drops.is_empty(): return "新规则动作尚未集成"
+	for day in s.expedition_attempts:
+		if not day is String or not day.is_valid_int() or str(int(day)) != day or int(day) < 1 or int(day) > s.day or s.expedition_attempts[day] != "n%s-expedition" % day: return "每日探险记录错误"
+		if not s.expedition_meals.has(s.expedition_attempts[day]): return "餐前效果转移记录缺失"
+	if s.expedition_meals.size() != s.expedition_attempts.size(): return "游离餐前效果转移记录"
+	if not s.expedition.is_empty():
+		if _expedition_model() == null: return "动作模块尚未集成"
+		error = _model.validate(s.expedition)
+		if error != "": return error
+		if s.expedition.day != s.day or s.expedition_attempts.get(str(int(s.day)),"") != s.expedition.run_id: return "动作日期或次数不一致"
+		if (s.phase == "expedition") != (s.expedition.status in ["active","cleared"]): return "动作与经营阶段不一致"
+		if s.phase == "expedition" and (s.expedition.weapon_id != progress.equipped_weapon or s.expedition.skills != progress.skills): return "动作装备或技能与成长不一致"
+		var meal = s.expedition_meals[s.expedition.run_id]
+		if (meal == null) != (s.expedition.meal_effect == null): return "动作餐前效果转移不一致"
+		if meal != null and (meal.effect_id != s.expedition.meal_effect.effect_id or meal.source_item_uid != s.expedition.meal_effect.source_item_uid): return "动作餐前效果来源被改写"
+		for drop in s.expedition.drops:
+			if drop.collected != s.collected_drops.has(_drop_key(s.expedition.run_id,drop.id)): return "场上掉落与经济领取记录不一致"
+		for node in s.expedition.resource_nodes:
+			if node.collected != s.collected_drops.has(_drop_key(s.expedition.run_id,"resource:"+node.id)): return "资源节点与经济领取记录不一致"
+	elif s.phase == "expedition" or s.expedition_attempts.has(str(int(s.day))): return "缺少本次动作模拟状态"
 	return ""
 
 func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> String:
-	var live = {}; var issued = {}; var cash = int(s.initial_cash); var paid = []; var sold = {}; var consumed = {}
+	var live = {}; var issued = {}; var cash = int(s.initial_cash); var paid = []; var sold = {}; var consumed = {}; var drops = {}
 	for i in range(s.ledger.size()):
 		var row = s.ledger[i]
 		if not row is Dictionary or not row.has_all(["index","kind","day","cash_delta","moves","created","removed","args","events"]): return "经济流水字段缺失"
@@ -568,6 +666,19 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 				if not QUALITY_UPGRADES.has(id) or id in paid or not row.created.is_empty() or not row.removed.is_empty(): return "重复或非法升级支付"
 				paid.append(id); expected_cash = -QUALITY_UPGRADES[id].cost
 			"settle": expected_cash = -mini(4,cash)
+			"pickup":
+				if not row.args.get("run_id") is String or not row.args.get("pickups") is Array or row.args.pickups.is_empty() or not row.removed.is_empty() or s.expedition_attempts.get(str(int(row.day))) != row.args.run_id: return "拾取来源不一致"
+				var offset = 0
+				for pickup in row.args.pickups:
+					if not pickup is Dictionary or not pickup.has_all(["drop_id","item_id","quantity","cost"]) or not pickup.drop_id is String or pickup.drop_id.is_empty() or not _whole(pickup.quantity,1,CAPACITY) or pickup.item_id not in ["sparkcap","moonheart"] or pickup.cost != 0: return "非法拾取记录"
+					var key = _drop_key(row.args.run_id,pickup.drop_id); var picked_uids = []
+					if drops.has(key) or offset+pickup.quantity > row.created.size(): return "重复掉落或数量不一致"
+					for n in range(int(pickup.quantity)):
+						var item = row.created[offset]; offset += 1
+						if item.item_id != pickup.item_id or item.cost != 0: return "拾取物品或成本错误"
+						picked_uids.append(item.uid)
+					drops[key] = {"run_id":row.args.run_id,"drop_id":pickup.drop_id,"item_id":pickup.item_id,"quantity":int(pickup.quantity),"uids":picked_uids,"day":row.day}
+				if offset != row.created.size(): return "拾取与实例数量错误"
 			"advance","fulfill":
 				var removed = {}
 				for event in row.events:
@@ -575,14 +686,19 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 					if event.get("revenue",0) == 0: continue
 					if not event.has("order_id") or not sales.has(event.order_id) or sales[event.order_id] != event or sold.has(event.order_id): return "成交事件未对账"
 					sold[event.order_id] = true; removed[str(event.uid)] = event; expected_cash += event.revenue
-				if removed.size() != row.removed.size() or not row.created.is_empty(): return "交付扣除数量不一致"
+				if removed.size() != row.removed.size(): return "交付扣除数量不一致"
+				if row.kind == "fulfill":
+					if row.created.size() != 2 or row.events.size() != 1 or row.events[0].get("quest_id") != "hagrid_patrol": return "人物奖励来源错误"
+					for reward in row.created:
+						if reward.item_id != "ember_herb" or reward.cost != 0: return "人物奖励数量或成本错误"
+				elif not row.created.is_empty(): return "普通交付不能产生物品"
 				for item in row.removed:
 					if not removed.has(str(item.uid)) or removed[str(item.uid)].cost != item.cost: return "交付扣除UID/成本错误"
 			_: return "未知经济流水种类"
 		if row.cash_delta != expected_cash: return "现金变动来源错误"
 		cash += row.cash_delta
 		if cash < 0: return "历史现金为负"
-	if cash != s.cash or live.size() != uids.size() or paid != s.upgrades: return "经济总账不守恒"
+	if cash != s.cash or live.size() != uids.size() or paid != s.upgrades or drops != s.collected_drops: return "经济总账不守恒"
 	for uid in uids:
 		if not live.has(uid) or live[uid].item_id != uids[uid].item_id or live[uid].cost != uids[uid].cost: return "库存取得来源错误"
 		if Catalog.ITEMS[uids[uid].item_id].kind == "dish":
@@ -590,10 +706,14 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 				if live[uid].get(key) != uids[uid].get(key): return "菜品制作身份被改写"
 	for id in sales:
 		if sales[id].revenue > 0 and not sold.has(id): return "成交收入未入账"
-	if s.pending_meal_effect != null:
-		if not s.pending_meal_effect is Dictionary or not s.pending_meal_effect.has_all(["effect_id","source_item_uid","used"]) or not _whole(s.pending_meal_effect.source_item_uid,1) or not consumed.has(str(s.pending_meal_effect.source_item_uid)) or not s.pending_meal_effect.used is bool or s.pending_meal_effect.used != false: return "待用餐前效果来源错误"
-		var source = consumed[str(s.pending_meal_effect.source_item_uid)]
-		if s.pending_meal_effect.effect_id != ("light_step" if source.item_id == "floating_pie" else "clear_breath"): return "餐前效果种类错误"
+	var effects = s.expedition_meals.values(); effects.append(s.pending_meal_effect); var meal_uids = []
+	for meal in effects:
+		if meal == null: continue
+		if not meal is Dictionary or not meal.has_all(["effect_id","source_item_uid","used"]) or not _whole(meal.source_item_uid,1) or not consumed.has(str(meal.source_item_uid)) or not meal.used is bool or meal.used != false or meal.source_item_uid in meal_uids: return "待用餐前效果来源错误"
+		meal_uids.append(meal.source_item_uid)
+		var source = consumed[str(meal.source_item_uid)]
+		if meal.effect_id != ("light_step" if source.item_id == "floating_pie" else "clear_breath"): return "餐前效果种类错误"
+	if meal_uids.size() != consumed.size(): return "食用效果未进入待用槽或正式探索"
 	return ""
 
 func view() -> Dictionary:
@@ -624,6 +744,11 @@ func view() -> Dictionary:
 	v.customers_remaining = _s.customers.size()-_s.cursor
 	v.forecast = {"day":_s.day,"weather":_s.night.weather,"event_id":_s.night.event_id,"waves":_s.night.waves.duplicate(true),"required":["warming","heat_hold"],"text":"雨夜三波：赶路小食、巡护正餐、雨中返程；本波新饼走浮空通道，锅内最多保温三份。"}
 	v.summary = _s.summaries.back().duplicate(true) if not _s.summaries.is_empty() else {}
+	if not _s.pending.is_empty():
+		v.pending.options = []
+		for id in Catalog.RECIPES:
+			var matching = _instances(_s,id,"shelf").filter(func(item): return _match_instance(_s,item,_s.pending).is_empty())
+			v.pending.options.append({"item_id":id,"name":Catalog.ITEMS[id].name,"available":not matching.is_empty(),"reason":"" if not matching.is_empty() else "需要满足委托的未预留菜单料理","price":_price(_s,id)})
 	v.shelf_capacity = 3 if "shelf" in _s.active_upgrades else 2; v.inventory_capacity = CAPACITY; v.dish_income = _dish_income(_s)
 	v.available_commands = {}
 	for kind in PHASE_COMMANDS:
@@ -631,7 +756,8 @@ func view() -> Dictionary:
 		if kind == "recover" and _s.daily_recovery > 0: enabled = false; reason = "今日免费恢复已用"
 		if kind in ["fulfill","decline"] and _s.pending.is_empty(): enabled = false; reason = "没有待处理委托"
 		if kind == "consume" and _s.pending_meal_effect != null: enabled = false; reason = "已有待用餐前效果"
-		if kind == "start_expedition": enabled = false; reason = "新规则动作接口待集成"
+		if kind == "start_expedition" and _s.expedition_attempts.has(str(_s.day)): enabled = false; reason = "今日探索次数已用"
 		v.available_commands[kind] = {"enabled":enabled,"reason":reason}
-	v.expedition = {"status":"idle","day":_s.day,"run_id":"","attempts_remaining":1,"player":{},"enemies":[],"projectiles":[],"drops":[]}
+	v.expedition = _model.view(_s.expedition) if not _s.expedition.is_empty() and _expedition_model() != null else {"status":"idle","day":_s.day,"run_id":"","remaining_ms":null,"elapsed_ms":0,"attempts_remaining":1,"player":{},"enemies":[],"projectiles":[],"drops":[],"hazards":[],"resource_nodes":[],"meal_effect":null}
+	v.expedition.attempts_remaining = 0 if _s.expedition_attempts.has(str(_s.day)) else 1
 	return v

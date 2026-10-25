@@ -10,7 +10,7 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 
 `view()`、`snapshot()`、`command(kind,args,request_id)`、`advance(delta_ms)`、`set_paused(value)`、`save_to(path)`、`load_from(path)`、`validate_snapshot(data)`、`action_trace()` 保持统一入口。快照与 view 均为深拷贝。未知 profile 返回明确错误，不回落到旧规则。旧 v2 行为及 API 见 [legacy_api.md](legacy_api.md)。
 
-本提交冻结可供 P05 接入的服务波次、真实库存、菜单、温度及存档接口。真实 E02 动作接口尚待集成：start_expedition 明确拒绝且不消耗次数或餐前效果；当前不能据本提交宣布整个 quality-slice 完成。完整雨夜 runner 对缺失项返回失败。
+服务波次、真实库存、菜单、温度与存档接口已可供 P05 接入。E02 `8a3350a` 已自然合并并接入真实 Session；成功创建 version2 模型后才扣次数及转移餐前效果。整个 quality-slice 的组合验收仍在补齐，完整 runner 对未齐必需项保持失败。
 
 ## 阶段与原子命令
 
@@ -59,7 +59,11 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 
 首夜即 rain / rain_return；雨价按菜品标签与事件计算：价格档倍率后加25%，正数半入；活动倍率上限25%。原料售回单独记 ingredient_sales，不算菜品收入或毛利。日结 summary 包含收入、已售成本、费用与未售UID。
 
-餐前槽 `pending_meal_effect` 为 null 或 `{effect_id:"light_step"|"clear_breath",source_item_uid:int,used:false}`。食用真实消耗一份储藏料理、无现金变化；失败出发不消耗槽。最终 E02 集成将把槽原子转移至模型 meal_effect。
+餐前槽 `pending_meal_effect` 为 null 或 `{effect_id:"light_step"|"clear_breath",source_item_uid:int,used:false}`。食用真实消耗一份储藏料理、无现金变化；失败出发不消耗槽。正式出发成功时原子转移至模型 meal_effect；离场不返还。expedition_meals 记录每次 run 的初始转移来源，不能重复使用同一已消耗UID。
+
+海格在第二晚第二波开始时作为独立 pending 委托出现，不加入普通 orders；pending 冻结整个波钟及在途配送。`fulfill {order_id,item_id}` 只消耗满足要求的未预留菜单UID，原子收款并取得两份零成本暖焰草；`decline {order_id}` 可跳过。pending.options 给出实际可交付料理；两种结果均可保存、请求防重。
+
+探索 view 由真实 E02 模型提供，含 terrain/hazards/resource_nodes/meal_effect；remaining_ms 为 null，elapsed_ms 为统计时钟。资源节点读取 view 根 resource_nodes 的当日位置。collected_drops 以 `run_id|drop_id` 为键，记录 run_id/drop_id/item_id/quantity/uids/day；每份拾取生成真实零成本UID，模型推进与库存领取一次提交，后续晚的同名节点互不冲突。
 
 ## 存档与验收
 
@@ -70,3 +74,5 @@ validator 核对真实UID/取得成本/配方/成交与现金账、预留通道�
 - `tests/core/run_quality_service.gd -- --report ABS_REPORT`：服务专项，包含冻结新旧饼吞吐对照、三份保温真实UID、菜单优先序、混合温度、跨日、存档与原子拒绝。
 - `tests/run.gd -- --suite quality-slice --report ABS_REPORT`：完整雨夜入口；当前实际运行 Q03，其余未集成必需 case 为明确失败，进程非零。
 - `tests/run.gd -- --suite prototype --report ABS_REPORT`：明确 legacy factory 的原15项。省略 --suite 仍为 prototype，以保留旧 gate 的协议。
+
+`tests/core/run_quality_expedition.gd -- --report ABS_REPORT` 执行实际 Session 两路移动/节点领取/保存、同一真实素材快照四用途分叉、两种餐前效果与创建失败原子性、跨晚节点身份专项；边界失败注入仅用于 create 返回空的反例，不作为取得素材或闭环证据。

@@ -79,9 +79,12 @@ func test_profile():
 	var before = g.snapshot()
 	expect(g.command("consume",{"item_id":"floating_pie","quantity":1},"meal-once").code == "duplicate" and g.snapshot() == before,"meal request retry cannot duplicate consumption")
 	reject(g,"consume",{"item_id":"floating_pie","quantity":1})
-	reject(g,"start_expedition")
-	expect(g.snapshot().pending_meal_effect == before.pending_meal_effect and g.snapshot().expedition_attempts.is_empty(),"unavailable real action module cannot consume food or daily attempt")
 	roundtrip(g,"pending-meal")
+	act(g,"start_expedition")
+	expect(g.snapshot().pending_meal_effect == null and g.snapshot().expedition.meal_effect == before.pending_meal_effect and g.snapshot().expedition.version == 2,"real quality model atomically receives pending meal")
+	act(g,"leave_expedition"); reject(g,"start_expedition")
+	expect(g.snapshot().pending_meal_effect == null,"unused meal is not refunded on return")
+	roundtrip(g,"returned-meal")
 
 func test_throughput():
 	var fresh = prepare_quick(); var old = fresh.snapshot()
@@ -243,8 +246,28 @@ func test_save_identity():
 	corrupt = underway.snapshot(); corrupt.service.reservations[0].batch_id = "fake-pot"
 	expect(underway.validate_snapshot(corrupt) != "","ordinary/floating channel cannot invent a pot batch")
 
+func test_optional_hagrid():
+	var g = Session.new(7); act(g,"finish_shopping"); act(g,"open_shop"); advance_wave(g)
+	for wave in [2,3]: act(g,"start_wave",{"wave_id":"n1-w%d" % wave}); advance_wave(g)
+	act(g,"settle"); act(g,"next_day")
+	act(g,"buy",{"item_id":"pumpkin","quantity":1}); act(g,"buy",{"item_id":"ember_herb","quantity":1})
+	act(g,"finish_shopping"); act(g,"open_shop"); advance_wave(g)
+	act(g,"craft",{"recipe_id":"ember_soup","quantity":1}); act(g,"display",{"item_id":"ember_soup","quantity":1})
+	act(g,"start_wave",{"wave_id":"n2-w2"})
+	expect(g.snapshot().service.orders.size() == 9 and g.view().pending.id == "n2-hagrid-patrol","optional character is separate from nine ordinary patrol orders")
+	var before = g.snapshot(); act(g,"advance",{"delta_ms":60000})
+	expect(g.snapshot() == before,"pending character freezes whole wave clock and reservations")
+	var declined = roundtrip(g,"pending-hagrid")
+	reject(g,"fulfill",{"order_id":"stale","item_id":"ember_soup"})
+	act(g,"fulfill",{"order_id":"n2-hagrid-patrol","item_id":"ember_soup"},"hagrid-once")
+	expect(g.snapshot().quests.hagrid_patrol == "completed" and g.view().cash == before.cash+18 and g.snapshot().items.filter(func(i): return i.item_id == "ember_herb" and i.cost == 0).size() == 2,"one actual dish trades for revenue and exactly two reward herbs")
+	before = g.snapshot(); expect(g.command("fulfill",{"order_id":"n2-hagrid-patrol","item_id":"ember_soup"},"hagrid-once").code == "duplicate" and before == g.snapshot(),"quest reward request replay is inert")
+	act(declined,"decline",{"order_id":"n2-hagrid-patrol"})
+	expect(declined.snapshot().quests.hagrid_patrol == "declined" and declined.snapshot().service.orders.size() == 9,"skipping character leaves ordinary queue intact")
+	for branch in [g,declined]: advance_wave(branch); act(branch,"start_wave",{"wave_id":"n2-w3"}); advance_wave(branch); act(branch,"settle"); roundtrip(branch,"hagrid-outcome")
+
 func run(folder: String) -> Dictionary:
 	output_dir = folder+"/fixtures-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
-	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity()
+	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity(); test_optional_hagrid()
 	var result = {"suite":"quality-service-focused","checks":checks,"failures":failures,"traces":traces}
 	return result
