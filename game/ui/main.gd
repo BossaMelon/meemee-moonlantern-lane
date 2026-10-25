@@ -488,6 +488,7 @@ func _build_gear():
 	body.add_child(_label("巷后菇圃 · 今日准备",24,GOLD))
 	var expedition = view.expedition
 	body.add_child(_label("今日剩余 %d 次 · 击败食材怪后靠近拾取\n可以不去；撤退或失败保留已拾取材料，无罚款。"%expedition.attempts_remaining,18,MUTED))
+	body.add_child(_label("今日食材：星火菇"+("，以及月心菇精英的高级材料；可做彗星馅饼。" if view.day==3 else "；可让暖焰汤变成会照路的星火汤。"),17,GOLD))
 	body.add_child(_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition")))
 	body.add_child(_label("轻羽护盾："+("下次探险已备好一次免伤" if view.next_expedition_shield else "可吃掉一份储藏浮空饼，换一次免伤并放弃售价"),18,GOLD))
 	body.add_child(_button("consume_pie","吃一份浮空饼 · 为下次探险护身",_act.bind("consume",{"item_id":"floating_pie","quantity":1}),view.phase=="shopping" and _inventory("floating_pie").bag>0 and not view.next_expedition_shield))
@@ -498,7 +499,10 @@ func _build_gear():
 		var equipped = view.progression.equipped_weapon==id
 		card.add_child(_button("equip_"+id,"已装备" if equipped else "装备这件武器",_act.bind("equip_weapon",{"weapon_id":id}),view.phase=="shopping" and not equipped))
 	body.add_child(_label("推风术：半径推退、打断预警并暴露精英护盾；可接施法或闪避。" if "gust" in view.progression.skills else "探索套装次日解锁扇射魔杖与推风术：日结购买，要求实际料理收入。",18,MUTED))
-	if not view.progression.pending_unlocks.is_empty(): body.add_child(_label("已付款，次日生效："+"、".join(view.progression.pending_unlocks),18,GOLD))
+	if not view.progression.pending_unlocks.is_empty():
+		var names: Array[String] = []
+		for id in view.progression.pending_unlocks: names.append(WEAPONS[id].name if WEAPONS.has(id) else ("推风术" if id=="gust" else str(id)))
+		body.add_child(_label("已付款，次日生效："+"、".join(names),18,GOLD))
 	body.add_child(_label("厨房的留用取舍",22,GOLD))
 	var device = _inventory("stirring_cauldron")
 	var card = _card()
@@ -546,6 +550,7 @@ func _build_summary():
 			card.add_child(_label(upgrade.name,21,GOLD))
 			card.add_child(_label(upgrade.description,17,MUTED))
 			card.add_child(_button("upgrade_"+upgrade.upgrade_id,"%s · %d 金" % ["已购买" if upgrade.owned else "投资明天",upgrade.cost],_act.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),upgrade.available))
+			if not upgrade.available and not upgrade.owned: card.add_child(_label(str(upgrade.get("reason","")),17,MUTED))
 	body.add_child(_button("summary_gear","看看装备、技能与待生效升级 →",_select_tab.bind("gear")))
 	for sale in view.sales:
 		if sale.day==view.day: body.add_child(_label(_event_text(sale),17,MUTED))
@@ -659,6 +664,10 @@ func _sync_battle_route():
 		battle_missing.add_child(_button("missing_expedition_return","撤退回饭店",_act.bind("leave_expedition",{})))
 
 func _on_returned():
+	var counts = {}
+	for drop in game.view().expedition.drops:
+		if drop.collected: counts[drop.item_id] = counts.get(drop.item_id,0)+1
+	_notice("回到饭店："+_rewards(counts)+"已进入储藏。" if not counts.is_empty() else "回到饭店。基础供货仍可继续，探险不会带来罚款。")
 	tab = "gear"
 	_refresh()
 
