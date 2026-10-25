@@ -72,6 +72,12 @@ func _sprite(id: String, foot: Vector2):
 	var pivot = _point(info.get("pivot",[0,0]))
 	draw_texture(image,(foot-pivot).round())
 
+func _prop(id: String, foot: Vector2, scale_factor: float):
+	var image=Art.sprite(id)
+	if image==null: return
+	var pivot=_point(Art.entry(id).get("pivot",[0,0]))
+	draw_texture_rect(image,Rect2((foot-pivot*scale_factor).round(),image.get_size()*scale_factor),false)
+
 func _installed() -> bool:
 	for item in state.get("inventory",[]):
 		if item.item_id == "stirring_cauldron": return item.installed>0
@@ -105,6 +111,12 @@ func _draw():
 				if not _installed(): continue
 				id = "cauldron_stir_right" if stirring and int(visual_seconds*4)%2 else "cauldron_stir_left"
 		_sprite(id,foot)
+	# Published A01 objects turn each entrance into a visible part of the room.
+	_prop("world_recipe_book",Vector2(118,135),0.5)
+	_prop("world_menu_board",Vector2(303,108),0.6)
+	_prop("world_order_note",Vector2(268,182),0.5)
+	_prop("world_ledger",Vector2(297,137),0.5)
+	_prop(str(state.get("progression",{}).get("equipped_weapon","bolt_wand")),Vector2(247,143),0.65)
 	for effect in effects: _draw_effect(effect)
 
 func _draw_effect(effect: Dictionary):

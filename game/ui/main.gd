@@ -30,6 +30,7 @@ var ordered_controls: Array[Button] = []
 var margin: Control
 var illustration: Control
 var status: Label
+var cash_label: Label
 var title: Label
 var compact = false
 var order_caption: Label
@@ -50,6 +51,10 @@ var world_buttons: Dictionary = {}
 var world_specs: Dictionary = {}
 var recipe_selected = "floating_pie"
 var toast_remaining = 0.0
+var sheet_feedback: Label
+var craft_feedback: Label
+var last_ui_action = ""
+var last_ui_args: Dictionary = {}
 var battle_host: Control
 var battle_panel: Control
 var battle_missing: VBoxContainer
@@ -148,11 +153,13 @@ func _build_theme():
 	for state_name in ["normal","hover","pressed","focus"]: ui_theme.set_color("font_"+state_name+"_color","Button",CREAM)
 	ui_theme.set_color("font_color","Button",CREAM)
 	ui_theme.set_color("font_disabled_color","Button",Color("ac9b81"))
-	ui_theme.set_stylebox("normal","Button",_style(Color("e5d2a7"),Color("c9b184"),1,10))
+	var plain=Art.skin("ui_button_plain")
+	ui_theme.set_stylebox("normal","Button",plain if plain else _style(Color("e5d2a7"),Color("c9b184"),1,10))
 	ui_theme.set_stylebox("hover","Button",_style(Color("f7eac9"),Color("a87640"),1,10))
 	ui_theme.set_stylebox("pressed","Button",_style(Color("cfb789"),Color("a87640"),1,10))
 	ui_theme.set_stylebox("disabled","Button",_style(Color("e0d6be"),Color.TRANSPARENT,0,10))
-	ui_theme.set_stylebox("focus","Button",_style(Color.TRANSPARENT,Color("ad783c"),3,0))
+	var plain_focus=Art.skin("ui_button_plain_focus")
+	ui_theme.set_stylebox("focus","Button",plain_focus if plain_focus else _style(Color.TRANSPARENT,Color("ad783c"),3,0))
 	ui_theme.set_constant("separation","VBoxContainer",10)
 	ui_theme.set_constant("separation","HBoxContainer",10)
 	ui_theme.set_constant("h_separation","HFlowContainer",8)
@@ -174,12 +181,13 @@ func _build_shell():
 	margin.add_child(illustration)
 	_add_hotspot("world_stove","灶台 · 菜谱",Rect2(27,94,49,62),"room","craft")
 	_add_hotspot("world_craft","备餐桌 · 菜谱",Rect2(82,105,67,44),"room","craft")
-	_add_hotspot("world_menu","墙上菜单",Rect2(228,71,52,38),"room","shelf")
+	_add_hotspot("world_menu","墙上菜单",Rect2(282,64,42,49),"room","shelf")
 	_add_hotspot("world_counter","柜台 · 招呼客人",Rect2(223,160,85,62),"room","order")
+	_add_hotspot("world_customer","招呼客人",Rect2(202,184,29,48),"room","order")
 	_add_hotspot("world_journal","桌上账本",Rect2(278,117,53,43),"room","journal")
-	_add_hotspot("world_gear","门口 · 探险装备",Rect2(331,82,37,84),"room","gear")
+	_add_hotspot("world_gear","墙边装备 · 探险",Rect2(231,107,31,38),"room","gear")
 	_add_hotspot("world_storage","储藏柜格",Rect2(156,101,40,42),"room","storage")
-	_add_hotspot("world_lane","去月灯巷",Rect2(91,225,80,24),"room","lane")
+	_add_hotspot("world_lane","店门 · 去月灯巷",Rect2(331,82,37,84),"room","lane")
 	_add_hotspot("world_stall","巷口食材摊",Rect2(301,155,76,88),"lane","shopping")
 	_add_hotspot("world_home","回到饭店",Rect2(7,91,48,104),"lane","home")
 	focus_caption=_label("",16,Color("fff0c7"))
@@ -194,9 +202,19 @@ func _build_shell():
 	status=_label("",20,Color("fff0d0"))
 	status.autowrap_mode=TextServer.AUTOWRAP_OFF
 	status.add_theme_stylebox_override("normal",_style(Color("332519dd"),Color("705333"),1,12))
+	hud.add_child(_icon("ui_day",24))
 	hud.add_child(status)
+	hud.add_child(_icon("ui_coin",24))
+	cash_label=_label("",20,Color("fff0d0"))
+	cash_label.autowrap_mode=TextServer.AUTOWRAP_OFF
+	hud.add_child(cash_label)
 	pause_button=_button("pause","Ⅱ",_toggle_pause)
 	pause_button.tooltip_text="暂停 · 保存与退出"
+	pause_button.icon=Art.sprite("ui_pause")
+	if pause_button.icon!=null:
+		pause_button.text=""
+		pause_button.expand_icon=true
+		pause_button.add_theme_constant_override("icon_max_width",24)
 	pause_button.size=Vector2(52,52)
 	margin.add_child(pause_button)
 	phase_hint=_label("",18,Color("f5dfb3"))
@@ -246,6 +264,8 @@ func _leave_hotspot(id: String):
 
 func _update_message_visibility():
 	feedback.visible=toast_remaining>0 and not sheet_open
+	if is_instance_valid(sheet_feedback): sheet_feedback.visible=toast_remaining>0 and sheet_open and tab!="craft"
+	if is_instance_valid(craft_feedback): craft_feedback.visible=toast_remaining>0 and sheet_open and tab=="craft" and last_ui_action=="craft" and last_ui_args.get("recipe_id","")==recipe_selected
 	phase_hint.visible=not sheet_open and not feedback.visible and not focus_caption.visible
 
 func _activate_hotspot(id: String):
@@ -299,6 +319,9 @@ func _build_sheet():
 	body=VBoxContainer.new()
 	body.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	scroll.add_child(body)
+	sheet_feedback=_label("",17,GOLD)
+	sheet_feedback.visible=false
+	stack.add_child(sheet_feedback)
 	primary=_button("primary","",_primary_action)
 	stack.add_child(primary)
 
@@ -322,6 +345,7 @@ func _resize_layout():
 	pause_button.position=Vector2(size.x-76,18)
 	status.get_parent().position=Vector2(16 if compact else 24,12 if compact else 18)
 	status.add_theme_font_size_override("font_size",16 if compact else 20)
+	cash_label.add_theme_font_size_override("font_size",16 if compact else 20)
 	phase_hint.position=Vector2(24,size.y-50)
 	phase_hint.size=Vector2(size.x-48,32)
 	feedback.position=Vector2(24,size.y-50)
@@ -332,7 +356,7 @@ func _resize_layout():
 	_wire_focus()
 
 func _layout_sheet():
-	var limits={"pause":Vector2(460,420),"craft":Vector2(700,560),"shopping":Vector2(820,660),"shelf":Vector2(820,680)}
+	var limits={"pause":Vector2(460,368),"craft":Vector2(700,480),"shopping":Vector2(820,660),"shelf":Vector2(820,620),"order":Vector2(660,480),"counter":Vector2(580,340),"storage":Vector2(600,420),"gear":Vector2(720,620),"journal":Vector2(760,600)}
 	var preferred: Vector2=limits.get(tab,Vector2(800,680))
 	var sheet_size=Vector2(minf(preferred.x,size.x-32),minf(preferred.y,size.y-112))
 	if compact: sheet_size=Vector2(minf(710,size.x-24),size.y-24)
@@ -351,12 +375,14 @@ func _position_hotspots():
 		button.position=(origin+native.position*scale_factor).round()
 		button.size=(native.size*scale_factor).max(Vector2(48,48))
 		button.visible=spec.location==world_view
+		if id=="world_customer": button.visible=button.visible and not view.is_empty() and view.phase=="trading"
 		button.disabled=sheet_open or (not view.is_empty() and view.paused)
 
 func _update_status():
 	if view.is_empty(): return
 	var weather="雨" if int(view.day)==3 else "晴"
-	status.text="第%d日  ·  %s  ·  %s     %d 金" % [view.day,weather,PHASES.get(view.phase,view.phase),view.cash]
+	status.text="第%d日  ·  %s  ·  %s" % [view.day,weather,PHASES.get(view.phase,view.phase)]
+	cash_label.text="%d 金" % view.cash
 
 func _label(value: String, font_size: int = 18, color: Color = CREAM) -> Label:
 	if sheet_open and tab=="shelf":
@@ -435,7 +461,9 @@ func _refresh():
 	var captions={"shopping":"月灯巷 · 食材摊","craft":"灯下菜谱册","shelf":"今晚的菜单","gear":"出门前的准备","journal":"咩咩的账本","storage":"厨房储藏","order":"柜台上的点单纸","counter":"柜台 · 开门迎客","pause":"灯还亮着，歇一歇"}
 	sheet_title.text=captions.get(tab,"")
 	sheet_title.add_theme_color_override("font_color",Color("e6d39a") if tab=="shelf" else GOLD)
-	sheet_surface.add_theme_stylebox_override("panel",_style(Color("304437") if tab=="shelf" else PANEL,Color("8d633b"),3,16 if compact else 24))
+	var paper=Art.skin("ui_paper_panel")
+	if paper: paper.set_content_margin_all(16 if compact else 20)
+	sheet_surface.add_theme_stylebox_override("panel",paper if paper and tab!="shelf" else _style(Color("304437") if tab=="shelf" else PANEL,Color("8d633b"),3,16 if compact else 20))
 	if sheet_open:
 		match tab:
 			"shopping": _build_shopping()
@@ -462,6 +490,7 @@ func _refresh():
 	if not view.pending.is_empty(): phase_hint.text="海格在柜台等一份温暖的带餐。" if view.pending.get("character_id","")=="hagrid" else "柜台有客人想和你说说特别的点单。"
 	feedback.text=messages.back() if not messages.is_empty() else ""
 	feedback.tooltip_text=feedback.text
+	sheet_feedback.text=feedback.text
 	_update_message_visibility()
 	_position_hotspots()
 	pause_button.disabled=sheet_open
@@ -585,8 +614,6 @@ func _build_shopping():
 			if view.phase=="shopping" and reason.is_empty(): reason = "本次份数超过供货或可用金币，请调低份数。"
 			card.add_child(_label(reason,17,MUTED))
 	body.add_child(_button("recover","帮邻店洗锅 · +12 金（每日一次）",_act.bind("recover",{}),_enabled("recover")))
-	body.add_child(_button("shopping_expedition","合上，去门口看看装备",_close_sheet))
-	_build_stock("ingredient","储藏食材")
 
 func _choose_recipe(id: String):
 	recipe_selected=id
@@ -631,6 +658,8 @@ func _build_craft():
 	if not str(selected.get("requires_device","")).is_empty(): page.add_child(_label("需要装配自搅坩埚",17,GOLD))
 	var possible=view.phase=="preparation" and selected.available and batch<=selected.max_quantity
 	page.add_child(_button("craft_"+selected.recipe_id,"备好 %d 份" % batch,_act.bind("craft",{"recipe_id":selected.recipe_id,"quantity":batch}),possible))
+	craft_feedback=_label(messages.back() if not messages.is_empty() else "",17,GOLD)
+	page.add_child(craft_feedback)
 	page.add_child(_label("最多 %d 份 · %s" % [selected.max_quantity,selected.reason],16,MUTED))
 	page.add_child(_label("备好的料理还要写上墙上的菜单。",16,MUTED))
 
@@ -796,6 +825,7 @@ func _primary_action():
 	if game.view().phase!="settled":
 		sheet_open=false
 		world_view="room"
+		return_hotspot={"preparation":"world_craft","trading":"world_counter","shopping":"world_lane"}.get(game.view().phase,return_hotspot)
 		illustration.show_lane(false)
 	_refresh()
 
@@ -808,6 +838,8 @@ func _act(kind: String, args: Dictionary):
 	var guest = str(game.view().pending.get("character_id","")) if kind=="fulfill" else ""
 	request_serial += 1
 	var result = game.command(kind,args,request_prefix+":"+str(request_serial))
+	last_ui_action=kind
+	last_ui_args=args.duplicate(true)
 	_notice(("✓ " if result.ok else "无法完成：")+str(result.message))
 	_record_events(result.get("events",[]))
 	if result.ok and kind=="craft":
@@ -829,6 +861,7 @@ func _toggle_pause():
 	var result=game.set_paused(not game.view().paused)
 	_notice(("月灯巷会等你。" if game.view().paused else "继续。") if result.ok else result.message)
 	if game.view().phase!="expedition":
+		toast_remaining=0.0
 		sheet_open=game.view().paused
 		if sheet_open: tab="pause"
 	_refresh()
@@ -870,6 +903,7 @@ func _show_file_error(node_name: String, caption: String, detail: String):
 	error_dialog.title=caption
 	error_dialog.dialog_text=detail
 	error_dialog.theme=theme
+	error_dialog.get_label().add_theme_color_override("font_color",Color("fff0d0"))
 	error_dialog.get_ok_button().custom_minimum_size=Vector2(96,48)
 	error_dialog.confirmed.connect(error_dialog.queue_free)
 	add_child(error_dialog)
@@ -881,6 +915,7 @@ func _load_game() -> Dictionary:
 	_notice(("恢复成功：" if result.ok else "恢复失败，当前进度未变：")+str(result.message))
 	if result.ok:
 		save_writes_allowed = true
+		sheet_open=false
 		request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
 		tab = {"shopping":"shopping","preparation":"craft","trading":"journal","closing":"journal","settled":"journal","expedition":"gear"}.get(game.view().phase,"journal")
 		last_pending = ""

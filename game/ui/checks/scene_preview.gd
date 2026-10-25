@@ -14,7 +14,7 @@ func _initialize():
 		quit(2)
 		return
 	DirAccess.make_dir_recursive_absolute(folder)
-	for path in ["game/ui/main.gd","game/ui/shop_canvas.gd","game/ui/checks/scene_preview.gd"]:
+	for path in ["game/ui/main.gd","game/ui/shop_canvas.gd","game/ui/pixel_assets.gd","game/ui/checks/scene_preview.gd","game/core/game_session.gd","game/expedition/expedition_panel.gd","assets/pixel/manifest.json"]:
 		sources[path]=FileAccess.get_sha256("res://"+path)
 	call_deferred("run")
 
@@ -69,6 +69,9 @@ func run():
 	ui.save_path=folder+"/preview-save.json"
 	root.add_child(ui)
 	await frames(15)
+	var art=load("res://game/ui/pixel_assets.gd")
+	for id in ["world_recipe_book","world_menu_board","world_order_note","world_ledger","ui_paper_panel","ui_button_plain","ui_button_plain_focus","ui_day","ui_coin","ui_pause"]:
+		expect(art.sprite(id)!=null,"published A01 asset actually loaded: "+id)
 	if "--windowed" not in OS.get_cmdline_args():
 		expect(root.mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN],"official fullscreen flag produced actual fullscreen Window mode")
 	expect(ui.get_open_sheet()=="","world is the default screen")
@@ -102,6 +105,18 @@ func run():
 	await click("pause")
 	expect(ui.game.view().paused and ui.get_open_sheet()=="pause","pause owns save and exit controls")
 	await screenshot("08-pause-sheet")
+	await click("resume")
+	for i in range(40):
+		if not ui.game.view().pending.is_empty(): break
+		await create_timer(0.1).timeout
+	expect(not ui.game.view().pending.is_empty(),"real business clock reaches special guest")
+	await click("world_customer")
+	expect(ui.get_open_sheet()=="order","actual customer opens order paper")
+	await screenshot("09-order-paper")
+	await click("fulfill_floating_pie")
+	expect(ui.game.view().pending.is_empty() and ui.get_open_sheet()=="","actual stocked meal fulfills request and returns world")
+	await screenshot("10-served-world")
+	await click("pause")
 	write_report()
 	ui.tree_exiting.connect(func():
 		expect(FileAccess.file_exists(ui.save_path),"product save quit writes only isolated preview save")

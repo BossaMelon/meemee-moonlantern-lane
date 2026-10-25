@@ -6,7 +6,11 @@
 
 恢复点为 `codex/p02-before-scene-ui-996d3f4`。本轮将常驻侧栏与 tabbar 移除，默认仅显示全屏餐厅、日程/天气/金币和暂停入口。世界物件是实际 Button 热点，鼠标/触屏命中物件、手柄方向聚焦后确认；悬停/聚焦显示物件名称与边缘反馈。
 
-公开定位继续使用 `get_action_control(id)`，但没有隐藏旧导航。房内入口：`world_craft` 备餐桌、`world_stove` 灶台→菜谱册，`world_menu` 菜单板→份数/定价，`world_counter` 柜台/客人→接单交付/开门，`world_journal` 桌上账本→日程/收工/升级，`world_gear` 门口装备→探险，`world_storage` 柜格→储藏，`world_lane` 巷口→街巷。街巷：`world_stall` 实际食材摊→采购，`world_home` 店门→回餐厅。打开浮层后仅其中可见操作可聚焦；`sheet_close` / B / Esc 返回场景并把焦点交回原物件。公开 `get_open_sheet()` 返回浮层种类或空串，`get_world_view()` 返回 room/lane，供 P03 只读定位；不得调用内部导航冒充输入。
+公开定位继续使用 `get_action_control(id)`，但没有隐藏旧导航。房内入口：`world_craft` 备餐桌、`world_stove` 灶台→菜谱册，`world_menu` 菜单板→份数/定价，`world_counter` 柜台与营业时的 `world_customer` 客人→接单交付/开门，`world_journal` 桌上账本→日程/收工/升级，`world_gear` 墙边装备→探险，`world_storage` 柜格→储藏，`world_lane` 真实店门→街巷。街巷：`world_stall` 实际食材摊→采购，`world_home` 店门→回餐厅。打开浮层后仅其中可见操作可聚焦；`sheet_close` / B / Esc 返回场景并把焦点交回原物件。公开 `get_open_sheet()` 返回 shopping/craft/shelf/order/counter/journal/gear/storage/pause 或空串，`get_world_view()` 返回 room/lane，供 P03 只读定位；不得调用内部导航冒充输入。
+
+P03 最小驱动协议：从上述真实热点打开，读取控件 `get_global_rect()`（UI 虚拟坐标）后注入 InputEvent；`recipe_<recipe_id>` 选择当前菜页，再使用 `craft_<recipe_id>`，其余批量/采购/菜单/价格/交付/装备动作ID保留。`primary` 只在当前相关浮层显示：食材摊或采购期菜谱→结束采购，备餐期柜台→开门，收工/日结账本→结算/次日。经营暂停用 `pause` 打开、`resume` 继续，save/load/quit 仅存在于可见暂停册页。操作成功/失败在浮层按钮附近显示；合上后结果短暂出现，世界态最多一句引导或当前物件标签。位置以真实控件为准，不直接调用 `_activate_hotspot` 或其他回调。
+
+A01 第二轮来源为原 PR18、source head `7c20a0bb1be67b3be186814b707f82a50f110848`，经 root 原生 merge `5dfbe19` 消费；保留 P02,A01 联合范围。菜谱册、菜单板、点单纸、账本均以真实独立精灵摆在对应物件处，UI 明确使用新 paper/plain/focus 和 day/coin/pause ID；本 owner 不改 assets/pixel 文件。
 
 暂停/保存/恢复/退出位于真实暂停浮层，`pause` 打开，`resume` 继续；存档自动恢复与拒绝恢复时的写入保护、E01失败保存解冻/成功退出冻结保持原协议。全屏验收用官方 `--fullscreen`，记录 DisplayServer/Window 模式及 screen/window/viewport/PNG 尺寸；窗口兼容必须显式 `--windowed`，不放大全屏截图、不调用 CUA。
 
