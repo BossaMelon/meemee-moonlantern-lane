@@ -31,7 +31,7 @@ Windows 可使用 Godot 导出模板产生原生可执行文件，但导出成�
 ## 4. 开发与逻辑边界
 
 - Godot 标准版与 CLI：agent 编写场景、资源、脚本与导出配置，用户无需手动配置编辑器。使用实际 4.7.2 API，官方版本文档和运行结果共同核验。[命令行开发](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)
-- 核心：`game/core/` 采用不依赖节点、渲染或 UI 的 `RefCounted` 逻辑，负责经济与阶段转换。P01 完成并发布实际接口后，P02 才依它实现 UI；当前不虚构函数名。`project.godot` 由 P01 建立以运行真实 headless 测试，主场景完成前不宣称可玩入口。
+- 核心：`game/core/` 采用不依赖节点、渲染或 UI 的 `RefCounted` 逻辑，负责经济与阶段转换。P01 完成并发布实际接口后，P02 才依它实现 UI；当前不虚构函数名；核心 owner 将接口说明与代码一同交付在 `game/core/README.md`，避免 UI 据探索文档猜 API。`project.godot` 由 P01 建立以运行真实 headless 测试，主场景完成前不宣称可玩入口。
 - 存档：有版本号的完整 JSON 写入 `user://`，覆盖阶段、时钟、待处理事件、库存、现金、升级、已读内容和随机种子/内部状态。失败不能覆盖唯一有效存档；恢复后随机结果和交易防重语义保持一致。
 - 测试：优先引擎自带 `SceneTree` runner 与 Python 标准库 gate，不先增加测试插件、运行时网络、LLM 或付费服务。实际实现可按证据调整，但必须同步契约与任务依赖。
 

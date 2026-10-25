@@ -41,7 +41,8 @@
         "project.godot",
         "game/core/**",
         "tests/run.gd",
-        "tests/core/**"
+        "tests/core/**",
+        "tests/run.gd.uid"
       ],
       "depends_on": [
         "H01",
