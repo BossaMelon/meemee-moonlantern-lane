@@ -30,7 +30,7 @@
 
 ## 3. 地图、敌人与两条打法
 
-逻辑空间先沿用 960×540，无新相机系统。E01 的地图数据是碰撞/水区/出生点/资源点事实源；A01 按同一坐标画可读地形，不能画出实际上可穿透的实墙。边缘细节收敛，关键预警不被纹理、前景或 UI 遮挡。
+逻辑空间先沿用 960×540，无新相机系统。E01 的地图数据是碰撞/水区/出生点/资源点事实源；A01 按同一坐标画可读地形，不能画出实际上可穿透的实墙。边缘细节收敛，关键预警不被纹理、前景或 UI 遮挡。E01消费既定 manifest ID：`garden_stump`（含 footprint/pivot）、`sporecaster_idle/windup/release`、`spore_cloud`、`water_ripple`；敌人 kind 固定为 `sporecaster`。A01仅追加这些必要表现到小 atlas，旧资产字节保留，不先画完整地图拓扑。
 
 | 区域 | 规则与回报 |
 |---|---|
@@ -53,6 +53,8 @@
 
 沿用 `floating_pie/ember_soup/moon_stew/star_soup/comet_pie`、四种基础食材及 `sparkcap/moonheart`。配方投入和默认批量能力不变；新 profile 从第一晚就稳定供应暖焰草，`supply_pass` 不再作为前置，不改旧 profile 的解锁规则。保留开店遗留锅留用或售回 18、替代品 30 的机会成本；有锅才可制作炖锅。
 
+**核心阶段边界：**`shopping → preparation → trading(波1) → intermission → trading(波2) → intermission → trading(波3) → closing → settled`。intermission 是核心持久化 phase，不是把 trading 的 paused 置 true。仅当本波全部顾客已成交/离开且 reservations 为空才进入波间；第三波直接 closing。craft 仅 shopping（餐前）/preparation/intermission 可用，display/undisplay/price/set_menu_priority 仅 preparation/intermission 可用，buy 仍仅 shopping，装卸锅仅 preparation。active trading 即使 UI 暂停也拒绝制作和移菜单；解除暂停不能自动开始下一波。每次 start_wave 原子提交目标 wave_id、复用已生成队列，不再抽客或刷新预算。
+
 **三波客流**采用“赶路客较多→巡护正餐→雨中返程”的可读摘要，数量和需求分布在采购前给出；实际队列与预算在开夜时由固定种子生成并保存。普通客不需要逐个收银；海格仍是可跳过、停时的短委托，不锁第二晚。稀有菜的照路/庆功需求可预见，缺稀有材料仍能完成当晚。不要把三波做成旧每秒成交循环乘三。
 
 供应有真实在途份数和有限通道；两路线的操作区别如下：
@@ -60,7 +62,9 @@
 | 路线 | 备餐与实际出餐规则 | 成本与取舍 |
 |---|---|---|
 | 浮空小食 | 本波新制的浮空饼/彗星饼可同时有两份飞向外带客，发出后不能改售给另一人；玩家以小批量、波间补做维持浮空周转。 | 较少准备资金、较多波间决策；跨波剩饼仍能吃/卖，但浮空加速结束，按普通单通道交付，不销毁或降原价。 |
-| 热锅正餐 | 装配坩埚后，一次可从已备炖锅中预留最多三份给当前正餐组，完成后同时交付；保温份数可跨波保留，无需重做。 | 保留厨具、提前占用材料与菜单位；换取跨波供给余量，不能凭空补满锅。 |
+| 热锅正餐 | 装配坩埚后，一次可从已备炖锅中预留最多三份给当前正餐组，完成后同时交付；锅内最多三份保温库存可跨波保留，无需重做。 | 保留厨具、提前占用材料与菜单位；换取跨波供给余量，不能凭空补满锅。 |
+
+**保温是核心状态：**新制炖锅实例为 hot；本波结束且所有在途交付已完成时，已安装锅按菜单优先、UID升序自动将最多三份剩余炖锅标 held，写入 service.held_uids。这些份数下一波仍具 warming/heat_hold，可直接出锅；其余跨波炖锅转 cooled，仍可作 hearty 正餐出售/保留，但不再匹配暖身订单，不销毁、不降原价。未上菜单的储藏炖锅不自动占保温位。移出保温锅/出售锅会释放对应 held 状态，不可靠再次 display 或读档重新变热；next_day 保留真实温度/库存，旧 cooked_wave 不伪装新制。UI明确显示热、保温、已凉及锅内余量；变化由波边界/合法物品操作触发，不按现实离线时间发生。
 
 汤类按普通通道交付；其 `warming/heat_hold/trail_light` 决定匹配，未装锅不能获得锅的成组交付。所有批量交付仍逐份核算食材成本、顾客预算和交易身份。普通/浮空/锅批次的交付初值分别 3s/1.5s/4.5s；普通通道最多一单，浮空通道两单，锅批次每次最多三单。三通道可并行，但只能使用已上菜单的真实份数。每位普通客有可见、可暂停的宽松等候窗口，初值 20s；全部成交或明确离开即结束本波，无最低波长、无额外罚款。实际长度和拥堵是否有趣须试玩，不能靠延长秒数解决无决策的问题。
 
@@ -87,7 +91,7 @@
 | 原输入/食用 | `expedition_input` 的 move/aim 双轴、cast/dodge/skill 不增加按钮。`consume {item_id,quantity:1}` 复用，按 profile 校验上述两菜；邻近拾取与入口返程仍自动判距离。 |
 | E01 模型 | `create` 末尾追加可选 options（`ruleset,map_id,map_revision,mode,meal_effect`）；旧调用维持旧模型。模型返回真实 pickups/events，P01在同次成功推进中原子入账。 |
 | 地图/反馈 | view 增 `terrain`（obstacles:圆/矩形的 id 与逻辑坐标尺寸；water_zones:矩形区域及 speed_scale）、`hazards`（id/source/位置/radius/state/remaining_ms）、`resource_nodes`（id/item_id/quantity/collected）、enemy 的 stagger/攻击身份、meal_effect。事件增 `obstacle_hit/enemy_staggered/spore_spawned/spore_cleared`，包含真实实体 ID 与 tick。 |
-| 经营/成长 | view 增 `service:{night_id,wave_id,next_wave_id,wave_index,status,orders,reservations,menu_priority}`；订单含预算/等待时间/交付通道，reservation 含 item_uid/order_id/remaining_ms；progression/餐前效果显示取得、装备和待用状态。 |
+| 经营/成长 | view 增 `service:{night_id,wave_id,next_wave_id,wave_index,status,orders,reservations,menu_priority,held_uids}`；订单含预算/等待时间/交付通道，reservation 含 item_uid/order_id/remaining_ms；菜品实例含 prepared_wave_id、炖锅 temperature=hot/held/cooled，库存总量含 reserved；progression/餐前效果显示取得、装备和待用状态。 |
 
 所有新 profile 经营/动作时间由同一 50ms 固定步推进，保存余数与 RNG；相同输入时序、同种子及等总时长帧切分应同结果。暂停停止物理、预警、孢子、波次、等待与交付计时；恢复/失焦清零保持输入，之后按相同输入继续可比较状态。离线时间不推进。地图碰撞是模型事实；渲染只能消费位置、状态、事件。
 
@@ -113,7 +117,7 @@
 |---|---|
 | Q01 地图 | 实际走通两路/连接/返程；菇桩阻挡行走、闪避、冲刺和弹体；湿渠对双方步行同效，帧切分不穿透；美术位置与碰撞吻合。 |
 | Q02 组合战斗 | 真实输入引冲撞桩硬直/破盾、风咒清孢子并推退；未撞桩不硬直，飞弹不被清除，单次攻击/危险区不重复伤害/掉落。投手和精英组合实际经历而非分别摆拍。 |
-| Q03 三波经营 | 饼本波浮空/跨波普通交付与锅跨波保温真实影响供应；波间批量补做与优先级有效；预留份数不可双卖，交付预算/收入/成本可复算，重复开波不跳波。 |
+| Q03 三波经营 | 饼本波浮空/跨波普通交付与锅最多三份跨波保温真实影响供应；第4份跨波锅餐变凉不能匹配暖身，前3份仍可；active trading 暂停也拒绝 craft/display，真正 intermission 才接受；波间批量补做与优先级有效；预留份数不可双卖，交付预算/收入/成本可复算，重复开波不跳波。 |
 | Q04 食材与成长 | 同一稀有材料快照分叉售原料/加工出售/加工自食/保留，均守恒；两种效果实际用掉且互斥。首晚合法收入买散射杖→马上练习→下一晚正式装备；练习不能刷钱、料、次数或效果。 |
 | Q05 正确性/保存 | 五固定种子、两条行为不同的正常策略和不探险分支可继续经营，无负现金或应急依赖；两路、孢子预警、硬直、波间、交付途中、升级后/练习中保存恢复与连续分支一致；旧 profile 主备档哈希不变。 |
 | Q06 实际输入/画面 | 鼠键、合成触屏/手柄均经真实 InputEvent 完整走一晚并试新打法；验证释放/失焦、暂停GUI不施法、窄屏遮挡和独立进程恢复，提供 exact候选/版本/日志/截图。不能直接调用核心或按钮信号冒充 UI。 |
