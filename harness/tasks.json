@@ -136,6 +136,18 @@
   "coordination": {
     "chat_id": "01a172aa-e83d-7df3-a710-087a1da16d66",
     "service_tier": "default",
-    "delegation": "visible_chats_only"
+    "delegation": "visible_chats_only",
+    "read_only_reviewers": [
+      {
+        "chat_id": "01a17385-3ee4-7481-acc0-7eac726f5c9a",
+        "title": "月灯巷｜美术指导与视觉验收",
+        "role": "art_direction_and_visual_acceptance",
+        "model": "gpt-6-astra",
+        "reasoning_effort": "high",
+        "service_tier": "default",
+        "access": "read_only",
+        "can_delegate": false
+      }
+    ]
   }
 }
