@@ -3,6 +3,7 @@ extends Control
 const Session = preload("res://game/core/game_session.gd")
 const ShopCanvas = preload("res://game/ui/shop_canvas.gd")
 const Art = preload("res://game/ui/pixel_assets.gd")
+const PortableFont = preload("res://game/ui/portable_font.gd")
 const RainPanels = preload("res://game/ui/rain_night/panels.gd")
 const PROFILE_ID = "rain-night-v1"
 const EXPEDITION_SCENE = "res://scenes/expedition/expedition.tscn"
@@ -171,8 +172,7 @@ func _style(color: Color, border: Color, width: int = 1, padding: int = 12) -> S
 
 func _build_theme():
 	var ui_theme = Theme.new()
-	var font = SystemFont.new()
-	font.font_names = PackedStringArray(["PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Heiti SC"])
+	var font = PortableFont.get_font()
 	ui_theme.default_font = font
 	ui_theme.default_font_size = 18
 	ui_theme.set_color("font_color","Label",CREAM)

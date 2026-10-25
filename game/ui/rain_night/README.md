@@ -1,5 +1,11 @@
 # 雨夜呈现组件与定位协议
 
+随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。
+
+字体检查入口：`Godot --headless --path . --script game/ui/checks/portable_font.gd -- /private/tmp/NEW_FONT_CHECK`。检查实际 FontFile 数据 hash、完整随包字体链和真实 Main 中经 InputEvent 打开的标签/按钮字体绑定，并扫描生产源码/场景的字符全集（保守包含注释）及实际文字。`--missing-glyph` 是预期 exit1 的缺字负例。缺资源负例应在隔离小项目中保留同一检查/provider/清单/许可而不放字体及导入缓存，必须 exit1；不移动真实字体、不接触玩家存档。字体必须经 W01 冷导入基础正常加载，不能用原文件解码或系统字体回退绕过失败。
+
+原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。清单/OFL/NOTICE 属非资源文件，打包方需明确随包纳入，并在无源码/原导入缓存的真实包检查中验证。此 headless 检查不声称已经过冷打包、原生全屏/844×390或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
+
 `panels.gd` 是只读 typed-view 组件：`present(view, page, selected_item="")` 深拷贝输入，显示真实字段；`get_action_control(id)` 返回当前可见页面的 Control，`status_line()` 提供一行世界 HUD 摘要。没有 Session、存档、计时推进、发奖或成交模拟。组件 fixture 检查不能作为新雨夜游戏或 Q06 证据。
 
 组件页为 `forecast/service/menu/meal/rare/growth`，由主 UI 挂在现有纸木浮层中，保留 `world_*`、`get_open_sheet()`、`get_world_view()`；不增加常驻侧栏，不提供隐藏旧 tabbar。主场景按 P04 正式 facade 显式 `Session.new(seed,"rain-night-v1")`，默认存档为 `user://profiles/rain-night-v1/moonlantern.json`，不扫描旧 v2 用户路径。实际独立用户数据目录由 H05 启动器负责。
