@@ -440,8 +440,9 @@ func _set_batch(value: int):
 	_refresh()
 
 func _build_shopping():
-	body.add_child(_label("月灯巷食材摊",24,GOLD))
-	body.add_child(_label("第三日有雨：暖焰汤（供货契约）或保温炖锅（留用坩埚）。食材与来源见手账。",17,MUTED))
+	if not compact:
+		body.add_child(_label("月灯巷食材摊",24,GOLD))
+		body.add_child(_label("第三日有雨：暖焰汤（供货契约）或保温炖锅（留用坩埚）。食材与来源见手账。",17,MUTED))
 	_batch_selector()
 	for supply in view.supply:
 		var card = _card()
@@ -523,11 +524,11 @@ func _select_item(id: String):
 	_refresh()
 
 func _build_gear():
-	body.add_child(_label("巷后菇圃 · 今日准备",24,GOLD))
+	if not compact: body.add_child(_label("巷后菇圃 · 今日准备",24,GOLD))
 	var expedition = view.expedition
-	body.add_child(_label("今日剩余 %d 次 · 击败食材怪后靠近拾取\n可以不去；撤退或失败保留已拾取材料，无罚款。"%expedition.attempts_remaining,18,MUTED))
-	body.add_child(_label("今日食材：星火菇"+("，以及月心菇精英的高级材料；可做彗星馅饼。" if view.day==3 else "；可让暖焰汤变成会照路的星火汤。"),17,GOLD))
+	body.add_child(_label("今日 %d 次 · 撤退不罚款，保留已拾取食材"%expedition.attempts_remaining if compact else "今日剩余 %d 次 · 击败食材怪后靠近拾取\n可以不去；撤退或失败保留已拾取材料，无罚款。"%expedition.attempts_remaining,16 if compact else 18,MUTED))
 	body.add_child(_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition")))
+	body.add_child(_label("今日食材：星火菇"+("，以及月心菇精英的高级材料；可做彗星馅饼。" if view.day==3 else "；可让暖焰汤变成会照路的星火汤。"),17,GOLD))
 	body.add_child(_label("轻羽护盾："+("下次探险已备好一次免伤" if view.next_expedition_shield else "可吃掉一份储藏浮空饼，换一次免伤并放弃售价"),18,GOLD))
 	body.add_child(_button("consume_pie","吃一份浮空饼 · 为下次探险护身",_act.bind("consume",{"item_id":"floating_pie","quantity":1}),view.phase=="shopping" and _inventory("floating_pie").bag>0 and not view.next_expedition_shield))
 	body.add_child(_label("武器与技能",22,GOLD))
