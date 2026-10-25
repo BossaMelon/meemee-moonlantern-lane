@@ -43,7 +43,11 @@ func expect(value: bool, message: String):
 		quit(1)
 
 func emit_input(event: InputEvent, local: bool = false):
-	input_file.store_line(JSON.stringify({"elapsed_ms":Time.get_ticks_msec()-started_ms,"event":event.as_text(),"class":event.get_class(),"local":local}))
+	var entry={"elapsed_ms":Time.get_ticks_msec()-started_ms,"event":event.as_text(),"class":event.get_class(),"local":local,"pressed":event.is_pressed()}
+	if event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag: entry.position=[event.position.x,event.position.y]
+	if event is InputEventJoypadMotion: entry.axis=event.axis; entry.axis_value=event.axis_value
+	if event is InputEventScreenTouch or event is InputEventScreenDrag: entry.touch_index=event.index
+	input_file.store_line(JSON.stringify(entry))
 	if local: root.push_input(event,true)
 	else: Input.parse_input_event(event)
 
@@ -101,11 +105,14 @@ func scroll_to(button: Button):
 			touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_input(touch)
 		else:
-			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_input(motion,true)
+			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_input(motion)
 			var wheel=InputEventMouseButton.new()
 			wheel.position=clip.get_center(); wheel.global_position=wheel.position
 			wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN if direction>0 else MOUSE_BUTTON_WHEEL_UP
-			wheel.pressed=true; emit_input(wheel,true)
+			wheel.pressed=true; emit_input(wheel)
+			var release=InputEventMouseButton.new()
+			release.position=wheel.position; release.global_position=wheel.global_position
+			release.button_index=wheel.button_index; release.pressed=false; emit_input(release)
 		await frames(2)
 	await screenshot(mode+"-scroll-failure-"+str(button.get_meta("action_id",button.name)))
 	expect(false,"real scrolling reaches "+str(button.get_meta("action_id",button.name)))
@@ -132,8 +139,9 @@ func activate_control(button: Button, id: String):
 		if mode=="mouse":
 			var motion=InputEventMouseMotion.new()
 			motion.position=rect.get_center(); motion.global_position=motion.position
-			emit_input(motion,true); await frames(1)
+			emit_input(motion); await frames(1)
 		for down in [true,false]:
+			trace.append({"control_input":id,"pressed":down,"at":str(rect.get_center()),"current_rect":str(button.get_global_rect()),"scroll_vertical":ui.scroll.scroll_vertical})
 			if mode=="touch":
 				var event=InputEventScreenTouch.new()
 				event.index=0; event.position=rect.get_center(); event.pressed=down
@@ -143,10 +151,11 @@ func activate_control(button: Button, id: String):
 				event.position=rect.get_center(); event.global_position=event.position
 				event.button_index=MOUSE_BUTTON_LEFT; event.pressed=down
 				event.button_mask=MOUSE_BUTTON_MASK_LEFT if down else 0
-				emit_input(event,true)
+				emit_input(event)
 			await frames(1)
 	await frames(3)
 	var economic=id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
+	if economic and action_count==count_before: await screenshot(mode+"-intent-failure-"+id)
 	if economic: expect(action_count>count_before,"real control emits expected economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
@@ -157,6 +166,10 @@ func activate_control(button: Button, id: String):
 		await screenshot(mode+"-actual-craft-"+output)
 	trace.append({"mode":mode,"action":id,"day":v.day,"phase":v.phase,"cash":v.cash,"cursor":v.cursor,"clock_ms":v.clock_ms})
 	print("P03 INPUT ",mode," ",id," => ",v.day,"/",v.phase)
+
+func quantity(value: int):
+	await super.quantity(value)
+	expect(ui.batch==value,"real quantity controls select requested batch: "+str(value))
 
 func screenshot(name: String):
 	expect(DisplayServer.get_name()!="headless","runtime screenshot requires rendered display")
@@ -182,7 +195,11 @@ func _observe_product_exit():
 	product_exit_observed=true
 	var disk=JSON.parse_string(FileAccess.get_file_as_string(ui.save_path))
 	saved_sha256=FileAccess.get_sha256(ui.save_path)
-	expect(json_equal(ui.game.snapshot(),disk),"product exit writes the complete final snapshot")
+	var actual: Dictionary=ui.game.snapshot()
+	var differences: Array=[]
+	for field in actual:
+		if not json_equal(actual[field],disk.get(field)): differences.append(field)
+	expect(json_equal(actual,disk),"product exit writes the complete final snapshot; differing fields="+str(differences))
 	record_checkpoint(pending_product_exit)
 
 func expect_product_exit(name: String, control: Button):
