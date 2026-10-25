@@ -14,6 +14,7 @@ var active_touches: Dictionary = {}
 var save_count = 0
 var real_core = false
 var observed_events: Array = []
+var save_quit_only = false
 
 class ActionAdapter extends RefCounted:
 	var state: Dictionary
@@ -42,6 +43,7 @@ func expect(ok: bool, message: String):
 
 func _initialize():
 	real_core = "--real-core" in OS.get_cmdline_user_args()
+	save_quit_only = "--save-quit-only" in OS.get_cmdline_user_args()
 	for i in range(OS.get_cmdline_user_args().size()-1):
 		if OS.get_cmdline_user_args()[i] == "--output": output = OS.get_cmdline_user_args()[i+1]
 	DirAccess.make_dir_recursive_absolute(output)
@@ -125,6 +127,9 @@ func run():
 	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
 	root.content_scale_size = Vector2i.ZERO
 	root.size = Vector2i(1280,800)
+	if save_quit_only:
+		await check_save_quit()
+		return
 	Engine.time_scale = 6.0
 	for mode in ["keyboard","touch","gamepad"]:
 		if real_core:
@@ -178,6 +183,7 @@ func run():
 			panel.bind_session(adapter)
 		await screenshot(mode+"-paused")
 		await click(panel.pause_button.position+panel.pause_button.size/2.0)
+		panel.grab_focus()
 		pressed.clear(); active_touches.clear()
 		var frames = 0
 		var captured = false
@@ -210,4 +216,65 @@ func run():
 		"engine":Engine.get_version_info(),"source_sha256":sources,"desktop_size":{"width":1280,"height":800},"narrow_size":{"width":960,"height":640},
 		"claims":"Real-rendered action scene and InputEvent paths. Normal command setup is not a full restaurant UI/P14 claim; no physical controller/iOS claim."},"\t")); file.close()
 	print("E01 rendered InputEvent checks: ",checks," failures: ",failures.size())
+	quit(1 if not failures.is_empty() else 0)
+
+func check_save_quit():
+	DisplayServer.window_set_size(Vector2i(844,390)); root.size = Vector2i(844,390)
+	adapter = ActionAdapter.new()
+	adapter.set_paused(true)
+	panel = ExpeditionScene.instantiate()
+	root.add_child(panel)
+	panel.bind_session(adapter)
+	await process_frame
+	if not panel.has_signal("save_quit_requested") or panel.get("save_quit_button") == null:
+		expect(false,"visible save-and-quit button and signal required")
+		quit(1); return
+	var counts = {"save":0,"save_quit":0,"clean":true}
+	panel.save_requested.connect(func(): counts.save += 1)
+	panel.save_quit_requested.connect(func():
+		counts.save_quit += 1
+		var held: Dictionary = panel.current_input()
+		counts.clean = counts.clean and held.move_x == 0.0 and held.move_y == 0.0 and not held.cast and not held.dodge and not held.skill
+		var simulated: Dictionary = adapter.view().expedition.input
+		for axis in ["move_x","move_y","aim_x","aim_y"]: counts.clean = counts.clean and simulated[axis] == 0.0
+		for action in ["cast","dodge","skill"]: counts.clean = counts.clean and not simulated[action]
+	)
+	for mode in ["mouse","touch","gamepad"]:
+		# Actual input first leaves several device controls held at the same time.
+		panel.grab_focus()
+		joy({"move_x":1.0,"move_y":0.0,"aim_x":1.0,"aim_y":0.0,"cast":true,"dodge":true,"skill":true})
+		await process_frame
+		var before: int = counts.save_quit
+		var center: Vector2 = panel.save_quit_button.get_global_rect().get_center()
+		if mode == "mouse": await click(center)
+		elif mode == "touch":
+			var down = InputEventScreenTouch.new(); down.index = 19; down.position = center; down.pressed = true
+			Input.parse_input_event(down)
+			await process_frame
+			var up = InputEventScreenTouch.new(); up.index = 19; up.position = center; up.pressed = false
+			Input.parse_input_event(up)
+			await process_frame
+		else:
+			# Start at the same panel focus used by the real main UI, then navigate.
+			joy({"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false})
+			key_event(KEY_D,true); key_event(KEY_J,true); key_event(KEY_L,true)
+			await process_frame
+			panel.grab_focus()
+			for code in [JOY_BUTTON_DPAD_UP,JOY_BUTTON_DPAD_RIGHT,JOY_BUTTON_DPAD_RIGHT,JOY_BUTTON_A]:
+				var down = InputEventJoypadButton.new(); down.button_index = code; down.pressed = true
+				Input.parse_input_event(down)
+				await process_frame
+				var up = InputEventJoypadButton.new(); up.button_index = code; up.pressed = false
+				Input.parse_input_event(up)
+				await process_frame
+		expect(counts.save_quit == before+1,"actual "+mode+" activates save-and-quit once")
+		expect(counts.save == 0,"save-and-quit remains distinct from save "+mode)
+		expect(counts.clean,"device and simulation holds clear before signal "+mode)
+	for button in [panel.pause_button,panel.save_button,panel.save_quit_button,panel.return_button]:
+		expect(Rect2(Vector2.ZERO,Vector2(844,390)).encloses(button.get_global_rect()),"toolbar target fits 844x390: "+button.text)
+		expect(button.size.y >= 44.0,"touch target remains >=44px")
+	await screenshot("save-quit-844x390")
+	var file = FileAccess.open(output+"/save-quit-inputs.json",FileAccess.WRITE)
+	file.store_string(JSON.stringify({"checks":checks,"failures":failures,"counts":counts,"width":844,"height":390,"claims":"Actual InputEvent activation of product signal; host owns full save and process exit."},"\t")); file.close()
+	print("E01 save-and-quit checks: ",checks," failures: ",failures.size())
 	quit(1 if not failures.is_empty() else 0)
