@@ -50,6 +50,27 @@
 
 当前概念合成为 `preview/garden-v3-concept.png`（同时更新 `garden-composite.png`），使用实际已有角色与敌人；`garden-v2-concept.png` 仅保留上次评审恢复点。`preview/world-ui-v2-contact.png` 检查已冻结的10件物件/符号。这些不证明运行时/UI已改好。真正全屏场景、灯下/暗处/边缘的预警与弹体对比度、前景遮挡、中文和输入焦点由P02/P03提供引擎证据。
 
+## 雨菇圃机制素材
+
+专用图集 `atlases/rain_garden.png` 为192×128；只追加下列六个ID，不替换旧70件精灵、旧图集或安静菇圃背景。
+
+| ID | 原生尺寸 | pivot | 接入约定 |
+|---|---|---|---|
+| `garden_stump` | 64×64 | `[32,56]` | 实体菇桩；厚侧面和紧贴根部。manifest的`footprint.polygon`是可见底座提示，坐标相对精灵左上角；只供实现者依据可见底座定碰撞，禁止用整张菌盖/画布矩形。 |
+| `sporecaster_idle` | 40×40 | `[20,36]` | 正式enemy kind为`sporecaster`，直立漏斗盖待机。 |
+| `sporecaster_windup` | 40×40 | `[20,36]` | 压低、横向展宽的蓄势轮廓；按真实windup状态保持。 |
+| `sporecaster_release` | 40×40 | `[20,36]` | 喷口伸长、两侧翻起的释放轮廓；按真实释放事件切换。 |
+| `spore_cloud` | 64×40 | `[32,33]` | 低矮连片的紫红危险团簇；下沿定义可见地面边界，非伤害半径。 |
+| `water_ripple` | 32×16 | `[16,8]` | 透明中心的短弧水纹，可复用单帧，置于脚下；不是水面/岸线贴图，不承载碰撞。 |
+
+投孢菇三姿态采用同一缩放率、画布和脚底pivot；原生可见范围随动作改变，不能每帧按bbox重新归一缩放或居中。素材不提供攻击节奏、命中、伤害或敌人状态机。孢子团需由真实危险区状态驱动轻微贴地脉动和生成/消散，与食材拾取浮动区分；不要加拾取闪点、满屏粒子或持续震屏。`motion_hint`是表现接入要求，当前静态素材和概念合成不证明运动已经实现。
+
+全部六件仍在原有共享32色内。孢子团量化限制在其中八种紫红/靛蓝色（`export_palette_subset`），避免映射为旧木棕色；没有新增全局色板。生成原稿保留真实alpha，导出沿用128阈值、二值透明、透明RGB清零和nearest。水纹v1缩小后过碎，保留原稿；运行时用加厚弧段的v2原稿。
+
+`preview/rain-garden-contact-native.png`按1:1原生尺寸展示，`rain-garden-contact-4x.png`为nearest放大检查；`garden-stump-footprint.png`以青线标底座提示、奶油十字标pivot。`rain-garden-concept-native.png`及3倍的`rain-garden-concept.png`把实际资源叠到未改动的背景。`sporecaster-poses.gif`仅演示三姿态锚点与轮廓，时长是预览停留时间，不是攻击规则。这些全部是素材QA，不是运行截图、地图布局决定或趣味验收。浅水可见底与轻岸线、实际危险边界/运动仍由地图和战斗实现接入后验证。
+
+仅重建本组使用 `python3 assets/pixel/build.py --rain-only`。专项校验：`python3 assets/pixel/verify.py garden_stump sporecaster_idle sporecaster_windup sporecaster_release spore_cloud water_ripple`。检查覆盖生成来源、alpha、尺寸、共享/子集色板、图集、pivot及底座多边形每个覆盖像素确实可见；可见底座提示不是碰撞JSON。
+
 ## 重建与检查
 
 需要 Python 3 与 Pillow（本次实际 Python 3.12.14 / Pillow 12.3.0），运行 `python3 assets/pixel/build.py`，再运行 `python3 assets/pixel/verify.py`。本机可用 bundled Python；不需要在线生成或 API key。构建只做已有生成原稿的裁切、最近邻缩放、固定色板导出、硬透明处理与图集打包，不生成替代美术。`source/`、`preview/` 带 `.gdignore`，不参与游戏资源导入。
