@@ -3,6 +3,7 @@ extends Control
 signal returned
 signal pause_requested
 signal save_requested
+signal action_events(events: Array)
 var session
 var state: Dictionary = {}
 var keys: Dictionary = {}
@@ -51,9 +52,8 @@ func _button(text: String, action: Callable) -> Button:
 
 func _layout():
 	if pause_button == null: return
-	var scale_factor = minf((size.x-24.0)/960.0,(size.y-180.0)/540.0)
-	scale_factor = maxf(0.5,floorf(scale_factor*2.0)/2.0)
-	field = Rect2(Vector2((size.x-960.0*scale_factor)/2.0,70),Vector2(960,540)*scale_factor)
+	var scale_factor = clampf(minf((size.x-24.0)/960.0,(size.y-160.0)/540.0),0.2,1.0)
+	field = Rect2(Vector2((size.x-960.0*scale_factor)/2.0,62),Vector2(960,540)*scale_factor)
 	pause_button.position = Vector2(size.x-350,12)
 	pause_button.size = Vector2(130,46)
 	save_button.position = Vector2(size.x-210,12)
@@ -71,12 +71,14 @@ func refresh():
 	if session != null:
 		var view: Dictionary = session.view()
 		state = view.get("expedition",{})
+		if pause_button != null: pause_button.text = "继续 / Esc" if view.get("paused",false) else "暂停 / Esc"
 	queue_redraw()
 
 func _command(kind: String, args: Dictionary = {}):
 	if session == null: return {}
 	serial += 1
 	var result: Dictionary = session.command(kind,args,session_prefix+"-"+str(serial))
+	if not result.get("events",[]).is_empty(): action_events.emit(result.events)
 	if not result.ok: message = result.message
 	for event in result.get("events",[]):
 		if event.type == "pickup_blocked": message = event.message
@@ -117,6 +119,7 @@ func _process(delta: float):
 	frame_ms -= elapsed
 	if elapsed > 0:
 		var result: Dictionary = session.advance(mini(elapsed,60000))
+		if not result.get("events",[]).is_empty(): action_events.emit(result.events)
 		for event in result.get("events",[]):
 			if event.type == "drop_collected": message = "采得月心菇" if event.item_id == "moonheart" else "采得星火菇"
 			elif event.type == "pickup_blocked": message = event.message
@@ -159,11 +162,12 @@ func _input(event: InputEvent):
 		keys[event.physical_keycode if event.physical_keycode != 0 else event.keycode] = event.pressed
 		if event.pressed and event.keycode == KEY_ESCAPE: release_inputs(); pause_requested.emit()
 	elif event is InputEventMouseMotion:
-		pointer = event.position
+		pointer = get_global_transform_with_canvas().affine_inverse()*event.position
 		mouse_aim = field.has_point(pointer)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var local = get_global_transform_with_canvas().affine_inverse()*event.position
 		if not event.pressed: mouse_cast = false
-		elif field.has_point(event.position): mouse_cast = true; mouse_aim = true; pointer = event.position
+		elif field.has_point(local): mouse_cast = true; mouse_aim = true; pointer = local
 	elif event is InputEventJoypadMotion:
 		var amount = event.axis_value if absf(event.axis_value) >= 0.2 else 0.0
 		if event.axis == JOY_AXIS_LEFT_X: sticks.move.x = amount
@@ -174,15 +178,16 @@ func _input(event: InputEvent):
 		joy_buttons[event.button_index] = event.pressed
 		if event.pressed and event.button_index == JOY_BUTTON_START: release_inputs(); pause_requested.emit()
 	elif event is InputEventScreenTouch:
+		var local = get_global_transform_with_canvas().affine_inverse()*event.position
 		if not event.pressed: touches.erase(event.index)
 		else:
 			var centers = _centers()
 			for kind in ["skill","cast","dodge","move","aim"]:
-				if event.position.distance_to(centers[kind]) <= (62.0 if kind in ["move","aim"] else 31.0):
-					touches[event.index] = {"kind":kind,"origin":centers[kind],"position":event.position}
+				if local.distance_to(centers[kind]) <= (62.0 if kind in ["move","aim"] else 31.0):
+					touches[event.index] = {"kind":kind,"origin":centers[kind],"position":local}
 					mouse_aim = false
 					break
-	elif event is InputEventScreenDrag and touches.has(event.index): touches[event.index].position = event.position
+	elif event is InputEventScreenDrag and touches.has(event.index): touches[event.index].position = get_global_transform_with_canvas().affine_inverse()*event.position
 	queue_redraw()
 
 func _texture(id: String, background: bool = false) -> Texture2D:
@@ -277,8 +282,9 @@ func _draw():
 		draw_string(font,center+Vector2(-28,6),label,HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("f6e6c5"))
 		for data in touches.values():
 			if data.kind == kind and kind in ["move","aim"]: draw_circle(center+(data.position-data.origin).limit_length(45),14,Color("b0d6d5"))
-	draw_string(font,Vector2(185,size.y-119),"WASD / 左摇杆移动 · 方向键 / 右摇杆瞄准",HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("e6ddbd"))
+	var hint = "WASD / 左摇杆移动 · 方向键 / 右摇杆瞄准" if size.x >= 1100 else "WASD移动 · 方向键瞄准 / 双摇杆"
+	draw_string(font,Vector2(185,size.y-89),hint,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("e6ddbd"))
 	var cooldown = ""
 	if state.has("player"): cooldown = "闪避 %.1fs · 风咒 %.1fs" % [state.player.dodge_cooldown_ms/1000.0,state.player.skill_cooldown_ms/1000.0]
-	draw_string(font,Vector2(185,size.y-92),cooldown,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("d7efd8"))
-	draw_string(font,Vector2(185,size.y-63),message,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("ffe1a0"))
+	draw_string(font,Vector2(185,size.y-63),cooldown,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("d7efd8"))
+	draw_string(font,Vector2(185,size.y-37),message,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("ffe1a0"))

@@ -12,6 +12,8 @@ var modes: Array = []
 var pressed: Dictionary = {}
 var active_touches: Dictionary = {}
 var save_count = 0
+var real_core = false
+var observed_events: Array = []
 
 class ActionAdapter extends RefCounted:
 	var state: Dictionary
@@ -29,12 +31,17 @@ class ActionAdapter extends RefCounted:
 		events.append_array(result.events)
 		if result.returned: phase = "shopping"
 		return result
+	func set_paused(value: bool) -> Dictionary:
+		paused = value
+		if not paused: Model.clear_input(state)
+		return {"ok":true}
 
 func expect(ok: bool, message: String):
 	checks += 1
 	if not ok: failures.append(message); push_error(message)
 
 func _initialize():
+	real_core = "--real-core" in OS.get_cmdline_user_args()
 	for i in range(OS.get_cmdline_user_args().size()-1):
 		if OS.get_cmdline_user_args()[i] == "--output": output = OS.get_cmdline_user_args()[i+1]
 	DirAccess.make_dir_recursive_absolute(output)
@@ -120,40 +127,73 @@ func run():
 	root.size = Vector2i(1280,800)
 	Engine.time_scale = 6.0
 	for mode in ["keyboard","touch","gamepad"]:
-		adapter = ActionAdapter.new()
+		if real_core:
+			var core = load("res://game/core/game_session.gd")
+			var setup = load("res://tests/expedition/prototype_cases.gd").new()
+			setup.factory = func(seed_value): return core.new(seed_value)
+			setup.root = output+"/normal-setup-"+mode
+			DirAccess.make_dir_recursive_absolute(setup.root)
+			var probe = core.new(1)
+			if probe.snapshot().get("version",0) != 2:
+				expect(false,"--real-core requires actual v2 integration")
+				quit(1); return
+			adapter = setup.growth(23,3).game
+			expect(setup.failures.is_empty(),"real-session fixture earned growth through normal commands "+mode)
+			expect(adapter.command("start_expedition").ok,"real third-day expedition started")
+		else: adapter = ActionAdapter.new()
+		observed_events = []
 		panel = ExpeditionScene.instantiate()
 		root.add_child(panel)
 		panel.bind_session(adapter)
-		panel.pause_requested.connect(func(): adapter.paused = not adapter.paused; if not adapter.paused: Model.clear_input(adapter.state))
-		panel.save_requested.connect(func(): save_count += 1)
+		panel.action_events.connect(func(events): observed_events.append_array(events))
+		panel.pause_requested.connect(func(): adapter.set_paused(not adapter.view().paused))
+		panel.save_requested.connect(func():
+			save_count += 1
+			if real_core: expect(adapter.save_to(output+"/"+mode+"-actual-session.json").ok,"actual GUI save request writes full session "+mode)
+		)
 		await process_frame
 		# Every mode actually holds and releases all three action buttons.
 		inject(mode,{"move_x":1.0,"move_y":0.0,"aim_x":1.0,"aim_y":0.0,"cast":true,"dodge":true,"skill":true})
 		await process_frame
 		await process_frame
+		inject(mode,{"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false})
+		await process_frame
+		var released: Dictionary = panel.current_input()
+		expect(released.move_x == 0.0 and released.move_y == 0.0 and not released.cast and not released.dodge and not released.skill,"actual release clears held controls "+mode)
 		await click(panel.pause_button.position+panel.pause_button.size/2.0)
-		expect(adapter.paused,"actual GUI click pauses "+mode)
-		var before = adapter.state.duplicate(true)
+		expect(adapter.view().paused,"actual GUI click pauses "+mode)
+		var before = adapter.view().expedition.duplicate(true)
 		await create_timer(0.2,true,false,true).timeout
-		expect(before == adapter.state,"actual wait freezes action simulation "+mode)
+		expect(before == adapter.view().expedition,"actual wait freezes action simulation "+mode)
+		var saved_before = save_count
 		await click(panel.save_button.position+panel.save_button.size/2.0)
-		expect(save_count > 0,"actual GUI click routes save request "+mode)
+		expect(save_count == saved_before+1,"actual GUI click routes save request "+mode)
+		if real_core:
+			var restored = load("res://game/core/game_session.gd").new(1)
+			expect(restored.load_from(output+"/"+mode+"-actual-session.json").ok,"real scene save reloads into fresh session "+mode)
+			var before_restore: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(output+"/"+mode+"-actual-session.json"))
+			var restored_state: Dictionary = restored.snapshot()
+			expect(JSON.parse_string(JSON.stringify(before_restore,"",true,true)) == JSON.parse_string(JSON.stringify(restored_state,"",true,true)),"real saved full session restores exactly while paused "+mode)
+			adapter = restored
+			panel.bind_session(adapter)
 		await screenshot(mode+"-paused")
 		await click(panel.pause_button.position+panel.pause_button.size/2.0)
 		pressed.clear(); active_touches.clear()
 		var frames = 0
 		var captured = false
-		while adapter.phase == "expedition" and frames < 4000:
+		while adapter.view().phase == "expedition" and frames < 4000:
 			frames += 1
-			inject(mode,Driver.next_input(adapter.state))
+			inject(mode,Driver.next_input(adapter.view().expedition))
 			await process_frame
 			if frames > 40 and not captured:
 				await screenshot(mode+"-combat")
 				captured = true
-		expect(adapter.state.return_reason == "completed","InputEvent path defeats and collects through actual panel "+mode+": "+adapter.state.return_reason)
+		var final_state: Dictionary = adapter.view().expedition
+		expect(final_state.return_reason == "completed","InputEvent path defeats and collects through actual panel "+mode+": "+final_state.return_reason)
 		for type in ["cast","dodge","skill","hit","enemy_defeated","drop_collected"]:
-			expect(adapter.events.any(func(e): return e.type == type),"actual "+mode+" event "+type)
-		modes.append({"mode":mode,"simulated_input":true,"fixture":"isolated action model; not core progression or full P14","frames":frames,"state":adapter.state,"events":adapter.events})
+			expect(observed_events.any(func(e): return e.type == type),"actual "+mode+" event "+type)
+		if real_core: expect(adapter.validate_snapshot(adapter.snapshot()).is_empty(),"real session inventory and complete state validate after UI combat "+mode)
+		modes.append({"mode":mode,"simulated_input":true,"fixture":"real session, normal command setup" if real_core else "isolated model adapter","frames":frames,"state":final_state,"events":observed_events})
 		panel.release_inputs()
 		panel.queue_free()
 		await process_frame
@@ -163,6 +203,11 @@ func run():
 	await process_frame
 	await screenshot("narrow-960x640")
 	var file = FileAccess.open(output+"/runtime-inputs.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify({"schema_version":1,"checks":checks,"failures":failures,"modes":modes,"claims":"Isolated real-rendered scene and InputEvent adapter paths only. No physical controller/iOS/full core integration claim."},"\t")); file.close()
+	var sources = {}
+	for path in ["game/expedition/expedition_model.gd","game/expedition/expedition_panel.gd","game/core/game_session.gd","game/core/catalog.gd","assets/pixel/manifest.json"]:
+		if FileAccess.file_exists("res://"+path): sources[path] = FileAccess.get_sha256("res://"+path)
+	file.store_string(JSON.stringify({"schema_version":1,"checks":checks,"failures":failures,"modes":modes,"real_core":real_core,
+		"engine":Engine.get_version_info(),"source_sha256":sources,"desktop_size":{"width":1280,"height":800},"narrow_size":{"width":960,"height":640},
+		"claims":"Real-rendered action scene and InputEvent paths. Normal command setup is not a full restaurant UI/P14 claim; no physical controller/iOS claim."},"\t")); file.close()
 	print("E01 rendered InputEvent checks: ",checks," failures: ",failures.size())
 	quit(1 if not failures.is_empty() else 0)

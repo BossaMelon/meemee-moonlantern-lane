@@ -78,14 +78,51 @@ func resume_compare(g, tag: String):
 	act(g,"expedition_input",input)
 	act(copy,"expedition_input",input)
 	var a: Dictionary = g.advance(137)
-	var b: Dictionary = copy.advance(137)
-	expect(a == b and _without_requests(g.snapshot()) == _without_requests(copy.snapshot()),"continued branch equals saved branch "+tag)
+	var events: Array = []
+	for amount in [17,33,87]: events.append_array(copy.advance(amount).events)
+	expect(a.events == events and _without_requests(g.snapshot()) == _without_requests(copy.snapshot()),"continued branch equals saved branch across frame partitions "+tag)
 	expect(before.expedition.remaining_ms > g.snapshot().expedition.remaining_ms,"comparison actually advances simulation")
 
 func _without_requests(s: Dictionary) -> Dictionary:
 	var out = s.duplicate(true)
 	out.erase("requests")
-	return out
+	# JSON has one numeric type; compare both branches in that representation without
+	# truncating fractional coordinates or dropping any simulation/economy fields.
+	return JSON.parse_string(JSON.stringify(out,"",true,true))
+
+func food_branches(g, seed_value: int):
+	# Both branches originate from the exact pie earned/kept by this continuous save.
+	var path = root+"/food-choice-%d.json" % seed_value
+	expect(g.save_to(path).ok,"save actual earned pie choice")
+	var sold = factory.call(1)
+	expect(sold.load_from(path).ok,"sale branch loads same pie")
+	var cash = sold.view().cash
+	act(sold,"finish_shopping"); display(sold,"floating_pie",1); act(sold,"open_shop")
+	var guard = 0
+	while sold.view().cash == cash and sold.view().phase == "trading" and guard < 15:
+		guard += 1
+		if not sold.view().pending.is_empty(): act(sold,"decline",{"order_id":sold.view().pending.id})
+		else: sold.advance(1000)
+	expect(sold.view().cash > cash and not sold.view().next_expedition_shield,"selling this pie earns money without shield")
+	var eaten = factory.call(1)
+	expect(eaten.load_from(path).ok,"food branch loads same pie")
+	var pies = count(eaten,"floating_pie")
+	act(eaten,"consume",{"item_id":"floating_pie","quantity":1})
+	expect(count(eaten,"floating_pie") == pies-1 and eaten.view().cash == cash,"eating consumes exactly one real pie with no sale income")
+	reject(eaten,"consume",{"item_id":"floating_pie","quantity":1})
+	act(eaten,"start_expedition")
+	expect(eaten.view().expedition.player.shield and not eaten.view().next_expedition_shield,"pending shield transfers once into real action state")
+	var events: Array = []
+	guard = 0
+	while eaten.view().phase == "expedition" and eaten.view().expedition.player.hp == 3 and guard < 3600:
+		guard += 1
+		events.append_array(eaten.advance(50).events)
+	var shield_hits = events.filter(func(e): return e.type == "shield_absorbed").size()
+	var actual_damage = events.filter(func(e): return e.type == "hit" and e.entity_id == "player" and e.get("damage",0) == 1).size()
+	expect(shield_hits == 1 and actual_damage >= 1,"actual consumed food blocks first attack, later attack still injures")
+	if eaten.view().phase == "expedition": act(eaten,"leave_expedition")
+	expect(not eaten.view().next_expedition_shield and count(eaten,"floating_pie") == pies-1,"leaving never refunds consumed food or shield")
+	traces.append({"scenario":"actual-food-sale-or-shield","seed":seed_value,"sale_cash_delta":sold.view().cash-cash,"food_cash_delta":eaten.view().cash-cash,"attack_events":events,"eaten_final":eaten.snapshot()})
 
 func combat(g, seed_value: int, day: int) -> Dictionary:
 	act(g,"start_expedition")
@@ -105,6 +142,11 @@ func combat(g, seed_value: int, day: int) -> Dictionary:
 		events.append_array(step.events)
 		trace.append({"tick":state.tick,"input":input,"advance_ms":50,"events":step.events})
 		if not resumed and guard == 8 and g.view().phase == "expedition":
+			expect(g.set_paused(true).ok,"pause real session during action")
+			var paused = g.snapshot()
+			g.advance(60000)
+			expect(g.snapshot() == paused,"paused session keeps action, inventory and timing unchanged")
+			expect(g.set_paused(false).ok,"resume clears held controls")
 			resume_compare(g,"seed-%d-day-%d" % [seed_value,day])
 			resumed = true
 	var end: Dictionary = g.snapshot().expedition
@@ -120,7 +162,7 @@ func combat(g, seed_value: int, day: int) -> Dictionary:
 	traces.append({"scenario":"actual-spatial-combat","seed":seed_value,"day":day,"actions":trace,"final":end})
 	return {"events":events,"end":end,"start":start}
 
-func growth(seed_value: int) -> Dictionary:
+func growth(seed_value: int, stop_before_day: int = 0) -> Dictionary:
 	var g = factory.call(seed_value)
 	var report = {"seed":seed_value,"days":[],"failures":[]}
 	expect(g.view().progression.owned_weapons == ["bolt_wand"],"starts with basic weapon only")
@@ -131,11 +173,13 @@ func growth(seed_value: int) -> Dictionary:
 			expect("fan_wand" in g.view().progression.owned_weapons and "gust" in g.view().progression.skills,"paid kit unlocks on next day")
 			act(g,"equip_weapon",{"weapon_id":"fan_wand"})
 		if day == 3:
+			food_branches(g,seed_value)
 			var cash = g.view().cash
 			var pies = count(g,"floating_pie")
 			act(g,"consume",{"item_id":"floating_pie","quantity":1})
 			expect(count(g,"floating_pie") == pies-1 and g.view().cash == cash and g.view().next_expedition_shield,"food has real opportunity cost")
 			reject(g,"consume",{"item_id":"floating_pie","quantity":1})
+		if day == stop_before_day: return {"game":g}
 		var fight = combat(g,seed_value,day)
 		if day == 1:
 			ensure_stock(g,"flour",5); ensure_stock(g,"pumpkin",8); ensure_stock(g,"cream",3)
@@ -182,6 +226,21 @@ func _case(id: String, test: Callable):
 	test.call()
 	cases.append({"id":id,"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures.duplicate()})
 
+func purchase_boundaries():
+	for source in ["none","recover","recycle"]:
+		var g = factory.call(7)
+		if source == "recover": act(g,"recover")
+		elif source == "recycle": act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
+		act(g,"finish_shopping"); trade(g)
+		expect(g.view().cash >= 24,"non-dish funds could afford kit but do not qualify: "+source)
+		reject(g,"upgrade",{"upgrade_id":"field_kit"})
+	var poor = factory.call(7)
+	act(poor,"buy",{"item_id":"flour","quantity":12})
+	act(poor,"buy",{"item_id":"pumpkin","quantity":12})
+	act(poor,"finish_shopping"); craft(poor,"floating_pie",2); display(poor,"floating_pie",2); trade(poor)
+	expect(poor.view().cash == 20 and poor.snapshot().sales.filter(func(s): return s.revenue > 0).size() == 2,"sales threshold can be met while cash remains insufficient")
+	reject(poor,"upgrade",{"upgrade_id":"field_kit"})
+
 func run(session_factory: Callable, output_dir: String) -> Dictionary:
 	factory = session_factory
 	root = output_dir+"/expedition"
@@ -198,6 +257,7 @@ func run(session_factory: Callable, output_dir: String) -> Dictionary:
 		for seed_value in seeds: simulations.append(growth(seed_value))
 	)
 	_case("P17",func():
+		purchase_boundaries()
 		for report in simulations:
 			expect(report.days.size() == 3,"one continuous session spans three days")
 			var first: Dictionary = report.days[0].combat.start
