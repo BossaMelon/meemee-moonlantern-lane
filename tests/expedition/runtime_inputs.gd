@@ -270,6 +270,11 @@ func check_save_quit():
 		expect(counts.save_quit == before+1,"actual "+mode+" activates save-and-quit once")
 		expect(counts.save == 0,"save-and-quit remains distinct from save "+mode)
 		expect(counts.clean,"device and simulation holds clear before signal "+mode)
+		var frozen: Dictionary = adapter.view().expedition.duplicate(true)
+		key_event(KEY_D,true); await process_frame; await process_frame
+		expect(frozen == adapter.view().expedition,"save-and-quit suspends further session changes "+mode)
+		panel.cancel_save_quit()
+		key_event(KEY_D,false)
 	for button in [panel.pause_button,panel.save_button,panel.save_quit_button,panel.return_button]:
 		expect(Rect2(Vector2.ZERO,Vector2(844,390)).encloses(button.get_global_rect()),"toolbar target fits 844x390: "+button.text)
 		expect(button.size.y >= 44.0,"touch target remains >=44px")

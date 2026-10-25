@@ -18,6 +18,8 @@
 
 场景入口为 `scenes/expedition/expedition.tscn`，根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`；信号 `returned`、`pause_requested`、`save_requested`、`save_quit_requested`、`action_events(events:Array)`。主 UI 仅在 phase=expedition 显示该面板并调用 bind_session；面板负责 expedition_input 和 advance，主 UI 在此期间不得再推进同一会话，避免双倍速度。暂停/保存由信号交回主 UI；场景不持有经济副本。恢复或重绑 session 后由主 UI 调用 release_inputs 清除设备侧保持状态；核心也应清其模拟输入。坐标事件会转换为面板局部坐标，允许嵌入带偏移的容器。
 
-顶部保留独立「保存」「保存退出」「返回饭店」。「保存退出」发信号前先 release_inputs，不撤退、不自行保存或退出进程；P02 应将 `save_quit_requested` 接到主 UI `_save.bind(true)`，只在完整保存成功后关闭，失败保持当前动作进度。`save_requested` 继续接 `_save.bind(false)`。返回饭店的 leave_expedition 语义不变。四个工具按钮支持焦点左右/Tab 循环，面板焦点可用手柄上/右进入工具栏；缺少时在运行时补 `ui_accept` 的 JOY_BUTTON_A，保留已有绑定、不写 project 设置。继续战斗时宿主应把焦点还给面板，避免施法 A 被已聚焦工具按钮当作确认。
+顶部保留独立「保存」「保存退出」「返回饭店」。「保存退出」发信号前先 release_inputs，然后冻结面板推进与输入；不撤退、不自行保存或退出进程。P02 应将 `save_quit_requested` 接到主 UI `_save.bind(true)`，只在完整保存成功后关闭；**保存失败时由 P02 主 UI 暂停并显示错误，再调用 `battle_panel.cancel_save_quit()` 解除冻结；取消退出时也必须调用此方法**，方法不回滚或改写核心进度。成功保存后的 refresh/release/tree_exiting 不会追加会话请求。`save_requested` 继续接 `_save.bind(false)`。返回饭店的 leave_expedition 语义不变。
+
+`release_inputs()` 总是清设备缓冲；只在核心实际保持输入非零时提交一次完整零输入，重复调用和绑定已清零的读档不会增加 requests。比较逐字段数值/布尔，不因 JSON int/float 表示不同再发请求；不删请求历史、不忽略 requests 验证。暂停后工具事件归 GUI，不进入战斗保持缓冲；playing 的移动/瞄准/施法/闪避/技能事件会标 handled，包含方向键/Space 和手柄摇杆/A 的按下与抬起，不能穿透激活工具按钮。键鼠/触摸工具按钮本身仍走真实 GUI；暂停时手柄可从面板焦点上/右进入四按钮循环并确认。缺少时在运行时补 `ui_accept` 的 JOY_BUTTON_A，保留已有绑定、不写 project 设置。
 
 E01 只改 game/expedition/**、scenes/expedition/**、tests/expedition/**。P01 在 tests/run.gd 接入 `tests/expedition/prototype_cases.gd` 的 `run(session_factory, output_dir)`，实际返回 P16/P17 case 和模拟轨迹；不得在模块缺失时写假通过。模型独立检查入口另见 tests/expedition/run_model.gd。

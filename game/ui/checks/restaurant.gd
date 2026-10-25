@@ -36,13 +36,20 @@ func inventory(id: String) -> Dictionary:
 		if item.item_id==id: return item
 	return {}
 
-func fresh(size: Vector2i):
+func fresh(size: Vector2i, restore_existing: bool = false):
 	if is_instance_valid(ui): ui.free()
 	root.size = size
 	ui = Main.instantiate()
 	expect(ui.has_method("get_action_control"),"main script loads")
 	if not ui.has_method("get_action_control"): return
 	ui.save_path = folder+"/"+mode+"-restaurant-save.json"
+	# A new route needs a new fixture now that the product restores automatically.
+	# Keep previous test files as recovery evidence; restart checks opt into reuse.
+	if not restore_existing:
+		var previous_suffix=".prior-"+str(Time.get_ticks_usec())
+		for suffix in ["",".bak"]:
+			if FileAccess.file_exists(ui.save_path+suffix):
+				expect(DirAccess.rename_absolute(ui.save_path+suffix,ui.save_path+suffix+previous_suffix)==OK,"preserve previous isolated test save")
 	root.add_child(ui)
 	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
 	await frames(6)
@@ -263,7 +270,7 @@ func route(value: String, size: Vector2i):
 			await activate("upgrade_supply_pass")
 			var before: Dictionary = ui.game.snapshot()
 			await activate("save")
-			await fresh(size)
+			await fresh(size,true)
 			await activate("load")
 			expect(JSON.parse_string(JSON.stringify(ui.game.snapshot()))==JSON.parse_string(JSON.stringify(before)),"scene recreation restores actual restaurant state")
 		if day==2: await activate("upgrade_shelf")

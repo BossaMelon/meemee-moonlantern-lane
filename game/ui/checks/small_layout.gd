@@ -19,9 +19,10 @@ func shell_checks():
 		expect(button.size.y>=48 and button.size.y<=56,"quantity strip stays compact: "+id+" "+str(button.size))
 
 func run():
-	selected_routes=PackedStringArray(["small-layout"])
+	var pad_mode="pad" in OS.get_cmdline_user_args()
+	selected_routes=PackedStringArray(["small-layout-pad" if pad_mode else "small-layout"])
 	for size in [Vector2i(1280,720),Vector2i(844,390)]:
-		mode="touch"
+		mode="pad" if pad_mode else "touch"
 		await fresh(size)
 		if not failures.is_empty(): return
 		shell_checks()
@@ -52,3 +53,6 @@ func run():
 	write_report()
 	print("SMALL LAYOUT checks ",checks," failures ",failures.size())
 	quit(0 if failures.is_empty() else 1)
+
+func screenshot(name: String):
+	await super.screenshot("pad-"+name if mode=="pad" else name)
