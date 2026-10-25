@@ -153,6 +153,11 @@ public static class W01Process {
 function Write-Json($Path, $Value) {
     [IO.File]::WriteAllText($Path, (ConvertTo-Json -InputObject $Value -Depth 100), $utf8)
 }
+function Read-Log($Path) {
+    $stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    $reader=[IO.StreamReader]::new($stream,$utf8)
+    try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+}
 function Assert-Archive($Path, [long]$Size, $Sha) {
     $file = Get-Item -LiteralPath $Path
     if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Archive must be a regular file.' }
@@ -167,18 +172,20 @@ function Invoke-Owned($Exe, [string[]]$Arguments, $Working, [int]$Seconds, $Labe
     $executions.Add($entry)
     Write-Json (Join-Path $ReportDirectory 'executions.json') $executions.ToArray()
     $result = [W01Process]::Run($Exe, $Arguments, $Working, $out, $err, $Seconds)
-    $text = [IO.File]::ReadAllText($out, $utf8) + [IO.File]::ReadAllText($err, $utf8)
-    if ($EngineLog) {
-        if (-not (Test-Path -LiteralPath $EngineLog -PathType Leaf)) { throw "Missing actual engine log: $Label" }
-        $text += [IO.File]::ReadAllText($EngineLog, $utf8)
-    }
-    $text = [regex]::Replace($text, '\x1b\[[0-?]*[ -/]*[@-~]', '')
-    $engineError = [regex]::IsMatch($text, '(?m)^\s*(?:SCRIPT ERROR|ERROR):')
-    $entry.process=$result; $entry.engine_error_logged=$engineError
+    $entry.process=$result
     Write-Json (Join-Path $ReportDirectory 'executions.json') $executions.ToArray()
     if (-not $result.AllOwnedProcessesExited) { throw "Owned job did not become empty: $Label" }
     if ($result.TimedOut) { throw "Owned command timeout: $Label" }
     if ($result.ExitCode -ne 0) { throw "Nonzero exit $($result.ExitCode): $Label" }
+    $text = (Read-Log $out) + (Read-Log $err)
+    if ($EngineLog) {
+        if (-not (Test-Path -LiteralPath $EngineLog -PathType Leaf)) { throw "Missing actual engine log: $Label" }
+        $text += Read-Log $EngineLog
+    }
+    $text = [regex]::Replace($text, '\x1b\[[0-?]*[ -/]*[@-~]', '')
+    $engineError = [regex]::IsMatch($text, '(?m)^\s*(?:SCRIPT ERROR|ERROR):')
+    $entry.engine_error_logged=$engineError
+    Write-Json (Join-Path $ReportDirectory 'executions.json') $executions.ToArray()
     if ($engineError) { throw "Engine/script error in output or log: $Label" }
     return $entry
 }
@@ -215,7 +222,7 @@ $summary = [ordered]@{schema_version=1; fixture_only=[bool]$SelfTest; windows_so
 try {
     $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
     $null = Invoke-Owned $python @('--version') $checkout 20 'python-version'
-    $summary.python = [IO.File]::ReadAllText((Join-Path $ReportDirectory 'python-version-stdout.log'), $utf8).Trim()
+    $summary.python = (Read-Log (Join-Path $ReportDirectory 'python-version-stdout.log')).Trim()
     $summary.os = [Runtime.InteropServices.RuntimeInformation]::OSDescription
     $summary.powershell = $PSVersionTable.PSVersion.ToString()
     if ($SelfTest) {
@@ -231,7 +238,7 @@ try {
         $null = Invoke-Owned $git @('-C',$fixtureRepo,'add','fixture.txt') $ownedRoot 20 'fixture-git-add'
         $null = Invoke-Owned $git @('-C',$fixtureRepo,'-c','user.name=W01 fixture','-c','user.email=w01@fixture.invalid','commit','--quiet','-m','fixture') $ownedRoot 20 'fixture-git-commit'
         $null = Invoke-Owned $git @('-C',$fixtureRepo,'rev-parse','HEAD') $ownedRoot 20 'fixture-git-sha'
-        $fixtureSha = [IO.File]::ReadAllText((Join-Path $ReportDirectory 'fixture-git-sha-stdout.log'), $utf8).Trim()
+        $fixtureSha = (Read-Log (Join-Path $ReportDirectory 'fixture-git-sha-stdout.log')).Trim()
         $null = Invoke-Owned $python @($sourceGuard,$fixtureRepo,$fixtureSha,(Join-Path $ownedRoot 'fixture-source.json')) $ownedRoot 20 'fixture-source-ok'
         [IO.File]::WriteAllText((Join-Path $fixtureRepo 'fixture.txt'), 'changed fixture', $utf8)
         $rejected=$false
@@ -297,7 +304,7 @@ exit 0
         $summary.engine_files=@{}
         Get-ChildItem -LiteralPath $engineDir -File -Recurse | ForEach-Object { $summary.engine_files[$_.FullName.Substring($engineDir.Length+1)]=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
         $null = Invoke-Owned $engine @('--version') $source 20 'engine-version'
-        $version=[IO.File]::ReadAllText((Join-Path $ReportDirectory 'engine-version-stdout.log'), $utf8).Trim()
+        $version=(Read-Log (Join-Path $ReportDirectory 'engine-version-stdout.log')).Trim()
         if ($version -notmatch '^4\.7\.2(?:\.|$)') { throw "Wrong effective engine version: $version" }
         $summary.engine_version=$version
         $summary.cold_cache_initially_absent=$true
