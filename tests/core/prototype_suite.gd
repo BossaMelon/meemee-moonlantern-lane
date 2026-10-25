@@ -286,6 +286,7 @@ func test_p04():
 	reject(poor,"fulfill",{"order_id":"absent","item_id":"lamp"})
 
 func test_p05():
+	test_noop_request_binding()
 	var g = Session.new(23)
 	act(g,"buy",{"item_id":"timber","quantity":4},"same-buy")
 	var before = g.snapshot()
@@ -430,6 +431,7 @@ func test_p08():
 	expect(huge_clone.snapshot().seed == "9223372036854775806","64bit seed remains exact through JSON")
 
 func test_p09():
+	test_cost_provenance()
 	var g = prepared(7)
 	var path = temp_root+"/damage.json"
 	expect(g.save_to(path).ok,"first valid primary and backup")
@@ -461,6 +463,68 @@ func test_p09():
 	expect(FileAccess.get_file_as_string(path+".bak") == backup_bytes,"unsupported version doesn't overwrite backup")
 	var malformed = g.snapshot(); malformed.erase("rng_state")
 	expect(not g.validate_snapshot(malformed).is_empty(),"missing save field rejected")
+
+func test_noop_request_binding():
+	var g = Session.new(1)
+	var ledger_before = g.snapshot().ledger.duplicate(true)
+	expect(g.command("pause",{"value":false},"noop-pause").ok,"successful no-op pause")
+	expect(g.snapshot().requests.has("noop-pause"),"successful no-op binds request id")
+	expect(g.snapshot().ledger == ledger_before,"no-op request adds no economic ledger entry")
+	var before = g.snapshot()
+	var conflict = g.command("recover",{},"noop-pause")
+	expect(not conflict.ok and conflict.code == "request_conflict","no-op id cannot be reused for a reward")
+	expect(g.snapshot() == before,"conflicting no-op request atomically rejected")
+	g = Session.new(1)
+	act(g,"finish_shopping")
+	act(g,"price",{"item_id":"pen","tier":"standard"},"price-initial")
+	ledger_before = g.snapshot().ledger.duplicate(true)
+	expect(g.command("price",{"item_id":"pen","tier":"standard"},"price-noop").ok,"successful no-op price")
+	expect(g.snapshot().ledger == ledger_before,"no-op price does not add a ledger row")
+	act(g,"price",{"item_id":"pen","tier":"premium"},"price-new")
+	before = g.snapshot()
+	expect(g.command("price",{"item_id":"pen","tier":"standard"},"price-noop").code == "duplicate","old no-op price retry stays duplicate")
+	expect(g.snapshot() == before and g.view().prices.pen == 14,"retry cannot restore an outdated price")
+	var clone = roundtrip(g,"noop-requests")
+	before = clone.snapshot()
+	expect(clone.command("price",{"item_id":"pen","tier":"standard"},"price-noop").code == "duplicate","no-op binding survives reload")
+	expect(clone.snapshot() == before,"reloaded no-op retry cannot mutate price")
+
+func test_cost_provenance():
+	var g = Session.new(7)
+	act(g,"buy",{"item_id":"ink","quantity":1})
+	var path = temp_root+"/cost-provenance.json"
+	expect(g.save_to(path).ok,"save cost-bearing item and valid backup")
+	var backup_bytes = FileAccess.get_file_as_string(path+".bak")
+	var bad = g.snapshot(); bad.items[0].cost = 9
+	expect(not g.validate_snapshot(bad).is_empty(),"isolated purchase cost corruption rejected")
+	var bad_bytes = JSON.stringify(bad)
+	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(bad_bytes); file.close()
+	var clone = Session.new(1)
+	var restored = clone.load_from(path)
+	expect(restored.ok and restored.code == "recovered_backup","bad cost restores known valid backup")
+	expect(clone.snapshot().items.size() == 1,"recovered backup contains the purchased item")
+	if clone.snapshot().items.size() != 1: return
+	expect(clone.snapshot().items[0].cost == 1,"restored cost equals actual purchase price")
+	expect(FileAccess.get_file_as_string(path) == bad_bytes and FileAccess.get_file_as_string(path+".bak") == backup_bytes,"cost recovery preserves damaged primary and backup")
+	act(clone,"recycle",{"item_id":"ink","quantity":1})
+	expect(clone.view().cash == 99,"recycled cost-one ink cannot mint four coins")
+	var h = Session.new(7)
+	act(h,"buy",{"item_id":"feather","quantity":2}); act(h,"buy",{"item_id":"ink","quantity":2})
+	act(h,"buy",{"item_id":"bell","quantity":1}); act(h,"finish_shopping")
+	act(h,"craft",{"recipe_id":"pen","quantity":2}); act(h,"install",{"uid":5})
+	act(h,"display",{"item_id":"pen","quantity":2}); act(h,"undisplay",{"item_id":"pen","quantity":1})
+	act(h,"uninstall",{"uid":5})
+	bad = h.snapshot()
+	for item in bad.items:
+		if item.item_id == "pen": item.cost += 1; break
+	expect(not h.validate_snapshot(bad).is_empty(),"crafted cost must equal actual consumed ingredients")
+	expect(h.validate_snapshot(h.snapshot()).is_empty(),"location changes preserve valid uid and cost provenance")
+	act(h,"open_shop"); finish_trade(h)
+	bad = h.snapshot()
+	for sale in bad.sales:
+		if sale.revenue > 0:
+			sale.cost += 1; bad.summaries[0].sold_cost += 1; bad.summaries[0].gross_profit -= 1; break
+	expect(not h.validate_snapshot(bad).is_empty(),"realised cost cannot diverge from the consumed item and ledger")
 
 func test_p10():
 	for seed_value in seeds:

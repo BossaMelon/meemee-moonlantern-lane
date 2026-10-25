@@ -287,7 +287,10 @@ func command(kind: String, args: Dictionary = {}, request_id: String = "") -> Di
 	var candidate = _s.duplicate(true)
 	var result = _apply(candidate,kind,args)
 	if not result.ok: return result
-	if candidate == _s: return result
+	if candidate == _s:
+		# A successful intent must remain idempotent even when it changed no state.
+		if not request_id.is_empty(): _s.requests[request_id] = fingerprint
+		return result
 	var movements = {}
 	for item_id in Catalog.ITEMS:
 		var change = _count(candidate,item_id) - _count(_s,item_id)
@@ -447,6 +450,78 @@ func validate_snapshot(data: Variant) -> String:
 		if not key is String or not s.requests[key] is String: return "非法请求记录"
 	if s.daily_recovery != (1 if s.commits.has("recover:%d" % int(s.day)) else 0): return "恢复次数不一致"
 	if s.phase == "settled" and not s.commits.has("settle:%d" % int(s.day)): return "日结提交记录缺失"
+	return _validate_cost_provenance(s)
+
+func _validate_cost_provenance(s: Dictionary) -> String:
+	# Reconstruct only item acquisition and movement from the existing v1 ledger.
+	# Catalog purchase prices and consumed instances determine costs; the stored
+	# current item/sale cost is never its own source of truth. No save migration.
+	var expected = {"items":[],"next_uid":1}
+	var sales = {}
+	for entry in s.ledger:
+		var args: Dictionary = entry.args
+		var kind: String = entry.kind
+		if kind in ["buy","craft","display","undisplay","recycle"]:
+			if not _whole(args.get("quantity"),1,80): return "成本流水数量非法"
+		var quantity = int(args.quantity) if kind in ["buy","craft","display","undisplay","recycle"] else 0
+		var id = args.get("item_id","")
+		match kind:
+			"buy":
+				if not Catalog.ITEMS.has(id): return "采购成本来源未知"
+				if entry.cash_delta != -int(Catalog.ITEMS[id].buy)*quantity: return "采购金额与成本来源不一致"
+				for n in range(quantity): _add(expected,id,int(Catalog.ITEMS[id].buy))
+			"craft":
+				var recipe = Catalog.RECIPES.get(args.get("recipe_id",""),{})
+				if recipe.is_empty(): return "制作成本来源未知"
+				for material in recipe.inputs:
+					if _count(expected,material,"bag") < int(recipe.inputs[material])*quantity: return "制作缺少真实材料来源"
+				for n in range(quantity):
+					var basis = 0
+					for material in recipe.inputs:
+						for item in _take(expected,material,int(recipe.inputs[material]),"bag"): basis += int(item.cost)
+					_add(expected,recipe.output,basis)
+			"display", "undisplay":
+				var source = "bag" if kind == "display" else "shelf"
+				if _count(expected,id,source) < quantity: return "移动物品来源不足"
+				for item in _take(expected,id,quantity,source):
+					item.location = "shelf" if kind == "display" else "bag"
+					expected.items.append(item)
+			"install", "uninstall":
+				var found = false
+				for item in expected.items:
+					if item.uid != args.get("uid",-1): continue
+					var source = "bag" if kind == "install" else "installed"
+					if item.item_id != "bell" or item.location != source: return "设备来源或位置不一致"
+					item.location = "installed" if kind == "install" else "bag"
+					found = true
+					break
+				if not found: return "设备实例来源缺失"
+			"recycle":
+				if _count(expected,id,"bag") < quantity: return "回收物品来源不足"
+				var refund = 0
+				for item in _take(expected,id,quantity,"bag"): refund += int(item.cost/2)
+				if entry.cash_delta != refund: return "回收金额与取得成本不一致"
+			"next_day":
+				for item in expected.items:
+					if item.location == "shelf": item.location = "bag"
+		for event in entry.events:
+			if not event is Dictionary: return "非法成交事件"
+			if not event.has("uid"): continue
+			if kind not in ["advance","fulfill"] or not event.has_all(["item_id","cost","order_id"]): return "成交成本来源缺失"
+			if not event.item_id is String or not event.order_id is String or not _whole(event.uid,1) or not _whole(event.cost): return "成交成本来源非法"
+			var consumed = _take(expected,event.item_id,1,"shelf")
+			if consumed.size() != 1 or consumed[0].uid != event.uid or consumed[0].cost != event.cost: return "成交成本与实际出库实例不一致"
+			if sales.has(event.order_id): return "成交实例重复出库"
+			sales[event.order_id] = event
+	if expected.next_uid != s.next_uid or expected.items.size() != s.items.size(): return "库存实例与取得来源不一致"
+	for i in range(expected.items.size()):
+		var wanted = expected.items[i]; var actual = s.items[i]
+		# JSON parses integral numbers as floats; compare each numeric value rather
+		# than Dictionary/Array identity, which also compares numeric Variant types.
+		if wanted.uid != actual.uid or wanted.item_id != actual.item_id or wanted.cost != actual.cost or wanted.location != actual.location:
+			return "库存成本或实例与取得来源不一致"
+	for sale in s.sales:
+		if sale.revenue > 0 and (not sales.has(sale.order_id) or sales[sale.order_id] != sale): return "实现毛利与出库成本记录不一致"
 	return ""
 
 func view() -> Dictionary:
