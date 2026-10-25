@@ -23,6 +23,7 @@ var batch = 1
 var request_serial = 0
 var request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
 var save_path = "user://moonlantern.json"
+var save_writes_allowed = false
 var messages: Array[String] = []
 var action_controls: Dictionary = {}
 var ordered_controls: Array[Button] = []
@@ -66,7 +67,15 @@ func _ready():
 	built = true
 	resized.connect(_resize_layout)
 	_resize_layout()
-	_notice("发现本地存档，可点恢复；恢复失败会保留当前经营。" if FileAccess.file_exists(save_path) else "欢迎回家，咩咩。读需求、备料理，也可以去巷后采些特别食材。")
+	if FileAccess.file_exists(save_path) or FileAccess.file_exists(save_path+".bak"):
+		var startup_load = _load_game()
+		if not save_writes_allowed:
+			game.set_paused(true)
+			_notice("存档无法恢复。原存档与备份已保留，退出不会覆盖；请修复文件后重试恢复。")
+			_show_file_error("RestoreFailure","存档未恢复，原文件已保留",str(startup_load.message)+"\n退出不会覆盖原存档或备份。")
+	else:
+		save_writes_allowed = true
+		_notice("欢迎回家，咩咩。读需求、备料理，也可以去巷后采些特别食材。")
 	_refresh()
 
 func _notification(what):
@@ -308,6 +317,8 @@ func _refresh():
 	for id in action_controls.keys():
 		if not is_instance_valid(action_controls[id]) or not action_controls[id].is_inside_tree(): action_controls.erase(id)
 	view = game.view()
+	action_controls["save"].disabled = not save_writes_allowed
+	action_controls["quit"].text = "保存退出" if save_writes_allowed else "退出（保留原档）"
 	var pending_id = str(view.pending.get("id",""))
 	if pending_id != last_pending and not pending_id.is_empty(): tab = "order"
 	if pending_id.is_empty() and tab == "order": tab = "journal"
@@ -678,6 +689,12 @@ func _toggle_pause():
 	_refresh()
 
 func _save(exit_when_saved: bool):
+	if not save_writes_allowed:
+		if exit_when_saved: get_tree().quit()
+		else:
+			_notice("存档尚未恢复，原文件与备份受到保护；请先重试恢复。")
+			_refresh()
+		return
 	# SceneTree.quit() completes at frame end. Freeze both session drivers before
 	# writing so the live state cannot advance beyond the successful save.
 	var main_was_processing=is_processing()
@@ -698,25 +715,30 @@ func _save(exit_when_saved: bool):
 	if not result.ok:
 		game.set_paused(true)
 		_refresh()
-		var error_dialog=AcceptDialog.new()
-		error_dialog.name="SaveFailure"
-		error_dialog.title="保存失败，当前进度仍保留"
-		error_dialog.dialog_text=str(result.message)
-		error_dialog.theme=theme
-		error_dialog.get_ok_button().custom_minimum_size=Vector2(96,48)
-		error_dialog.confirmed.connect(error_dialog.queue_free)
-		add_child(error_dialog)
-		error_dialog.popup_centered(Vector2i(mini(480,int(size.x)-24),180))
+		_show_file_error("SaveFailure","保存失败，当前进度仍保留",str(result.message))
 
-func _load_game():
+func _show_file_error(node_name: String, caption: String, detail: String):
+	var error_dialog=AcceptDialog.new()
+	error_dialog.name=node_name
+	error_dialog.title=caption
+	error_dialog.dialog_text=detail
+	error_dialog.theme=theme
+	error_dialog.get_ok_button().custom_minimum_size=Vector2(96,48)
+	error_dialog.confirmed.connect(error_dialog.queue_free)
+	add_child(error_dialog)
+	error_dialog.popup_centered(Vector2i(mini(480,int(size.x)-24),180))
+
+func _load_game() -> Dictionary:
 	_release_battle_inputs()
 	var result = game.load_from(save_path)
 	_notice(("恢复成功：" if result.ok else "恢复失败，当前进度未变：")+str(result.message))
 	if result.ok:
+		save_writes_allowed = true
 		request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
 		tab = {"shopping":"shopping","preparation":"craft","trading":"journal","closing":"journal","settled":"journal","expedition":"gear"}.get(game.view().phase,"journal")
 		last_pending = ""
 	_refresh()
+	return result
 
 func _sync_battle_route():
 	var active = view.phase=="expedition"

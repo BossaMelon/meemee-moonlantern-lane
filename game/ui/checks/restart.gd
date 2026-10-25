@@ -12,7 +12,7 @@ func run():
 	expect(FileAccess.file_exists(path),"previous engine process wrote a real restaurant save")
 	if not FileAccess.file_exists(path): return
 	var expected=JSON.parse_string(FileAccess.get_file_as_string(path))
-	await fresh(Vector2i(640,960) if "--portrait" in OS.get_cmdline_user_args() else Vector2i(1280,720))
+	await fresh(Vector2i(640,960) if "--portrait" in OS.get_cmdline_user_args() else Vector2i(1280,720),true)
 	if not failures.is_empty(): return
 	await activate("load")
 	var restored=JSON.parse_string(JSON.stringify(ui.game.snapshot(),"",true,true))
