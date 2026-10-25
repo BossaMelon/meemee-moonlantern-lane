@@ -71,6 +71,27 @@
 
 仅重建本组使用 `python3 assets/pixel/build.py --rain-only`。专项校验：`python3 assets/pixel/verify.py garden_stump sporecaster_idle sporecaster_windup sporecaster_release spore_cloud water_ripple`。检查覆盖生成来源、alpha、尺寸、共享/子集色板、图集、pivot及底座多边形每个覆盖像素确实可见；可见底座提示不是碰撞JSON。
 
+## 雨夜场景覆盖层与连续长桩
+
+本组只新增四个ID，冻结坐标依据E02 `rain-garden-two-routes` revision 1。来源与生成ID另见 `rain-scene-provenance.json`；`SOURCES.md`、旧背景及此前六件机制素材保持不变。
+
+| ID / manifest分组 | 实际PNG尺寸 | 接入位置 |
+|---|---|---|
+| `rain_ground_routes` / backgrounds | 960×540 | 左上`(0,0)`，1:1覆盖原960×540逻辑场；大部分透明 |
+| `rain_canal_shallow` / backgrounds | 340×120 | 左上`(340,335)`，1:1；完整不透明，水区正好到`(680,455)`的半开边界 |
+| `garden_root_log_50` / sprites | 70×125 | pivot`(35,77.5)`放在模型中心`(395,187.5)`；**scale=1** |
+| `garden_root_log_45` / sprites | 65×125 | pivot`(32.5,77.5)`放在模型中心`(727.5,262.5)`；**scale=1** |
+
+地面与水面经过480×270/170×60网格导出再nearest整数2倍，实际PNG已是逻辑尺寸，不再次放大。两者使用原菇圃32色；水面只用其中四种颜色，保留可见泥底与两处宽反光。地面路径边缘轻微自然变化，路线参考采样与可见土面距离不超过8个逻辑像素；路径不构成碰撞或唯一可通行区域。
+
+绘制顺序为旧 `mushroom-garden` → 两张新平面层 → 动态障碍/地面效果/角色的正确排序；三层使用一致的整体夜色调色。用覆盖层替换旧路径折线，用浅渠贴片替换旧矩形填色、亮边框及等距水纹。涉水涟漪仍由真实行为产生，贴片没有预烘焙可采物、怪物或障碍。岸线完全在水区以内，平坦可跨越；不新增桥、台阶或阻挡。
+
+长桩同源裁切导出；v1方向偏斜，仅保留来源，v2纵向连续。源图底部50像素的不齐根尖裁去，以保留连续接地边。`footprint.rect`分别为`[10,30,50,95]`、`[10,30,45,95]`，相对精灵左上角；完整覆盖区域的每个像素都可见。矩形是既有模型的对齐说明，不是新碰撞来源；`polygon`枚举半开矩形内的像素中心。使用模型中心与manifest pivot可准确还原现有矩形。长桩不能沿用E02角色默认2倍缩放，也不再重复叠放旧小桩。圆桩、短桩本轮未扩素材，E02移除其调试底盘前仍须单独核对可见根部/真实阻挡。
+
+重建：`python3 assets/pixel/build.py --rain-scene-only`，只写本组四PNG、新图集、对应manifest条目及新预览。专项编码检查：`python3 assets/pixel/verify.py rain_ground_routes rain_canal_shallow garden_root_log_50 garden_root_log_45`。对冻结地图的独立只读校验：`python3 assets/pixel/verify_rain_scene.py --map-source /private/tmp/e02-rain-runtime-native/source/rain_garden_map.gd`；先核实地图SHA，再校验水区、长桩、路线参考。换用不同地图版本会失败，不能把旧对齐证据套到新几何上。
+
+`rain-scene-native.png`为960×540原生合成；`rain-scene-scale.png`按冻结E02的角色2倍、长桩1倍展示比例。`rain-scene-layout.png`青线表示本组准确模型边界、粉线表示未修改的圆/短障碍参考、土色细线表示route事实源；这些标线不进入任何运行时资产。`rain-scene-logs-native.png`与`rain-scene-logs-3x.png`检查两版长桩。所有文件位于 `preview/`，不是完整地图截图，未包含所有现有动态物件，不能证明交互、碰撞、遮挡、真实viewport或趣味通过。
+
 ## 重建与检查
 
 需要 Python 3 与 Pillow（本次实际 Python 3.12.14 / Pillow 12.3.0），运行 `python3 assets/pixel/build.py`，再运行 `python3 assets/pixel/verify.py`。本机可用 bundled Python；不需要在线生成或 API key。构建只做已有生成原稿的裁切、最近邻缩放、固定色板导出、硬透明处理与图集打包，不生成替代美术。`source/`、`preview/` 带 `.gdignore`，不参与游戏资源导入。
