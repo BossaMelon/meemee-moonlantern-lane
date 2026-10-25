@@ -16,6 +16,6 @@
 
 事件 `type`：cast/hit/dodge/skill/enemy_defeated/drop_collected/expedition_returned；另有 telegraph/blocked/shield_absorbed/pickup_blocked 供反馈。事件包含实际实体或掉落 ID、tick 和结果。伤害、碰撞、护盾、击败均由模拟产生，渲染不决定结果。
 
-场景入口为 `scenes/expedition/expedition.tscn`，根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`；信号 `returned`、`pause_requested`、`save_requested`。主 UI 仅在 phase=expedition 显示该面板并调用 bind_session；面板负责 expedition_input 和 advance，主 UI 在此期间不得再推进同一会话，避免双倍速度。暂停/保存由信号交回主 UI；场景不持有经济副本。
+场景入口为 `scenes/expedition/expedition.tscn`，根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`；信号 `returned`、`pause_requested`、`save_requested`、`action_events(events:Array)`。主 UI 仅在 phase=expedition 显示该面板并调用 bind_session；面板负责 expedition_input 和 advance，主 UI 在此期间不得再推进同一会话，避免双倍速度。暂停/保存由信号交回主 UI；场景不持有经济副本。恢复或重绑 session 后由主 UI 调用 release_inputs 清除设备侧保持状态；核心也应清其模拟输入。坐标事件会转换为面板局部坐标，允许嵌入带偏移的容器。
 
 E01 只改 game/expedition/**、scenes/expedition/**、tests/expedition/**。P01 在 tests/run.gd 接入 `tests/expedition/prototype_cases.gd` 的 `run(session_factory, output_dir)`，实际返回 P16/P17 case 和模拟轨迹；不得在模块缺失时写假通过。模型独立检查入口另见 tests/expedition/run_model.gd。
