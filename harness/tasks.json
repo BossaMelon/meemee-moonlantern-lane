@@ -270,6 +270,23 @@
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "service_tier": "default"
+    },
+    {
+      "id": "W01",
+      "owner": "engineering_delivery",
+      "allowed_paths": [
+        ".github/workflows/windows-validation.yml",
+        "tools/run_windows_gate.ps1",
+        "tools/README.md"
+      ],
+      "depends_on": [
+        "H03",
+        "P06"
+      ],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     }
   ],
   "coordination": {
