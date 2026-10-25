@@ -1,50 +1,66 @@
-# 核心公开 API（P01）
+# 料理核心公开 API（P01 / save v2）
 
-Godot 4.7.2，核心不依赖 Node/UI。使用 `const Session = preload("res://game/core/game_session.gd")`，`var game = Session.new(1)`。只有三日；第三日结算后 `finished=true`，玩家可保存退出。
+规则来自冻结 H02 `4d06f599b40663b3910a215f89b1bd1a26343b48` 的 docs/05-restaurant-prototype.md。Godot 4.7.2，单人离线；运行时无网络或 LLM。`const Session = preload("res://game/core/game_session.gd")`，`var game = Session.new(seed_value)`。
 
-- `view() -> Dictionary`：深拷贝。包含 day/phase/cash/paused/clock_ms、inventory（按SKU汇总+uid列表）、items、supply、recipes（材料/批量可用数/原因）、upgrades、customers_remaining、pending、prices、forecast、summary、available_commands、ledger。UI不能写回该字典。
-- `snapshot() -> Dictionary`：完整版本化存档副本。随机seed/state是十进制字符串。
-- `command(kind: String, args: Dictionary={}, request_id: String="") -> Dictionary`：返回 `{ok,code,message,events}`；失败经济及随机状态完全不变。UI每次用户提交传独立request_id；重发同一请求保持同ID。ID与参数绑定，换参数返回request_conflict。顾客/日结/恢复/跨日另有语义防重。
-- `advance(delta_ms: int) -> Dictionary`：营业每1000毫秒处理一位普通客；特殊需求等待玩家选择并冻结时钟。暂停也不推进。UI调用 `advance(roundi(delta*1000))`；不要求玩家手动逐笔收银。
-- `set_paused(value: bool) -> Dictionary`：暂停全部经营推进。
-- `save_to(path: String="user://moonlantern.json") -> Dictionary`、`load_from(path: String="user://moonlantern.json") -> Dictionary`：保存/恢复，`load_from`失败不改会话，备份恢复返回`recovered_backup`。坏主档不被load覆盖。测试使用临时绝对路径。
-- `validate_snapshot(data: Variant) -> String`：空串表示合法；不接受不支持版本、部分字段、非法经济或不一致账本。
+- `view() -> Dictionary`：给 UI 的深拷贝；UI 不写回。
+- `snapshot() -> Dictionary`：完整 v2 存档副本，包括经济、请求、任务、成长和动作模拟状态。
+- `command(kind:String,args:Dictionary={},request_id:String="") -> Dictionary`：`{ok,code,message,events}`。失败不改变经济、动作、随机或请求状态。每个成功意图都绑定 ID 与参数，包含成功空操作；同 ID 同参数返回 duplicate，同 ID 换参数返回 request_conflict。
+- `advance(delta_ms:int)`：0–60000 整数毫秒。营业每1000ms处理普通客，特殊单/暂停停时；探险转给 E01 的50ms固定步和余数。
+- `set_paused(value:bool)`：冻结推进，并清空动作保持输入；恢复后需重新按下。失焦可调用暂停，或在探险中提交空 expedition_input。
+- `save_to(path="user://moonlantern.json") / load_from(path=...)`：原子文件提交、有效备份；损坏主档恢复返回 recovered_backup 并保留原始文件。v1明确返回不支持版本，不迁移/翻译旧奇物进度。读档后仅清空动作保持输入。
+- `validate_snapshot(data) -> String`：空串为合法。核对经济整数、成本取得/消耗来源、任务与成长来源、动作模型和已领取掉落；坐标/方向/速度/距离保留浮点，时间/生命/UID等按schema恢复整数。JSON写出开启full_precision。
+- `action_trace() -> Array`：本次进程的命令/输入/动作推进记录深拷贝，供重放报告使用；不属于经济账本或持久状态。
 
-阶段：`shopping -> preparation -> trading -> closing -> settled`。`next_day` 从前两日settled进入下一日shopping；第三日结束。`finish_shopping`进入preparation；只有preparation可制作/陈列/装配；`open_shop`进入trading；客流完成自动进入closing；`settle`仅提交一次费用；升级在settled。
+## 阶段与命令
 
-命令和args：
+`shopping → preparation → trading → closing → settled`；日1/2的 next_day 继续，日3 settled 时 finished=true。采购可插入每日一次 `shopping → expedition → shopping`，可以跳过。
 
-|kind|args|说明|
+| kind | args | 条件/行为 |
 |---|---|---|
-|buy|`{item_id,quantity}`|shopping；稳定货源，日内库存明确|
-|finish_shopping|`{}`|转整备|
-|craft|`{recipe_id,quantity}`|基础pen/lamp/charm已知，默认批量|
-|display|`{item_id,quantity}`|库存移至货架；按商品种类占陈列槽|
-|undisplay|`{item_id,quantity}`|移回库存|
-|install / uninstall|`{uid}`|唯一设备bell，占装配槽；赋予pen/lamp防水标签|
-|price|`{item_id,tier}`|tier为friendly/standard/premium；整备阶段|
-|open_shop|`{}`|生成队列已在当天开始时固定；自动营业|
-|fulfill|`{order_id,item_id}`|trading且pending；从货架卖一件，校验必需效果和预算|
-|decline|`{order_id}`|跳过特殊需求，明确无成交原因|
-|settle|`{}`|closing；费用、账单、防重|
-|upgrade|`{upgrade_id}`|settled；shelf增加第3种陈列；supply_pass次日直购基础成品|
-|next_day|`{}`|前两日settled|
-|recover|`{}`|shopping，每日一次免费回收委托+12金币|
-|recycle|`{item_id,quantity}`|shopping/preparation；仅bag，按成本半价回收|
+| buy | `{item_id,quantity}` | 采购稳定食材或次日起替代厨具；供货、现金、总容量80校验 |
+| finish_shopping | `{}` | 进入备餐 |
+| craft | `{recipe_id,quantity}` | 备餐批量立即完成；按实际原料成本入库；炖锅需装配厨具 |
+| display / undisplay | `{item_id,quantity}` | 备餐时储藏↔菜单；只有已制成料理；按菜种占槽 |
+| install / uninstall | `{uid}` | 备餐时装配/拆卸唯一实际厨具实例 |
+| price | `{item_id,tier}` | 备餐；friendly/standard/premium |
+| open_shop | `{}` | 自动营业，UI调用advance，不要求逐客收银 |
+| fulfill / decline | `{order_id,item_id}` / `{order_id}` | 停时特殊需求；一份交付。海格扣菜/收款/两份草/任务完成原子提交 |
+| settle / next_day | `{}` | 日结费用一次；前两日继续，供货/次数不重复刷新 |
+| upgrade | `{upgrade_id}` | 日结购买supply_pass/shelf/field_kit，次日生效；field_kit需累计菜品收入24且付24 |
+| recover | `{}` | 采购每日一次洗锅+12，不算菜品收入 |
+| recycle | `{item_id,quantity}` | 采购/备餐仅储藏库存；厨具固定18，其余成本半价 |
+| consume | `{item_id:"floating_pie",quantity:1}` | 采购吃一份储藏饼，下一探险一次抵伤，不能叠加 |
+| equip_weapon | `{weapon_id}` | 采购且已拥有；bolt_wand/fan_wand |
+| start_expedition / leave_expedition | `{}` | 每日一次出发、主动撤回；开始立即扣次数并转移待用食物盾 |
+| expedition_input | `{move_x,move_y,aim_x,aim_y,cast,dodge,skill}` | 仅探险；有限[-1,1]轴、布尔；缺省轴0/动作false，未解锁技能原子拒绝 |
 
-8个SKU：feather羽毛、ink墨水、timber月木、moss雨光苔、pen自写笔、lamp暖月灯、charm防潮护符、bell避雨铃。基础配方3个。避雨铃保证首日可购、可直接出售或留用，出售后基础批量制作仍可用。雨天必需效果waterproof；护符本身或装配避雨铃后的笔/灯均可满足。第二日采购前forecast明确第三日雨天、来源与两种解法。金额整数，售价使用整数比例四舍五入；活动最多+25%，设备不直接加钱。普通客预算与用途先匹配，无法成交会记录原因。UI应显示实际返回message及events，不能只显示金币变化。
+12 SKU、5菜谱的稳定ID与效果见 catalog.gd：4基础食材、sparkcap/moonheart、stirring_cauldron、floating_pie/ember_soup/moon_stew/star_soup/comet_pie。初始60金币及成本0遗留坩埚；替代厨具购买30、售回18。普通客只接受meal，雨天同时需要warming与heat_hold。奖励/掉落取得成本0，不计营业收入。
 
+## UI view
 
-`view()` 字段结构（稳定外观）：
+保留 inventory/supply/recipes/upgrades/demand_board/pending/prices/forecast/sales/summary/available_commands、day/phase/cash/paused/clock_ms/finished。
 
-- `inventory: Array[{item_id:String,name:String,bag:int,shelf:int,installed:int,tags:Array[String],uids:Array[{uid:int,item_id:String,cost:int,location:String}]}]`，8种SKU都存在，空库存为0。
-- `items` 为原始实例数组副本；`supply: Array[{item_id,name,quantity:int,buy:int,available:bool,reason:String}]`。
-- `recipes: Array[{recipe_id,name,inputs:Dictionary[String,int],output:String,max_quantity:int,available:bool,reason:String}]`。
-- `prices: Dictionary[String,int]` 为当前实际标价；`tiers: Dictionary[String,String]` 未写入的SKU为standard。
-- `demand_board: Array[{id:String,special:bool,required:Array[String],budget:int,processed:bool}]` 展示今晚用途、人数及预算；`customers_remaining:int`。不要求玩家猜隐藏需求。
-- `pending: Dictionary`，无特殊需求为`{}`；否则为`{id,special,required,budget,text,options:Array[{item_id,name,price,available,reason}]}`。传`pending.id`作为fulfill/decline的order_id。options给每个SKU逐项失败原因。
-- `upgrades: Array[{upgrade_id,name,cost:int,description:String,owned:bool,available:bool}]`；`summary: {day,revenue,sold_cost,gross_profit,fee,cash}` 或`{}`。
-- `forecast: {day:3,weather:"rain",required:["waterproof"],text:String}`，首日就可读；`available_commands: Dictionary[String,{enabled:bool,reason:String}]`。
-- `sales: Array[{day,order_id,item_id,revenue,cost,reasons:Array[String],uid?}]` 含成交及未成交原因。`command/advance`的events只含此次变化，适合UI反馈。
+- inventory：所有12种SKU，含 item_id/name/kind/effect_id、bag/shelf/installed、tags、uids（uid/item_id/cost/location）。items仍为完整实例副本。
+- recipes：recipe_id/name/inputs/output/requires_device/effect_id/max_quantity/available/reason；已知菜谱默认批量。
+- supply：item_id/name/quantity/buy/available/reason。upgrades：upgrade_id/name/cost/description/owned/active/available/reason。
+- demand_board/pending/sales：保留订单ID、需求与预算，并携带character_id/quest_id/rewards；普通单为空值/空数组。pending.options只列菜品并提供available/reason/price；传pending.id交付或跳过。
+- quests.hagrid_patrol：not_offered/pending/completed/declined，海格订单为d2-hagrid-patrol。销售及crafted事件含真实item_id/effect_id，UI据此表现魔法行为。
+- progression：owned_weapons/equipped_weapon/skills/pending_unlocks。dish_income仅累计菜品销售；next_expedition_shield为待用食物盾。
+- forecast：第三日雨天所需warming+heat_hold、两条稳定材料/厨具/升级解法，并预告精英素材与庆功菜。
+- expedition：status/day/run_id/remaining_ms/attempts_remaining/player/enemies/projectiles/drops；未开始是idle和空实体数组，开始后由模型view提供。精确字段见E01 README。UI只读，不能写位置/掉落或直接发奖。
 
-UI可只遍历这些数组生成按钮。请求ID建议使用会话内递增序号加时间等唯一前缀；读取同一存档后须继续保证不撞旧ID（也可每次用户意图使用新的随机UUID，重试复用原值）。
+## E01 单一模型接入
+
+唯一模型为 `game/expedition/expedition_model.gd`（RefCounted静态接口）：
+
+`create(day,run_id,seed,weapon,skills,shield)`、`set_input(state,args)`、`clear_input(state)`、`advance(state,delta_ms,free_capacity,paused)`、`leave(state)`、`validate(state)`、`view(state)`。
+
+核心持有完整动作状态和每日次数。advance只复制动作状态，不复制整份经济历史；在同一个候选中按真实pickups `{drop_id,item_id,quantity:1,cost:0}` 预检容量与去重，发物品UID、记零成本取得，然后一次提交动作与经济。collected_drops跨日保留；回店不二次发奖。只有钱、物品取得/消耗进入ledger，移动/施法tick与空操作不生成经济行；动作重放另用trace。
+
+存档使用JSON完整浮点精度。读取时只把数值恰为整数的值恢复为模型使用的整数表示，不截断坐标、速度或方向的小数；恢复/暂停/撤退用模型的空输入命令清零保持键，保留50ms固定步余数。核心动作补充测试覆盖带小数弹体的精确恢复、拾取后读档、完整180秒合法移动及经济账本行数，并输出实际耗时和文件大小。
+
+主 UI 在 expedition 阶段交由 E01 面板推进，自己不能再次advance。E01场景 bind_session(session)，returned/pause_requested/save_requested 信号交回主UI；不设第二份经济状态。
+
+## Runner
+
+默认 `tests/run.gd -- --report ABS_REPORT` 执行料理P02–P13/P15，并加载真实 `tests/expedition/prototype_cases.gd.run(session_factory,output_dir)`，注入冻结夹具五种子、合入P16/P17实际报告。E01缺失会明确失败，不能拿核心13项冒充完整原型。`--case core`或单case仅供定向诊断；完整gate仍要求全部必需ID。

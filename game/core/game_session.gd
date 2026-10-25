@@ -332,12 +332,13 @@ func _apply(s: Dictionary, kind: String, a: Dictionary) -> Dictionary:
 		"leave_expedition":
 			if s.phase != "expedition": return _fail("wrong_phase","当前不在探险中")
 			var ended = _model.leave(s.expedition)
+			_model.set_input(s.expedition,{})
 			s.phase = "shopping"
 			return _result(true,"ok","已返回采购，保留已拾取食材",ended.events)
 		"pause":
 			if not a.get("value") is bool: return _fail("invalid_value","暂停值须为布尔")
 			s.paused = a.value
-			if not s.expedition.is_empty() and _expedition_model() != null: _model.clear_input(s.expedition)
+			if not s.expedition.is_empty() and _expedition_model() != null: _model.set_input(s.expedition,{})
 		_:
 			return _fail("unknown_command","未知操作")
 	return _result(true,"ok","操作完成")
@@ -402,7 +403,9 @@ func _advance(delta_ms: Variant) -> Dictionary:
 		for pickup in result.pickups:
 			_add(_s,pickup.item_id,0)
 			_s.collected_drops[pickup.drop_id] = {"item_id":pickup.item_id,"uid":_s.next_uid-1,"day":_s.day}
-		if not seen.is_empty(): _record_economy(_s,"pickup",{"drop_ids":seen.keys()},result.events,int(_s.cash),old_items)
+		if not seen.is_empty():
+			var economic_events = result.events.filter(func(event): return event.get("type","") == "drop_collected")
+			_record_economy(_s,"pickup",{"drop_ids":seen.keys()},economic_events,int(_s.cash),old_items)
 		if result.returned: _s.phase = "shopping"
 		_action_trace.append({"kind":"advance","delta_ms":int(delta_ms)})
 		return _result(true,"ok",result.message,result.events)
@@ -430,7 +433,7 @@ func load_from(path: String = "user://moonlantern.json") -> Dictionary:
 	var loaded = Store.load_state(path,validate_snapshot)
 	if loaded.ok:
 		_s = _normalize(loaded.state)
-		if not _s.expedition.is_empty() and _expedition_model() != null: _model.clear_input(_s.expedition)
+		if not _s.expedition.is_empty() and _expedition_model() != null: _model.set_input(_s.expedition,{})
 		_action_trace = []
 		loaded.erase("state")
 	return loaded
@@ -440,11 +443,26 @@ func _normalize(value: Variant) -> Variant:
 	# preserve all action coordinates, directions and velocities exactly.
 	var result = value.duplicate(true)
 	for key in result:
-		if key != "expedition": result[key] = _economy_integers(result[key])
+		result[key] = _action_numbers(result[key]) if key == "expedition" else _economy_integers(result[key])
 	return result
 
+func _action_numbers(value: Variant) -> Variant:
+	# The model canonicalizes exact whole values to int, including coordinates.
+	# Match that representation without rounding or truncating any fraction.
+	if value is int or value is float:
+		return int(value) if is_finite(float(value)) and floor(value) == value else value
+	if value is Array:
+		var out: Array = []
+		for entry in value: out.append(_action_numbers(entry))
+		return out
+	if value is Dictionary:
+		var out = {}
+		for key in value: out[key] = _action_numbers(value[key])
+		return out
+	return value
+
 func _economy_integers(value: Variant) -> Variant:
-	if value is float: return int(value) if floor(value) == value else value
+	if value is float: return int(value) if is_finite(value) and floor(value) == value else value
 	if value is Array:
 		var out: Array = []
 		for entry in value: out.append(_economy_integers(entry))
@@ -509,7 +527,6 @@ func validate_snapshot(data: Variant) -> String:
 	if progress.skills != (["gust"] if active_kit else []): return "技能取得来源不一致"
 	if progress.equipped_weapon not in progress.owned_weapons: return "未拥有的装备"
 	if progress.pending_unlocks != (["fan_wand","gust"] if "field_kit" in s.upgrades and not active_kit else []): return "成长待生效状态不一致"
-	if "field_kit" in s.upgrades and _dish_income(s) < 24: return "探索套装缺少营业收入"
 	for id in s.tiers:
 		if not Catalog.ITEMS.has(id) or Catalog.ITEMS[id].kind != "dish" or not Catalog.TIERS.has(s.tiers[id]): return "非法定价"
 	for id in s.supply:
@@ -557,6 +574,7 @@ func validate_snapshot(data: Variant) -> String:
 			if sale.day != 2 or sale.character_id != "hagrid" or sale.quest_id != "hagrid_patrol": return "海格任务成交身份错误"
 			quest_status = "completed" if sale.revenue > 0 else "declined"
 			if sale.rewards != ([{"item_id":"ember_herb","quantity":2}] if sale.revenue > 0 else []): return "海格奖励轨迹错误"
+	if "field_kit" in s.upgrades and _dish_income(s) < 24: return "探索套装缺少营业收入"
 	if s.pending.get("quest_id","") == "hagrid_patrol": quest_status = "pending"
 	if s.quests != {"hagrid_patrol":quest_status}: return "人物任务持久状态不一致"
 	for i in range(customer_count):
@@ -580,6 +598,7 @@ func validate_snapshot(data: Variant) -> String:
 		var moved = {}; var added_cost = 0; var removed_cost = 0
 		for item in entry.removed:
 			if not item is Dictionary or not item.has_all(["uid","item_id","cost"]): return "账本消耗实例缺失"
+			if not _whole(item.uid,1) or not Catalog.ITEMS.has(item.item_id) or not _whole(item.cost): return "账本消耗实例非法"
 			var key = str(int(item.uid))
 			if not live.has(key) or live[key].item_id != item.item_id or live[key].cost != item.cost: return "物品成本或消耗来源不一致"
 			live.erase(key); removed_cost += int(item.cost); moved[item.item_id] = moved.get(item.item_id,0)-1
@@ -629,16 +648,17 @@ func validate_snapshot(data: Variant) -> String:
 				paid_upgrades.append(id); expected_cash = -int(Catalog.UPGRADES[id].cost)
 			"settle": expected_cash = -mini(4,cash)
 			"pickup":
-				if not entry.args.has("drop_ids") or entry.args.drop_ids.size() != entry.created.size() or not entry.removed.is_empty(): return "拾取数量不一致"
+				if not entry.args.get("drop_ids") is Array or entry.args.drop_ids.size() != entry.created.size() or not entry.removed.is_empty(): return "拾取数量不一致"
 				for n in range(entry.created.size()):
 					var id = entry.args.drop_ids[n]; var item = entry.created[n]
-					if drops.has(id) or item.item_id not in ["sparkcap","moonheart"] or item.cost != 0: return "非法或重复拾取"
+					if not id is String or id.is_empty() or drops.has(id) or item.item_id not in ["sparkcap","moonheart"] or item.cost != 0: return "非法或重复拾取"
 					drops[id] = {"item_id":item.item_id,"uid":item.uid,"day":entry.day}
 			"advance", "fulfill":
 				var sold = {}; var reward_count = 0
 				for event in entry.events:
+					if not event is Dictionary or not _whole(event.get("revenue",0)): return "非法成交事件"
 					if event.get("revenue",0) <= 0: continue
-					if not sale_seen.has(event.order_id) or sale_seen[event.order_id] != event or ledger_sales.has(event.order_id): return "成交与账本事件不一致"
+					if not event.has("order_id") or not sale_seen.has(event.order_id) or sale_seen[event.order_id] != event or ledger_sales.has(event.order_id): return "成交与账本事件不一致"
 					ledger_sales[event.order_id] = true; expected_cash += int(event.revenue); sold[str(int(event.uid))] = event
 					if event.quest_id == "hagrid_patrol": reward_count += 2
 				if sold.size() != entry.removed.size() or entry.created.size() != reward_count: return "成交扣菜或任务奖励数量不一致"
@@ -665,7 +685,7 @@ func validate_snapshot(data: Variant) -> String:
 		if not key is String or not s.requests[key] is String: return "非法请求记录"
 	if s.daily_recovery != (1 if s.commits.has("recover:%d" % int(s.day)) else 0): return "恢复次数不一致"
 	for day in s.expedition_attempts:
-		if not day.is_valid_int() or int(day) < 1 or int(day) > s.day or s.expedition_attempts[day] != "d%s-expedition" % day: return "每日探险记录错误"
+		if not day is String or not day.is_valid_int() or int(day) < 1 or int(day) > s.day or s.expedition_attempts[day] != "d%s-expedition" % day: return "每日探险记录错误"
 	if not s.expedition.is_empty():
 		if _expedition_model() == null: return "动作模块尚未集成"
 		var error: String = _model.validate(s.expedition)
