@@ -276,7 +276,7 @@ func restore(name: String, check_explicit_button: bool = false):
 	compare_restored_snapshot(actual,expected,"automatic restore remains exact after rendered frames: "+name)
 	expect(save_file_hashes()==startup_files,"automatic restore leaves primary and backup bytes unchanged")
 	if ui.game.view().phase=="expedition":
-		expect(ui.game.snapshot().expedition.input=={"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false},"restored combat has no held input")
+		expect(json_equal(ui.game.snapshot().expedition.input,{"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}),"restored combat has no held input")
 	if not failures.is_empty(): return
 	automatic_restore_verified=true
 	# Explicit restore remains a separate regression on the visible restaurant
