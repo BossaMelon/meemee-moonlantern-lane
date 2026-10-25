@@ -3,26 +3,28 @@ extends Control
 const Session = preload("res://game/core/game_session.gd")
 const ShopCanvas = preload("res://game/ui/shop_canvas.gd")
 const Art = preload("res://game/ui/pixel_assets.gd")
+const RainPanels = preload("res://game/ui/rain_night/panels.gd")
+const PROFILE_ID = "rain-night-v1"
 const EXPEDITION_SCENE = "res://scenes/expedition/expedition.tscn"
 const CREAM = Color("493527")
 const MUTED = Color("84694d")
 const GOLD = Color("996036")
 const DARK = Color("211a1c")
 const PANEL = Color("eee0bd")
-const PHASES = {"shopping":"采购","preparation":"备餐","trading":"营业","closing":"收工","settled":"日结","expedition":"巷后探险"}
+const PHASES = {"shopping":"采购","preparation":"备餐","trading":"营业","intermission":"波间备餐","closing":"收工","settled":"日结","expedition":"巷后探险"}
 const EFFECTS = {"meal":"料理","quick":"快捷","portable":"外带","hearty":"正餐","warming":"暖身","heat_hold":"保温","trail_light":"照路","celebration":"庆功"}
 const MAGIC = {"floating_delivery":"餐盘漂浮送达赶路客","ember_aura":"暖焰随汤杯移动，外带仍保温","self_stir":"坩埚自行搅拌，热食持续冒汽","trail_spark":"星火光点随汤照亮返程路","comet_orbit":"彗尾环绕馅饼，回应庆功点单"}
 const TIER_NAMES = {"friendly":"亲民 90%","standard":"标准 100%","premium":"精品 115%"}
 const WEAPONS = {"bolt_wand":{"name":"直线魔杖","text":"远射程直线弹 · 适合拉开距离与寻找精英背面"},"fan_wand":{"name":"扇射魔杖","text":"短程三向覆盖 · 可配合推退与闪避重排出手机会"}}
 signal action_completed(kind, args, result)
-var game = Session.new(20261025)
+var game = Session.new(20261025,PROFILE_ID)
 var view: Dictionary = {}
 var tab = "shopping"
 var selected_item = "floating_pie"
 var batch = 1
 var request_serial = 0
 var request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
-var save_path = "user://moonlantern.json"
+var save_path = "user://profiles/rain-night-v1/moonlantern.json"
 var save_writes_allowed = false
 var messages: Array[String] = []
 var action_controls: Dictionary = {}
@@ -39,6 +41,7 @@ var feedback: Label
 var scroll: ScrollContainer
 var body: VBoxContainer
 var primary: Button
+var departure_status: Label
 var pause_button: Button
 var sheet_layer: Control
 var sheet_surface: PanelContainer
@@ -64,6 +67,7 @@ var refresh_serial = 0
 var clock_accumulator = 0.0
 var body_context = ""
 var last_pending = ""
+var rain_panels: Array=[]
 
 func _ready():
 	get_tree().auto_accept_quit = false
@@ -134,8 +138,27 @@ func _process(delta):
 	clock_accumulator = 0.0
 	if not result.get("events",[]).is_empty():
 		_record_events(result.events)
-		_refresh()
-	elif game.view().phase != view.phase: _refresh()
+	var fresh=game.view()
+	if _refresh_live_counter(fresh): return
+	if not result.get("events",[]).is_empty() or fresh.phase!=view.phase: _refresh()
+	else:
+		view=fresh
+		_update_status()
+		illustration.set_state(view)
+
+func _refresh_live_counter(fresh: Dictionary) -> bool:
+	if not sheet_open or tab!="counter" or rain_panels.is_empty(): return false
+	if view.phase!="trading" or fresh.phase!="trading" or fresh.paused or not fresh.pending.is_empty(): return false
+	if view.service.wave_id!=fresh.service.wave_id: return false
+	view=fresh
+	_update_status()
+	illustration.set_state(view)
+	rain_panels[0].present(view,"service")
+	feedback.text=messages.back() if not messages.is_empty() else ""
+	feedback.tooltip_text=feedback.text
+	sheet_feedback.text=feedback.text
+	_update_message_visibility()
+	return true
 
 func _style(color: Color, border: Color, width: int = 1, padding: int = 12) -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()
@@ -383,8 +406,17 @@ func _position_hotspots():
 
 func _update_status():
 	if view.is_empty(): return
-	var weather="雨" if int(view.day)==3 else "晴"
-	status.text="第%d日  ·  %s  ·  %s" % [view.day,weather,PHASES.get(view.phase,view.phase)]
+	var night: Dictionary=view.night
+	var weather="雨夜" if night.weather=="rain" else "晴夜"
+	var service: Dictionary=view.service
+	if view.phase in ["closing","settled","shopping","preparation","expedition"]:
+		status.text="%s%d · %s" % [weather,night.day,PHASES.get(view.phase,view.phase)]
+	elif view.phase=="intermission": status.text="%s%d · 波间停时 · 保温%d/3" % [weather,night.day,service.held_uids.size()]
+	else:
+		var waiting=0
+		for order in service.orders:
+			if order.status=="waiting": waiting+=1
+		status.text="%s%d · 波%d/3 · 等%d / 在途%d" % [weather,night.day,service.wave_index,waiting,service.reservations.size()]
 	cash_label.text="%d 金" % view.cash
 
 func _label(value: String, font_size: int = 18, color: Color = CREAM) -> Label:
@@ -414,7 +446,34 @@ func _button(id: String, value: String, callback: Callable, enabled: bool = true
 	return button
 
 func get_action_control(id: String) -> Control:
-	return action_controls.get(id)
+	if id=="departure_summary" and is_instance_valid(departure_status) and departure_status.is_inside_tree(): return departure_status
+	var direct=action_controls.get(id)
+	if is_instance_valid(direct) and direct.is_inside_tree(): return direct
+	for panel in rain_panels:
+		if is_instance_valid(panel):
+			var control=panel.get_action_control(id)
+			if is_instance_valid(control): return control
+	return null
+
+func _append_rain_panel(section: String):
+	var panel=RainPanels.new()
+	panel.wave_action_in_footer=section=="service"
+	body.add_child(panel)
+	rain_panels.append(panel)
+	panel.intent_requested.connect(_act)
+	panel.world_requested.connect(_return_to_world)
+	panel.content_changed.connect(_rain_content_changed,CONNECT_DEFERRED)
+	panel.present(view,section,selected_item)
+
+func _rain_content_changed():
+	_wire_focus()
+	call_deferred("_layout_sheet")
+
+func _return_to_world(action_id: String):
+	sheet_open=false
+	return_hotspot=action_id
+	_refresh()
+	call_deferred("_focus_world",action_id)
 
 func _icon(id: String, extent: int = 48) -> TextureRect:
 	var image = TextureRect.new()
@@ -438,6 +497,8 @@ func _refresh():
 	var focused=get_viewport().gui_get_focus_owner()
 	var focus_id=str(focused.get_meta("action_id","")) if focused else ""
 	var old_scroll=scroll.scroll_vertical
+	rain_panels.clear()
+	action_controls.erase("start_wave")
 	for child in body.get_children():
 		body.remove_child(child)
 		child.queue_free()
@@ -476,19 +537,27 @@ func _refresh():
 			"storage":
 				_build_stock("ingredient","篮子里的食材")
 				_build_stock("dish","备好料理与菜单")
+				_append_rain_panel("rare")
 			"order": _build_special()
 			"counter": _build_counter()
 			"pause": _build_pause_menu()
 			"journal":
 				if view.phase=="settled": _build_summary()
 				else: _build_journal()
-	primary.text={"shopping":"食材备齐，回厨房 →","preparation":"翻开门牌，开门营业 →","closing":"收工，记下今天的账 →","settled":"保存三日回忆" if view.finished else "休息，迎接第%d日 →" % (int(view.day)+1)}.get(view.phase,"")
-	primary.visible=sheet_open and ((tab=="shopping" and view.phase=="shopping") or (tab=="craft" and view.phase=="shopping") or (tab=="counter" and view.phase=="preparation") or (tab=="journal" and view.phase in ["closing","settled"]))
+	primary.text={"shopping":"食材备齐，回厨房 →","preparation":"翻开门牌，开始第一波 →","closing":"收工，记下今晚的账 →"}.get(view.phase,"")
+	primary.visible=sheet_open and ((tab=="shopping" and view.phase=="shopping") or (tab=="craft" and view.phase=="shopping") or (tab=="counter" and view.phase=="preparation") or (tab=="journal" and view.phase=="closing"))
 	primary.disabled=view.paused or not view.has("progression")
+	primary.set_meta("action_id","primary")
+	if sheet_open and tab=="counter" and view.phase=="intermission":
+		primary.text="备好后，迎接下一批 →"
+		primary.visible=true
+		primary.disabled=view.paused or not _enabled("start_wave") or not view.service.reservations.is_empty() or not view.service.next_wave_id is String
+		primary.set_meta("action_id","start_wave")
+		action_controls.start_wave=primary
 	if view.paused:
 		for id in action_controls:
 			if id not in ["pause","resume","save","load","quit","sheet_close"]: action_controls[id].disabled=true
-	var hints={"shopping":"从巷口带回食材，再在备餐桌翻开菜谱。","preparation":"灶台备餐，墙上写菜单；准备好后到柜台开门。","trading":"普通客自动点餐。灯下的特别客人，会在柜台等你。","closing":"今晚的客人都走了。去桌边翻开账本吧。","settled":"账本里可以投资明天，也可以早点歇息。"}
+	var hints={"shopping":"从巷口带回食材，再在备餐桌翻开菜谱。","preparation":"灶台备餐，墙上写菜单；准备好后到柜台开门。","trading":"普通出餐自动进行；到柜台可看在途份数与等候。","intermission":"波间停时：可去灶台补餐、菜单板改序，再到柜台开下一波。","closing":"今晚的客人都走了。去桌边翻开账本吧。","settled":"账本里可以投资明天，也可以早点歇息。"}
 	phase_hint.text="已暂停 · 保存与退出在暂停册页" if view.paused else ("巷口的食材摊亮着灯，店门随时为你留着。" if world_view=="lane" else hints.get(view.phase,""))
 	if not view.pending.is_empty(): phase_hint.text="海格在柜台等一份温暖的带餐。" if view.pending.get("character_id","")=="hagrid" else "柜台有客人想和你说说特别的点单。"
 	feedback.text=messages.back() if not messages.is_empty() else ""
@@ -507,10 +576,8 @@ func _refresh():
 	call_deferred("_restore_focus",focus_id,old_scroll,refresh_serial)
 
 func _build_counter():
-	body.add_child(_label("把备好的料理写上菜单，巷里的客人就会循着灯来。",20))
-	for item in view.inventory:
-		if item.kind=="dish" and item.shelf>0: body.add_child(_label("%s    %d份    %d金" % [item.name,item.shelf,view.prices[item.item_id]],20))
-	body.add_child(_label("特别点单会暂停客流；可到墙上的菜单板查份数，再回来交付。",17,MUTED))
+	_append_rain_panel("service")
+	if view.phase=="preparation": body.add_child(_label("备好料理并写上菜单后，在这里翻开门牌，开始第一波。",17,MUTED))
 
 func _build_pause_menu():
 	body.add_child(_button("resume","继续今晚的故事",_toggle_pause,save_writes_allowed))
@@ -528,8 +595,9 @@ func _restore_focus(id: String, old_scroll: int, serial: int):
 			if not focused is Button or not battle_panel.is_ancestor_of(focused): ordered_controls[0].grab_focus()
 		else: battle_panel.grab_focus()
 		return
-	if action_controls.has(id) and action_controls[id].is_visible_in_tree() and not action_controls[id].disabled:
-		action_controls[id].grab_focus()
+	var previous=get_action_control(id)
+	if previous is Button and previous.is_visible_in_tree() and not previous.disabled:
+		previous.grab_focus()
 		if world_buttons.has(id): _point_hotspot(id)
 	elif sheet_open:
 		if not ordered_controls.is_empty(): ordered_controls[0].grab_focus()
@@ -542,6 +610,8 @@ func _wire_focus():
 	_collect_buttons(self)
 	for i in range(ordered_controls.size()):
 		var button = ordered_controls[i]
+		var visible_callback=_focus_visible.bind(button)
+		if not button.focus_entered.is_connected(visible_callback): button.focus_entered.connect(visible_callback)
 		var previous = ordered_controls[(i-1+ordered_controls.size())%ordered_controls.size()]
 		var next = ordered_controls[(i+1)%ordered_controls.size()]
 		button.focus_previous = button.get_path_to(previous)
@@ -558,6 +628,9 @@ func _collect_buttons(node: Node):
 
 func _card() -> VBoxContainer:
 	var panel = PanelContainer.new()
+	# Decorative paper must let touch drags reach the enclosing ScrollContainer.
+	# Child Buttons retain their own input handling and click boundaries.
+	panel.mouse_filter=Control.MOUSE_FILTER_PASS
 	panel.add_theme_stylebox_override("panel",_style(Color("354a3c") if tab=="shelf" else Color("f5e9cb"),Color("d4be91"),0,12))
 	body.add_child(panel)
 	var box = VBoxContainer.new()
@@ -603,7 +676,7 @@ func _set_batch(value: int):
 func _build_shopping():
 	if not compact:
 		body.add_child(_label("月灯巷食材摊",24,GOLD))
-		body.add_child(_label("第三日有雨：暖焰汤（供货契约）或保温炖锅（留用坩埚）。食材与来源见手账。",17,MUTED))
+		body.add_child(_label("今晚三波需求记在账本；暖焰草从今晚就稳定供应。",17,MUTED))
 	_batch_selector()
 	for supply in view.supply:
 		var card = _card()
@@ -662,7 +735,7 @@ func _build_craft():
 	notes.add_child(_label("\n".join(ingredients),17))
 	page.add_child(_label(MAGIC.get(item.get("effect_id",""),""),17,MUTED))
 	if not str(selected.get("requires_device","")).is_empty(): page.add_child(_label("需要装配自搅坩埚",17,GOLD))
-	var possible=view.phase=="preparation" and selected.available and batch<=selected.max_quantity
+	var possible=view.phase in ["shopping","preparation","intermission"] and selected.available and batch<=selected.max_quantity
 	page.add_child(_button("craft_"+selected.recipe_id,"备好 %d 份" % batch,_act.bind("craft",{"recipe_id":selected.recipe_id,"quantity":batch}),possible))
 	craft_feedback=_label(messages.back() if not messages.is_empty() else "",17,GOLD)
 	page.add_child(craft_feedback)
@@ -695,16 +768,16 @@ func _build_menu():
 	card.add_child(_label("标价 %d 金 · 备好 %d / 菜单 %d\n%s" % [price,current.bag,current.shelf,"暂无库存" if count==0 else "平均成本 %.1f · 单份预计毛利 %.1f" % [float(cost)/count,price-float(cost)/count]],18))
 	var moves = HFlowContainer.new()
 	card.add_child(moves)
-	moves.add_child(_button("display_"+selected_item,"上菜单 %d"%batch,_act.bind("display",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation" and current.bag>=batch and (current.shelf>0 or types<view.shelf_capacity)))
-	moves.add_child(_button("undisplay_"+selected_item,"撤回 %d"%batch,_act.bind("undisplay",{"item_id":selected_item,"quantity":batch}),view.phase=="preparation" and current.shelf>=batch))
+	moves.add_child(_button("display_"+selected_item,"上菜单 %d"%batch,_act.bind("display",{"item_id":selected_item,"quantity":batch}),view.phase in ["preparation","intermission"] and current.bag>=batch and (current.shelf>0 or types<view.shelf_capacity)))
+	moves.add_child(_button("undisplay_"+selected_item,"撤回 %d"%batch,_act.bind("undisplay",{"item_id":selected_item,"quantity":batch}),view.phase in ["preparation","intermission"] and current.shelf>=batch))
 	var prices = HFlowContainer.new()
 	card.add_child(prices)
 	for tier in ["friendly","standard","premium"]:
-		var button = _button("price_"+tier,TIER_NAMES[tier],_act.bind("price",{"item_id":selected_item,"tier":tier}),view.phase=="preparation")
+		var button = _button("price_"+tier,TIER_NAMES[tier],_act.bind("price",{"item_id":selected_item,"tier":tier}),view.phase in ["preparation","intermission"])
 		button.modulate = GOLD if view.tiers.get(selected_item,"standard")==tier else Color.WHITE
 		prices.add_child(button)
 	card.add_child(_label("先匹配料理效果，再检查预算；加价不保证能卖出。",17,MUTED))
-	_build_stock("dish","菜单与储藏总览")
+	_append_rain_panel("menu")
 
 func _select_item(id: String):
 	selected_item = id
@@ -714,10 +787,15 @@ func _build_gear():
 	if not compact: body.add_child(_label("巷后菇圃 · 今日准备",24,GOLD))
 	var expedition = view.expedition
 	body.add_child(_label("今日 %d 次 · 撤退不罚款，保留已拾取食材"%expedition.attempts_remaining if compact else "今日剩余 %d 次 · 击败食材怪后靠近拾取\n可以不去；撤退或失败保留已拾取材料，无罚款。"%expedition.attempts_remaining,16 if compact else 18,MUTED))
-	body.add_child(_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition")))
-	body.add_child(_label("今日食材：星火菇"+("，以及月心菇精英的高级材料；可做彗星馅饼。" if view.day==3 else "；可让暖焰汤变成会照路的星火汤。"),17,GOLD))
-	body.add_child(_label("轻羽护盾："+("下次探险已备好一次免伤" if view.next_expedition_shield else "可吃掉一份储藏浮空饼，换一次免伤并放弃售价"),18,GOLD))
-	body.add_child(_button("consume_pie","吃一份浮空饼 · 为下次探险护身",_act.bind("consume",{"item_id":"floating_pie","quantity":1}),view.phase=="shopping" and _inventory("floating_pie").bag>0 and not view.next_expedition_shield))
+	departure_status=_label(RainPanels.departure_summary(view),17,GOLD)
+	body.add_child(departure_status)
+	var depart=_button("start_expedition","进入巷后菇圃 →",_act.bind("start_expedition",{}),_enabled("start_expedition"))
+	depart.icon=Art.sprite(str(view.progression.equipped_weapon))
+	depart.expand_icon=true
+	depart.add_theme_constant_override("icon_max_width",32)
+	body.add_child(depart)
+	body.add_child(_label("棚架干路可引冲撞桩；湿渠材料集中，风咒可清孢子。两路通往深处，也可提早返店。",17,MUTED))
+	_append_rain_panel("meal")
 	body.add_child(_label("武器与技能",22,GOLD))
 	for id in view.progression.owned_weapons:
 		var card = _card()
@@ -738,7 +816,7 @@ func _build_gear():
 		if instance.location=="bag": card.add_child(_button("install_cauldron","留用：安装自搅坩埚",_act.bind("install",{"uid":instance.uid}),view.phase=="preparation" and device.installed==0))
 		elif instance.location=="installed": card.add_child(_button("uninstall_cauldron","拆下坩埚，回到储藏",_act.bind("uninstall",{"uid":instance.uid}),view.phase=="preparation"))
 	card.add_child(_button("sell_cauldron","售回一件未装配坩埚 · 18 金",_act.bind("recycle",{"item_id":"stirring_cauldron","quantity":1}),view.phase in ["shopping","preparation"] and device.bag>0))
-	_build_stock("ingredient","探险材料也进入真实储藏")
+	_build_stock("ingredient","带回的材料")
 
 func _build_special():
 	var pending = view.pending
@@ -759,29 +837,16 @@ func _build_special():
 	body.add_child(_button("special_decline","跳过这次委托，继续营业",_act.bind("decline",{"order_id":pending.id})))
 
 func _build_journal():
-	body.add_child(_label("咩咩的饭店手账",24,GOLD))
-	body.add_child(_label(view.forecast.text,18,GOLD))
+	_append_rain_panel("forecast")
 	body.add_child(_label("海格巡护带餐："+_quest_status(),18,GOLD))
-	for order in view.demand_board:
-		var who = "海格 · 巡护带餐" if order.get("character_id","")=="hagrid" else ("特别点单" if order.special else "普通客人")
-		body.add_child(_label("%s %s · %s · 预算%d" % ["✓" if order.processed else "○",who,_effects(order.required),order.budget],17))
-	body.add_child(_label("最近发生",21,GOLD))
-	for i in range(maxi(0,messages.size()-12),messages.size()): body.add_child(_label(messages[i],17,MUTED))
+	body.add_child(_label("最近发生",20,GOLD))
+	for i in range(maxi(0,messages.size()-5),messages.size()): body.add_child(_label(messages[i],17,MUTED))
 
 func _build_summary():
-	body.add_child(_label("三日饭店回忆" if view.finished else "今夜收工，辛苦啦",24,GOLD))
 	var summary = view.summary
-	body.add_child(_label("第 %d 日账单\n料理收入 %d − 已售成本 %d = 毛利 %d\n店铺费用 %d · 结末金币 %d" % [summary.day,summary.revenue,summary.sold_cost,summary.gross_profit,summary.fee,summary.cash],20))
-	body.add_child(_label("库存、厨具售回、奖励与升级另有来源，不把回收收入当料理毛利。",17,MUTED))
-	body.add_child(_label("海格巡护带餐："+_quest_status(),18,GOLD))
-	if not view.finished:
-		for upgrade in view.upgrades:
-			var card = _card()
-			card.add_child(_label(upgrade.name,21,GOLD))
-			card.add_child(_label(upgrade.description,17,MUTED))
-			card.add_child(_button("upgrade_"+upgrade.upgrade_id,"%s · %d 金" % ["已购买" if upgrade.owned else "投资明天",upgrade.cost],_act.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),upgrade.available))
-			if not upgrade.available and not upgrade.owned: card.add_child(_label(str(upgrade.get("reason","")),17,MUTED))
-	body.add_child(_button("summary_gear","合上账本，去看看装备",_close_sheet))
+	body.add_child(_label("第%d晚 · 料理收入%d − 成本%d = 毛利%d\n店铺费用%d · 结末%d金" % [summary.day,summary.revenue,summary.sold_cost,summary.gross_profit,summary.fee,summary.cash],18))
+	_append_rain_panel("growth")
+	body.add_child(_label("海格巡护带餐："+_quest_status(),17,GOLD))
 	for sale in view.sales:
 		if sale.day==view.day: body.add_child(_label(_event_text(sale),17,MUTED))
 
@@ -789,7 +854,7 @@ func _build_stock(kind: String, title: String):
 	body.add_child(_label(title,21,GOLD))
 	for item in view.inventory:
 		if item.kind != kind: continue
-		body.add_child(_label("%s：%s" % [item.name,"储藏%d"%item.bag if kind=="ingredient" else "备好%d / 菜单%d" % [item.bag,item.shelf]],17,MUTED))
+		body.add_child(_label("%s：%s" % [item.name,"储藏%d"%item.bag if kind=="ingredient" else "备好%d / 菜单%d / 在途%d" % [item.bag,item.shelf,item.get("reserved",0)]],17,MUTED))
 
 func _quest_status() -> String:
 	return {"not_offered":"尚未到访","pending":"正在等候","completed":"已完成，奖励已进入储藏","declined":"已跳过，不影响后续经营"}.get(view.quests.hagrid_patrol,str(view.quests.hagrid_patrol))
@@ -804,7 +869,7 @@ func _enabled(kind: String) -> bool:
 
 func _human_text(value: String) -> String:
 	for tag in EFFECTS: value = value.replace(tag,EFFECTS[tag])
-	return value
+	return RainPanels.REASONS.get(value,value)
 
 func _effects(tags: Array) -> String:
 	var values: Array[String] = []
@@ -821,13 +886,13 @@ func _rewards(rewards: Variant) -> String:
 
 func _primary_action():
 	if game.view().paused: return
+	if view.phase=="intermission" and tab=="counter":
+		_act("start_wave",{"wave_id":view.service.next_wave_id})
+		return
 	match view.phase:
 		"shopping": _act("finish_shopping",{})
 		"preparation": _act("open_shop",{})
 		"closing": _act("settle",{})
-		"settled":
-			if view.finished: _save(false)
-			else: _act("next_day",{})
 	if game.view().phase!="settled":
 		sheet_open=false
 		world_view="room"
@@ -855,7 +920,9 @@ func _act(kind: String, args: Dictionary):
 				for item in fresh.inventory:
 					if item.item_id==recipe.output: illustration.play_effect(str(item.effect_id),str(item.item_id),"craft")
 	if result.ok and kind=="fulfill": illustration.thank_guest(guest)
-	if result.ok and kind in ["fulfill","decline"]: sheet_open=false
+	if result.ok and kind in ["fulfill","decline","start_wave","next_day","start_expedition"]:
+		sheet_open=false
+		return_hotspot="world_gear" if kind=="next_day" else "world_counter"
 	_refresh()
 	action_completed.emit(kind,args,result)
 
@@ -923,7 +990,7 @@ func _load_game() -> Dictionary:
 		save_writes_allowed = true
 		sheet_open=false
 		request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
-		tab = {"shopping":"shopping","preparation":"craft","trading":"journal","closing":"journal","settled":"journal","expedition":"gear"}.get(game.view().phase,"journal")
+		tab = {"shopping":"shopping","preparation":"craft","trading":"journal","intermission":"craft","closing":"journal","settled":"journal","expedition":"gear"}.get(game.view().phase,"journal")
 		last_pending = ""
 	_refresh()
 	return result
@@ -954,11 +1021,13 @@ func _sync_battle_route():
 		battle_missing.add_child(_label("需要 E01 发布的固定模块与场景，不能用菜单代替真实战斗。"))
 		battle_missing.add_child(_button("missing_expedition_return","撤退回饭店",_act.bind("leave_expedition",{})))
 func _on_returned():
-	var counts = {}
-	for drop in game.view().expedition.drops:
-		if drop.collected: counts[drop.item_id] = counts.get(drop.item_id,0)+1
-	_notice("回到饭店："+_rewards(counts)+"已进入储藏。" if not counts.is_empty() else "回到饭店。基础供货仍可继续，探险不会带来罚款。")
-	tab = "gear"
+	var fresh=game.view()
+	var counts={}
+	var run_id=str(fresh.expedition.get("run_id",""))
+	for row in fresh.get("collected_drops",{}).values():
+		if row.run_id==run_id: counts[row.item_id]=counts.get(row.item_id,0)+int(row.quantity)
+	_notice("回到饭店："+_rewards(counts)+"已进入储藏。" if not counts.is_empty() else "回到饭店。基础供货仍可继续。")
+	tab="gear"
 	sheet_open=false
 	_refresh()
 
@@ -974,8 +1043,7 @@ func _event_text(event: Dictionary) -> String:
 	var name_text = item.get("name",id) if not id.is_empty() else "未成交"
 	var reasons: Array[String] = []
 	for value in event.get("reasons",[]):
-		var text = str(value)
-		for tag in EFFECTS: text = text.replace(tag,EFFECTS[tag])
+		var text = _human_text(str(value))
 		reasons.append(text)
 	var reward_text = ""
 	if event.get("quest_id","")=="hagrid_patrol" and int(event.get("revenue",0))>0:
@@ -987,6 +1055,11 @@ func _record_events(events: Array):
 		if not event is Dictionary: continue
 		if event.has("revenue"):
 			_notice(_event_text(event))
-			if int(event.revenue)>0: illustration.play_effect(str(event.get("effect_id","")),str(event.get("item_id","")),"sale")
+			if int(event.revenue)>0:
+				var effect=str(event.get("effect_id",""))
+				if event.get("channel")=="ordinary" and effect=="floating_delivery": effect="ordinary_delivery"
+				illustration.play_effect(effect,str(event.get("item_id","")),"sale")
+		elif event.get("type","")=="wave_completed":
+			_notice("本波已结束，波间可以补餐与调整菜单。" if event.get("next_wave_id")!=null else "三波客人都已离开，去账本收工吧。")
 		elif event.get("special",false): _notice(_event_text(event))
 		elif event.has("message"): _notice(str(event.message))
