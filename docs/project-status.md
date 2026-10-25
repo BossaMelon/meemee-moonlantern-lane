@@ -22,17 +22,18 @@ H02 [PR #9](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/9) 的原
 
 | 组件 | 已有证据 | 仍未证明 |
 |---|---|---|
-| P01 料理核心 [PR #13](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/13) | 作者在 `82913c5` 报告真实临时组合 H02 + E01 `42988da` + P01：15 个自动 case P02–P13/P15–P17、48,631 断言通过；组合清单在 `/private/tmp/moonlantern-restaurant-delivery/combination-manifest.json` | 这不是已合并候选的 prototype gate，也不是 UI 三日运行；新 scope 独立评审待进行 |
-| E01 动作与成长 [PR #10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10) | 作者报告隔离模型 79 checks；临时真实核心组合 P16/P17 与真实渲染三输入 58 checks 通过，报告 `/tmp/e01-real-core-runtime/runtime-inputs.json` | 临时组合与合成输入不等于整餐厅、OS 进程重启或实体设备验收；正式依赖仍需同步 |
-| P02/P03 UI 与运行验收 | 已有实际 InputEvent、引擎 PNG、冷首开和布局失败证据；P03 测试恢复点 `8fb36b6` 保留，按 owner 分工修复 | 全三日键鼠/合成触摸/合成手柄、成长回流与保存退出重启仍待固定组合完成 |
+| P01 料理核心 [PR #13](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/13) | 作者在 `82913c5` 报告真实临时组合 H02 + E01 `42988da` + P01：15 个自动 case P02–P13/P15–P17、48,631 断言通过；组合清单在 `/private/tmp/moonlantern-restaurant-delivery/combination-manifest.json` | 该核心已交付但未集成；不是已合并候选的 prototype gate 或 UI 三日运行，新 scope 独立评审待进行 |
+| E01 动作与成长 [PR #10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10) | 保留原 `ea0783d` 恢复点的模块/临时组合证据：隔离模型 79 checks，真实渲染三输入 58 checks；报告 `/tmp/e01-real-core-runtime/runtime-inputs.json`。后续入口/输入修复不外推为该报告已覆盖 | 临时组合与合成输入不等于整餐厅、OS 进程重启或实体设备验收；正式依赖仍需同步 |
+| P02/P03 UI 与运行验收 | P02 [PR #15](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/15) `b32270c` 已交付小屏修复与 E01 `1746dd3` 退出信号接线；P03 草稿 [PR #16](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/16) `77dfe41` 绑定 P01 `82913c5`、E01 `1746dd3`、UI `346cc2f` 与 H01 首开修复 | 该 P03 head 的实际 scope 因 UI base 未同步而多带 H01 tools，被正确拒绝；待整 stack 一次同步 main 后重验。完整三输入/三日/恢复仍待完成 |
 
 上述组件数据引用各作者绑定的候选/临时组合报告，未为状态更新重复运行，也不冒充 root 的独立新 scope 评审。
 
 ## 实际首开与未闭合缺口
 
 - **冷缓存首开已定向闭合。** P03 在 `ac90449`（tree `507951bf`）的零 `.godot` 快照复现像素资源未加载；同快照先执行官方 import 后加载成功，支持导入前置原因。H01 `8a1a780` 将 headless import 统一放入源码启动器；原六项行为与新增导入失败阻断通过。P03 再用全新快照应用该实际两文件差异，组合 tree `cf47597b21699bc4f0ba53d60fc0d2990abd0d81`：exit 0、pixel_room_loaded=true，日志无引擎/脚本错误，root 已看中文及像素首屏。报告与 PNG：`/private/tmp/p03-source-launch-ac90449-h01-8a1a780/evidence.json`、同目录 `source-launch.png`。PR #12 同步 main 后仅合入已验收资产，修复字节未变，沿用有效复验。
-- **布局待 UI 修复/复验。** P03 固定 `ac90449` 的真实 844×390 窗口/viewport 中，采购主按钮与装备页签超屏、滚动区高度不足；12 项检查中 3 项失败，报告 `/private/tmp/p03-layout-844-ac90449/touch/layout-d83e3024-report.json`。1280 基线布局也仍是 UI 修复/验收项；冷首开加载成功不等于布局或完整采购路径通过。
-- **产品退出入口仍有缺口。** 当前动作层缺可达的产品“保存退出”路径；P03 战斗 checkpoint 当时只能实际保存后由测试进程受控退出，不算产品退出验收通过。UI/E01 对应 owner 修复后，P03 再沿真实输入验证退出与新进程恢复。
+- **小屏布局定向修复已通过。** P02 PR #15 `b32270c` 修复原 1280×720 数量条与 844×390 超屏问题；P03 在 UI `346cc2f` 的绑定快照对真实 844×390 窗口/viewport 完成 28 项检查，exit 0、无失败且已查看同尺寸 PNG，报告 `/private/tmp/p03-layout-346cc2f-final/evidence-layout.json`。原 `ac90449` 的 3 项失败留作恢复证据，不再表述为当前缺陷；此定向结果不替代全三日。
+- **退出入口已接线，严格保存/恢复仍失败。** E01 PR #10 `1746dd3` 已提供保存退出信号，P02 已接入产品路径。P03 鼠标与触屏在第三日战斗实际退出后精确比较失败：磁盘与退出时内存仅 `requests` 不同，新增全零 `expedition_input`；P02 新进程恢复探针也复现。未忽略该差异或把恢复判通过。证据 `/private/tmp/p03-three-day-eda9-touch-02/touch/after-hagrid-eb279736-report.json`，及 P02 `output/restaurant-ui/battle-exit/restore-differences.json`。
+- **手柄释放误触返店仍待修复。** P03 最小复现：左右摇杆 `(0.6,-0.8)`、按住 A 施法约 30 帧后释放，未点击返程却变为 shopping、`return_reason=retreat`；键鼠/触屏对照仍在 expedition。报告 `/private/tmp/p03-combat-focus-39846/evidence-battle-pause.json`。root 已派 E01 修复这两项输入问题、P02 做最小接入，P03 待固定修复候选复验。
 - **完整产品待验。** 三日经营、真实动作/成长、菜单回流、暂停、保存退出重启、坏档反馈和三种输入关键路径必须在同一固定组合完成；独立组件、冷首开或资产预览均不能替代。
 
 ## 下一步与交付边界
