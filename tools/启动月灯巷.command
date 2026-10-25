@@ -39,5 +39,12 @@ task_scene_ref="$(/usr/bin/sed -n 's/^run\/main_scene="\([^"]*\)"[[:space:]]*$/\
 task_scene_path="$task_project_root/${task_scene_ref#res://}"
 [[ -f "$task_scene_path" ]] || task_fail "主场景尚未完成：$task_scene_ref。核心测试通过不代表已有可玩界面。"
 
+# Source assets need Godot's import cache before ResourceLoader can load them.
+# --import waits for imports and exits; keep gameplay arguments for the run below.
+print -- "正在检查并导入源码资源，首次启动可能需要稍候。"
+if ! "$task_engine" --headless --path "$task_project_root" --import; then
+  task_fail "Godot 资源导入失败，请查看上方引擎日志。"
+fi
+
 print -- "正在用 Godot $task_version 启动《咩咩与月灯巷》本地源码原型。"
 exec "$task_engine" --path "$task_project_root" "$@"
