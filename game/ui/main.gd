@@ -49,6 +49,7 @@ var focus_caption: Label
 var world_buttons: Dictionary = {}
 var world_specs: Dictionary = {}
 var recipe_selected = "floating_pie"
+var toast_remaining = 0.0
 var battle_host: Control
 var battle_panel: Control
 var battle_missing: VBoxContainer
@@ -111,6 +112,8 @@ func _unhandled_input(event):
 
 func _process(delta):
 	if not built or view.is_empty(): return
+	toast_remaining=maxf(0,toast_remaining-delta)
+	_update_message_visibility()
 	if view.phase == "expedition":
 		# E01 advances and emits returned; the main UI never double-ticks it.
 		return
@@ -179,7 +182,8 @@ func _build_shell():
 	_add_hotspot("world_lane","去月灯巷",Rect2(91,225,80,24),"room","lane")
 	_add_hotspot("world_stall","巷口食材摊",Rect2(301,155,76,88),"lane","shopping")
 	_add_hotspot("world_home","回到饭店",Rect2(7,91,48,104),"lane","home")
-	focus_caption=_label("",18,Color("fff0c7"))
+	focus_caption=_label("",16,Color("fff0c7"))
+	focus_caption.autowrap_mode=TextServer.AUTOWRAP_OFF
 	focus_caption.add_theme_stylebox_override("normal",_style(Color("352619dd"),Color.TRANSPARENT,0,8))
 	focus_caption.visible=false
 	margin.add_child(focus_caption)
@@ -215,9 +219,9 @@ func _add_hotspot(id: String, caption: String, native: Rect2, location: String, 
 	button.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
 	button.add_theme_stylebox_override("normal",StyleBoxEmpty.new())
 	button.add_theme_stylebox_override("disabled",StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("hover",_style(Color("ffe7a318"),Color("f2d59088"),1,0))
-	button.add_theme_stylebox_override("pressed",_style(Color("ffe7a328"),Color("f2d590"),2,0))
-	button.add_theme_stylebox_override("focus",_style(Color("ffe7a310"),Color("f2d590"),2,0))
+	button.add_theme_stylebox_override("hover",StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("pressed",StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("focus",StyleBoxEmpty.new())
 	button.focus_entered.connect(_point_hotspot.bind(id))
 	button.mouse_entered.connect(_point_hotspot.bind(id))
 	button.mouse_exited.connect(_leave_hotspot.bind(id))
@@ -227,14 +231,22 @@ func _add_hotspot(id: String, caption: String, native: Rect2, location: String, 
 
 func _point_hotspot(id: String):
 	if sheet_open or not world_buttons.has(id): return
-	focus_caption.text=world_specs[id].caption
+	focus_caption.text="◆  "+str(world_specs[id].caption)
 	focus_caption.visible=true
 	var rect: Rect2=world_buttons[id].get_global_rect()
-	focus_caption.position=Vector2(clampf(rect.get_center().x-90,12,size.x-240),clampf(rect.end.y+5,76,size.y-100))
-	focus_caption.size=Vector2(230,38)
+	var caption_size=focus_caption.get_combined_minimum_size()
+	focus_caption.size=caption_size
+	focus_caption.position=Vector2(clampf(rect.get_center().x-caption_size.x/2,12,size.x-caption_size.x-12),maxf(76,rect.position.y-caption_size.y-8))
+	_update_message_visibility()
 
 func _leave_hotspot(id: String):
-	if get_viewport().gui_get_focus_owner()!=world_buttons[id]: focus_caption.visible=false
+	if get_viewport().gui_get_focus_owner()!=world_buttons[id]:
+		focus_caption.visible=false
+		_update_message_visibility()
+
+func _update_message_visibility():
+	feedback.visible=toast_remaining>0 and not sheet_open
+	phase_hint.visible=not sheet_open and not feedback.visible and not focus_caption.visible
 
 func _activate_hotspot(id: String):
 	return_hotspot=id
@@ -301,6 +313,7 @@ func _close_sheet():
 func _focus_world(id: String):
 	if world_buttons.has(id) and world_buttons[id].is_visible_in_tree() and not world_buttons[id].disabled:
 		world_buttons[id].grab_focus()
+		_point_hotspot(id)
 
 func _resize_layout():
 	if not built: return
@@ -309,9 +322,9 @@ func _resize_layout():
 	pause_button.position=Vector2(size.x-76,18)
 	status.get_parent().position=Vector2(16 if compact else 24,12 if compact else 18)
 	status.add_theme_font_size_override("font_size",16 if compact else 20)
-	phase_hint.position=Vector2(24,size.y-74)
+	phase_hint.position=Vector2(24,size.y-50)
 	phase_hint.size=Vector2(size.x-48,32)
-	feedback.position=Vector2(24,size.y-38)
+	feedback.position=Vector2(24,size.y-50)
 	feedback.size=Vector2(size.x-48,26)
 	_layout_sheet()
 	_update_status()
@@ -319,11 +332,13 @@ func _resize_layout():
 	_wire_focus()
 
 func _layout_sheet():
-	var limits={"pause":Vector2(460,420),"craft":Vector2(880,600),"shopping":Vector2(820,660),"shelf":Vector2(820,680)}
+	var limits={"pause":Vector2(460,420),"craft":Vector2(700,560),"shopping":Vector2(820,660),"shelf":Vector2(820,680)}
 	var preferred: Vector2=limits.get(tab,Vector2(800,680))
 	var sheet_size=Vector2(minf(preferred.x,size.x-32),minf(preferred.y,size.y-112))
 	if compact: sheet_size=Vector2(minf(710,size.x-24),size.y-24)
 	sheet_surface.position=((size-sheet_size)/2).round()
+	if tab=="craft" and not compact and size.x>=1200:
+		sheet_surface.position=Vector2(size.x-sheet_size.x-28,maxf(86,(size.y-sheet_size.y)*0.32)).round()
 	sheet_surface.size=sheet_size
 
 func _position_hotspots():
@@ -447,6 +462,7 @@ func _refresh():
 	if not view.pending.is_empty(): phase_hint.text="海格在柜台等一份温暖的带餐。" if view.pending.get("character_id","")=="hagrid" else "柜台有客人想和你说说特别的点单。"
 	feedback.text=messages.back() if not messages.is_empty() else ""
 	feedback.tooltip_text=feedback.text
+	_update_message_visibility()
 	_position_hotspots()
 	pause_button.disabled=sheet_open
 	_layout_sheet()
@@ -479,6 +495,7 @@ func _restore_focus(id: String, old_scroll: int, serial: int):
 		return
 	if action_controls.has(id) and action_controls[id].is_visible_in_tree() and not action_controls[id].disabled:
 		action_controls[id].grab_focus()
+		if world_buttons.has(id): _point_hotspot(id)
 	elif sheet_open:
 		if not ordered_controls.is_empty(): ordered_controls[0].grab_focus()
 	else:
@@ -596,14 +613,20 @@ func _build_craft():
 	page.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	spread.add_child(page)
 	var item=_inventory(selected.output)
-	var portrait=_icon(selected.output,88 if not compact else 56)
-	portrait.size_flags_horizontal=Control.SIZE_SHRINK_CENTER
-	page.add_child(portrait)
-	page.add_child(_label(selected.name,26,GOLD))
-	page.add_child(_label(_effects(item.tags),17,MUTED))
+	var hero=HBoxContainer.new()
+	page.add_child(hero)
+	var portrait=_icon(selected.output,112 if not compact else 72)
+	portrait.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.size_flags_vertical=Control.SIZE_SHRINK_BEGIN
+	hero.add_child(portrait)
+	var notes=VBoxContainer.new()
+	notes.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	hero.add_child(notes)
+	notes.add_child(_label(selected.name,24,GOLD))
+	notes.add_child(_label(_effects(item.tags),16,MUTED))
 	var ingredients: Array[String]=[]
-	for id in selected.inputs: ingredients.append("%s ×%d  ·  储藏%d" % [_inventory(id).name,selected.inputs[id],_inventory(id).bag])
-	page.add_child(_label("\n".join(ingredients),18))
+	for id in selected.inputs: ingredients.append("%s ×%d · 储藏%d" % [_inventory(id).name,selected.inputs[id],_inventory(id).bag])
+	notes.add_child(_label("\n".join(ingredients),17))
 	page.add_child(_label(MAGIC.get(item.get("effect_id",""),""),17,MUTED))
 	if not str(selected.get("requires_device","")).is_empty(): page.add_child(_label("需要装配自搅坩埚",17,GOLD))
 	var possible=view.phase=="preparation" and selected.available and batch<=selected.max_quantity
@@ -900,6 +923,7 @@ func _on_returned():
 
 func _notice(value: String):
 	messages.append(value)
+	toast_remaining=0.0 if value.begins_with("欢迎回家") else 2.8
 	if messages.size()>80: messages.pop_front()
 
 func _event_text(event: Dictionary) -> String:
