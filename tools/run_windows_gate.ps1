@@ -160,6 +160,7 @@ function Assert-Archive($Path, [long]$Size, $Sha) {
     if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha) { throw 'Archive SHA256 mismatch.' }
 }
 function Invoke-Owned($Exe, [string[]]$Arguments, $Working, [int]$Seconds, $Label, $EngineLog = '') {
+    if ($Exe -isnot [string] -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw "Expected one existing executable path: $Label" }
     $out = Join-Path $ReportDirectory ($Label + '-stdout.log')
     $err = Join-Path $ReportDirectory ($Label + '-stderr.log')
     $entry = [ordered]@{label=$Label; executable=$Exe; arguments=$Arguments; working_directory=$Working; process=$null; engine_error_logged=$false}
@@ -212,7 +213,7 @@ print("Verified",len(files),"Git blobs;",len(generated),"generated metadata file
 
 $summary = [ordered]@{schema_version=1; fixture_only=[bool]$SelfTest; windows_source_verified=$false; status='failed'; errors=@(); owned_root=$ownedRoot}
 try {
-    $python = (Get-Command python -CommandType Application).Source
+    $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
     $null = Invoke-Owned $python @('--version') $checkout 20 'python-version'
     $summary.python = [IO.File]::ReadAllText((Join-Path $ReportDirectory 'python-version-stdout.log'), $utf8).Trim()
     $summary.os = [Runtime.InteropServices.RuntimeInformation]::OSDescription
@@ -223,7 +224,7 @@ try {
         $rejected = $false
         try { Assert-Archive $fixture 3 ('0' * 64) } catch { if ($_.Exception.Message -notmatch 'SHA256 mismatch') { throw }; $rejected=$true }
         if (-not $rejected) { throw 'Wrong-hash fixture accepted.' }
-        $git = (Get-Command git -CommandType Application).Source
+        $git = (Get-Command git -CommandType Application | Select-Object -First 1).Source
         $fixtureRepo = Join-Path $ownedRoot 'fixture Git'
         $null = Invoke-Owned $git @('init','--quiet',$fixtureRepo) $ownedRoot 20 'fixture-git-init'
         [IO.File]::WriteAllText((Join-Path $fixtureRepo 'fixture.txt'), 'original fixture', $utf8)
@@ -273,7 +274,7 @@ exit 0
     } else {
         if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Actual download/source validation is restricted to this GitHub runner invocation.' }
         if ($summary.python -ne 'Python 3.14.6') { throw "Pinned Python 3.14.6 required: $($summary.python)" }
-        $git = (Get-Command git -CommandType Application).Source
+        $git = (Get-Command git -CommandType Application | Select-Object -First 1).Source
         $sha = (& $git -C $checkout rev-parse HEAD).Trim()
         if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve immutable source SHA.' }
         $source = Join-Path $ownedRoot '源码 source with spaces'
