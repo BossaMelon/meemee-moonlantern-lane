@@ -292,6 +292,13 @@ func _centers() -> Dictionary:
 func touch_radius(kind: String) -> float:
 	return (52.0 if kind in ["move","aim"] else 29.0)*ui_scale
 
+func _hits_visible_gui(viewport_point: Vector2) -> bool:
+	for button in [pause_button,save_button,save_quit_button,return_button]:
+		if not is_instance_valid(button) or not button.is_visible_in_tree() or button.disabled: continue
+		var local = button.get_global_transform_with_canvas().affine_inverse()*viewport_point
+		if Rect2(Vector2.ZERO,button.size).has_point(local): return true
+	return false
+
 func _input(event: InputEvent):
 	if not is_visible_in_tree() or session == null: return
 	if _exit_pending:
@@ -319,6 +326,9 @@ func _input(event: InputEvent):
 			if not event.echo: keys[code] = event.pressed
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
+		if _hits_visible_gui(event.position):
+			mouse_aim = false
+			return
 		pointer = get_global_transform_with_canvas().affine_inverse()*event.position
 		mouse_aim = field.has_point(pointer)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -326,6 +336,10 @@ func _input(event: InputEvent):
 		if not event.pressed:
 			if mouse_cast: get_viewport().set_input_as_handled()
 			mouse_cast = false
+		elif _hits_visible_gui(event.position):
+			mouse_cast = false
+			mouse_aim = false
+			return
 		elif field.has_point(local):
 			mouse_cast = true; mouse_aim = true; pointer = local
 			grab_focus()

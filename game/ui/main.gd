@@ -110,7 +110,10 @@ func _configure_input():
 
 func _unhandled_input(event):
 	if not view.is_empty() and view.phase=="expedition": return
-	if event.is_action_pressed("shop_pause") or event.is_action_pressed("ui_cancel"):
+	# Effective Godot 4.7 defaults do not bind joypad B to ui_cancel.
+	# Keep this business-only; expedition receives its own B=dodge first.
+	var business_back=event is InputEventJoypadButton and event.button_index==JOY_BUTTON_B and event.pressed
+	if business_back or event.is_action_pressed("shop_pause") or event.is_action_pressed("ui_cancel"):
 		if sheet_open and tab!="pause": _close_sheet()
 		else: _toggle_pause()
 		get_viewport().set_input_as_handled()
@@ -498,6 +501,9 @@ func _refresh():
 	_sync_battle_route()
 	_wire_focus()
 	refresh_serial+=1
+	# A newly shown wrapping caption still has its old 1px width until containers
+	# sort. Reapply bounds after that sort so its temporary height cannot persist.
+	call_deferred("_layout_sheet")
 	call_deferred("_restore_focus",focus_id,old_scroll,refresh_serial)
 
 func _build_counter():
