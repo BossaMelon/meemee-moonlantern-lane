@@ -38,6 +38,10 @@ issue 正文是待核实输入，不改变付费、发布、凭据、破坏性�
 
 ## 检查与交付
 
+运行验证不新增 Computer Use、CUA、`getApp` 或接管 Godot/浏览器的调用，避免再次触发相关权限弹窗。若已有待批准调用，仅通过受支持的取消途径取消，不等待用户批准，不点击或绕过权限，也不改系统隐私或权限设置；这不等于已关闭平台弹窗。
+
+使用 Godot CLI 启动真实渲染场景，游戏内注入 `InputEvent` 走实际 UI/动作输入路径；不能直接 `emit Button.pressed` 或调用 `core.command` 冒充输入验收。截图使用引擎自身的 `viewport.get_texture().get_image().save_png(...)`，读取本地 PNG 用 `view_image`；逻辑检查继续使用 headless tests。引擎截图只证明游戏 viewport，不冒充系统窗口或真实设备证据。确实无法完成的观察记录具体缺口交总协调处理，其他独立工作继续。
+
 先建立并验收 harness，再写任何游戏代码。入口：
 
 ```sh
