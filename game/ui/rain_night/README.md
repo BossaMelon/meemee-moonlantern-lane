@@ -6,7 +6,7 @@
 
 默认检查1440×904虚拟视口，输出目录后加 `--small` 检查844×390；记录账本/菜谱/菜单/装备实际浮层与滚动区域几何，不能据此声称原生全屏。字形度量影响输入时沿用 `card_touch_scroll.gd` 等真实输入定向检查，不要求重跑无关经营链。
 
-原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。清单/OFL/NOTICE 属非资源文件，打包方需明确随包纳入，并在无源码/原导入缓存的真实包检查中验证。此 headless 检查不声称已经过冷打包、原生全屏/844×390或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
+原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。W01 只负责 Windows 源码门禁和冷导入，不生成原生包；E03 的 PCK 仅为资源回归。清单/OFL/NOTICE 属非资源文件，后续 D02 负责将其随真实原生导出产物纳入，并在无源码/原导入缓存的产物检查中验证。此 headless 检查不声称已经过原生导出、全屏/844×390像素或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
 
 `panels.gd` 是只读 typed-view 组件：`present(view, page, selected_item="")` 深拷贝输入，显示真实字段；`get_action_control(id)` 返回当前可见页面的 Control，`status_line()` 提供一行世界 HUD 摘要。没有 Session、存档、计时推进、发奖或成交模拟。组件 fixture 检查不能作为新雨夜游戏或 Q06 证据。
 
