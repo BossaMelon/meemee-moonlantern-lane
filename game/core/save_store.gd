@@ -21,7 +21,7 @@ static func save_state(path: String, state: Dictionary, validator: Callable) -> 
 	var error: String = validator.call(state)
 	if not error.is_empty(): return {"ok":false,"code":"invalid_state","message":error}
 	var temp = path+".tmp"
-	if not _write(temp,JSON.stringify(state,"\t")): return {"ok":false,"code":"write_failed","message":"无法写入临时存档"}
+	if not _write(temp,JSON.stringify(state,"\t",true,true)): return {"ok":false,"code":"write_failed","message":"无法写入临时存档"}
 	if not _read(temp,validator).ok: return {"ok":false,"code":"verify_failed","message":"临时存档校验失败，原档未变"}
 	# Rotate only a validated primary; a damaged primary can never replace a valid backup.
 	if _read(path,validator).ok:

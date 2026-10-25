@@ -457,7 +457,7 @@ func _economy_integers(value: Variant) -> Variant:
 
 func validate_snapshot(data: Variant) -> String:
 	if not data is Dictionary: return "存档必须为对象"
-	var s: Dictionary = data
+	var s: Dictionary = _normalize(data)
 	if not s.has("version") or s.version != VERSION: return "不支持的存档版本"
 	for key in _s:
 		if not s.has(key): return "存档缺少字段："+key
@@ -671,7 +671,7 @@ func validate_snapshot(data: Variant) -> String:
 		var error: String = _model.validate(s.expedition)
 		if error != "": return error
 		if s.expedition.day != s.day or s.expedition_attempts.get(str(int(s.day)),"") != s.expedition.run_id: return "动作日期或次数不一致"
-		if s.expedition.weapon_id != progress.equipped_weapon or s.expedition.skills != progress.skills: return "动作装备或技能与成长不一致"
+		if s.phase == "expedition" and (s.expedition.weapon_id != progress.equipped_weapon or s.expedition.skills != progress.skills): return "动作装备或技能与成长不一致"
 		if (s.phase == "expedition") != (s.expedition.status in ["active","cleared"]): return "动作与经营阶段不一致"
 		for drop in s.expedition.drops:
 			if drop.collected != s.collected_drops.has(drop.id): return "场上掉落与经济领取记录不一致"
@@ -681,57 +681,71 @@ func validate_snapshot(data: Variant) -> String:
 func view() -> Dictionary:
 	var v = snapshot()
 	v.finished = _s.day == 3 and _s.phase == "settled"
-	v.inventory = []
-	v.prices = {}
+	v.inventory = []; v.prices = {}
 	for id in Catalog.ITEMS:
 		var item = Catalog.ITEMS[id]
-		var row = {"item_id":id,"name":item.name,"bag":_count(_s,id,"bag"),"shelf":_count(_s,id,"shelf"),"installed":_count(_s,id,"installed"),"tags":_tags(_s,id),"uids":[]}
+		var row = {"item_id":id,"name":item.name,"kind":item.kind,"effect_id":item.effect_id,
+			"bag":_count(_s,id,"bag"),"shelf":_count(_s,id,"shelf"),"installed":_count(_s,id,"installed"),"tags":_tags(_s,id),"uids":[]}
 		for instance in _s.items:
 			if instance.item_id == id: row.uids.append(instance.duplicate(true))
-		v.inventory.append(row)
-		v.prices[id] = _price(_s,id)
+		v.inventory.append(row); v.prices[id] = _price(_s,id)
 	v.supply = []
 	for id in _s.supply:
-		v.supply.append({"item_id":id,"name":Catalog.ITEMS[id].name,"quantity":_s.supply[id],"buy":Catalog.ITEMS[id].buy,
-			"available":_s.phase == "shopping" and _s.supply[id] > 0 and _s.cash >= Catalog.ITEMS[id].buy,
-			"reason":"" if _s.phase == "shopping" else "请在淘货阶段采购"})
+		var reason = ""
+		if _s.phase != "shopping": reason = "请在采购阶段购买"
+		elif _s.supply[id] <= 0: reason = "当日供货已售罄"
+		elif _s.cash < Catalog.ITEMS[id].buy: reason = "金币不足"
+		v.supply.append({"item_id":id,"name":Catalog.ITEMS[id].name,"quantity":_s.supply[id],"buy":Catalog.ITEMS[id].buy,"available":reason == "","reason":reason})
 	v.recipes = []
 	for id in Catalog.RECIPES:
 		var recipe = Catalog.RECIPES[id].duplicate(true)
 		var maximum = 80
 		for material in recipe.inputs: maximum = mini(maximum,int(_count(_s,material,"bag") / recipe.inputs[material]))
-		recipe.recipe_id = id
-		recipe.max_quantity = maximum
-		recipe.available = _s.phase == "preparation" and maximum > 0
-		recipe.reason = "" if recipe.available else ("材料不足" if _s.phase == "preparation" else "请在整备阶段制作")
+		var missing_device = recipe.requires_device != "" and _count(_s,recipe.requires_device,"installed") == 0
+		var reason = ""
+		if _s.phase != "preparation": reason = "请在备餐阶段制作"
+		elif missing_device: reason = "需装配自搅坩埚"
+		elif maximum < 1: reason = "食材不足；查看采购或探险来源"
+		recipe.recipe_id = id; recipe.max_quantity = 0 if missing_device else maximum
+		recipe.available = reason == ""; recipe.reason = reason; recipe.effect_id = Catalog.ITEMS[id].effect_id
 		v.recipes.append(recipe)
 	v.upgrades = []
 	for id in Catalog.UPGRADES:
 		var row = Catalog.UPGRADES[id].duplicate(true)
-		row.upgrade_id = id
-		row.owned = id in _s.upgrades
-		row.available = _s.phase == "settled" and not row.owned and _s.cash >= row.cost
+		row.upgrade_id = id; row.owned = id in _s.upgrades; row.active = id in _s.active_upgrades
+		row.available = _s.phase == "settled" and not row.owned and _s.cash >= row.cost and (id != "field_kit" or _dish_income(_s) >= 24)
+		row.reason = "" if row.available else ("需累计菜品收入24" if id == "field_kit" and _dish_income(_s) < 24 else "请在日结后按资金购买；次日生效")
 		v.upgrades.append(row)
 	v.customers_remaining = _s.customers.size()-_s.cursor
 	v.demand_board = []
 	for order in _s.customers:
-		v.demand_board.append({"id":order.id,"special":order.special,"required":order.required.duplicate(),"budget":order.budget,"processed":_s.commits.has(order.id)})
-	v.forecast = {"day":3,"weather":"rain","required":["waterproof"],"text":"第三日有雨：防潮护符，或避雨铃庇护的笔/灯可满足需求；雨光苔每日在旧货摊稳定供应，避雨铃首日保证供应。"}
+		var row = order.duplicate(true); row.processed = _s.commits.has(order.id); v.demand_board.append(row)
+	v.forecast = {"day":3,"weather":"rain","required":["warming","heat_hold"],
+		"text":"第三日雨天需要暖身与保温：供货契约次日开放稳定暖焰草，与每日南瓜煮暖焰汤；或保留装配遗留坩埚，用每日南瓜和奶油做炖锅。第三日庆功客想吃彗星馅饼，月心菇来自菇圃精英；未探险可跳过。",
+		"solutions":[{"item_id":"ember_soup","materials":["pumpkin","ember_herb"],"requires_upgrade":"supply_pass","requires_device":"","source":"每日稳定供货"},
+		{"item_id":"moon_stew","materials":["pumpkin","cream"],"requires_upgrade":"","requires_device":"stirring_cauldron","source":"每日基础供货；开店遗留或次日替代厨具"}]}
 	v.summary = _s.summaries.back().duplicate(true) if not _s.summaries.is_empty() else {}
-	v.shelf_capacity = 3 if "shelf" in _s.upgrades else 2
-	v.inventory_capacity = CAPACITY
+	v.shelf_capacity = 3 if "shelf" in _s.active_upgrades else 2
+	v.inventory_capacity = CAPACITY; v.dish_income = _dish_income(_s)
 	v.available_commands = {}
-	for kind in ["buy","finish_shopping","craft","display","undisplay","install","uninstall","price","open_shop","fulfill","decline","settle","upgrade","next_day","recover","recycle"]:
-		var phases = {"buy":["shopping"],"finish_shopping":["shopping"],"craft":["preparation"],"display":["preparation"],"undisplay":["preparation"],"install":["preparation"],"uninstall":["preparation"],"price":["preparation"],"open_shop":["preparation"],"fulfill":["trading"],"decline":["trading"],"settle":["closing"],"upgrade":["settled"],"next_day":["settled"],"recover":["shopping"],"recycle":["shopping","preparation"]}
+	var phases = {"buy":["shopping"],"finish_shopping":["shopping"],"craft":["preparation"],"display":["preparation"],"undisplay":["preparation"],"install":["preparation"],"uninstall":["preparation"],"price":["preparation"],"open_shop":["preparation"],"fulfill":["trading"],"decline":["trading"],"settle":["closing"],"upgrade":["settled"],"next_day":["settled"],"recover":["shopping"],"recycle":["shopping","preparation"],"start_expedition":["shopping"],"leave_expedition":["expedition"],"expedition_input":["expedition"],"consume":["shopping"],"equip_weapon":["shopping"]}
+	for kind in phases:
 		var enabled = _s.phase in phases[kind]
 		var reason = "" if enabled else "当前阶段不可用"
 		if kind in ["fulfill","decline"] and _s.pending.is_empty(): enabled = false; reason = "没有待处理需求"
 		if kind == "next_day" and _s.day >= 3: enabled = false; reason = "三日原型结束，可保存退出"
-		if kind == "recover" and _s.daily_recovery >= 1: enabled = false; reason = "今日免费委托已用"
+		if kind == "recover" and _s.daily_recovery >= 1: enabled = false; reason = "今日洗锅委托已用"
+		if kind == "start_expedition" and _s.expedition_attempts.has(str(_s.day)): enabled = false; reason = "今日探险次数已用"
+		if kind == "consume" and (_s.next_expedition_shield or _count(_s,"floating_pie","bag") == 0): enabled = false; reason = "需储藏浮空饼且无待用护盾"
 		v.available_commands[kind] = {"enabled":enabled,"reason":reason}
 	if not v.pending.is_empty():
 		v.pending.options = []
 		for id in Catalog.ITEMS:
+			if Catalog.ITEMS[id].kind != "dish": continue
 			var reason = _matching(_s,id,_s.pending)
-			v.pending.options.append({"item_id":id,"name":Catalog.ITEMS[id].name,"price":_price(_s,id),"available":reason.is_empty(),"reason":reason})
+			if reason == "" and _s.items.size()-1+_reward_quantity(_s.pending) > CAPACITY: reason = "储藏容量不足以接收奖励"
+			v.pending.options.append({"item_id":id,"name":Catalog.ITEMS[id].name,"price":_price(_s,id),"available":reason == "","reason":reason})
+	if _s.expedition.is_empty():
+		v.expedition = {"status":"idle","day":_s.day,"run_id":"","remaining_ms":180000,"attempts_remaining":0 if _s.expedition_attempts.has(str(_s.day)) else 1,"player":{},"enemies":[],"projectiles":[],"drops":[]}
+	else: v.expedition = _model.view(_s.expedition)
 	return v
