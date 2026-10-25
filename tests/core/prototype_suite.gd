@@ -18,628 +18,410 @@ func expect(condition: bool, message: String):
 		push_error(case_id+": "+message)
 
 func run_case(id: String, test: Callable):
-	case_id = id
-	checks = 0
-	failures = []
+	case_id = id; checks = 0; failures = []
 	test.call()
 	cases.append({"id":id,"status":"passed" if failures.is_empty() else "failed","checks":checks,"failures":failures.duplicate()})
 	print("%s: %s (%d checks)" % [id,cases.back().status,checks])
 
+func audit(g):
+	var s = g.snapshot(); var cash = int(s.initial_cash); var counts = {}; var ids = {}; var moves = {}
+	for item in s.items:
+		expect(not ids.has(item.uid),"unique physical item uid")
+		ids[item.uid] = true; counts[item.item_id] = counts.get(item.item_id,0)+1
+		expect(item.cost >= 0,"nonnegative acquisition cost")
+	for row in s.ledger:
+		cash += int(row.cash_delta)
+		for id in row.moves: moves[id] = moves.get(id,0)+int(row.moves[id])
+	expect(cash == s.cash and cash >= 0,"cash reconstructs from actual ledger")
+	for id in Catalog.ITEMS: expect(counts.get(id,0) == moves.get(id,0),"conserved ingredient/dish/device "+id)
+	var error = g.validate_snapshot(s)
+	expect(error == "","full state validates: "+error)
+
 func act(g, kind: String, args: Dictionary = {}, request: String = "") -> Dictionary:
 	serial += 1
-	var result = g.command(kind,args,request if not request.is_empty() else "test-%d" % serial)
-	expect(result.ok,kind+" should succeed: "+str(result))
-	audit(g)
+	var result = g.command(kind,args,request if request != "" else "restaurant-%d" % serial)
+	expect(result.ok,kind+" succeeds: "+str(result)); audit(g)
 	return result
-
-func audit(g):
-	var s = g.snapshot()
-	var cash = int(s.initial_cash)
-	var counts = {}
-	var ids = {}
-	for item in s.items:
-		expect(not ids.has(item.uid),"uid unique")
-		ids[item.uid] = true
-		counts[item.item_id] = counts.get(item.item_id,0)+1
-		expect(item.cost >= 0,"nonnegative cost basis")
-	var moves = {}
-	for entry in s.ledger:
-		cash += int(entry.cash_delta)
-		for id in entry.moves: moves[id] = moves.get(id,0)+int(entry.moves[id])
-	expect(cash == s.cash and cash >= 0,"cash equals initial plus committed ledger")
-	for id in Catalog.ITEMS: expect(counts.get(id,0) == moves.get(id,0),"inventory movement conservation "+id)
-	expect(g.validate_snapshot(s).is_empty(),"complete snapshot valid: "+g.validate_snapshot(s))
 
 func reject(g, kind: String, args: Dictionary = {}, request: String = "") -> Dictionary:
-	var before = g.snapshot()
-	var result = g.command(kind,args,request)
-	expect(not result.ok,"must reject "+kind+str(args))
-	expect(result.code != "" and result.message != "","failure has reason")
-	expect(g.snapshot() == before,"failure atomic including RNG and request bookkeeping: "+kind)
+	var before = g.snapshot(); var result = g.command(kind,args,request)
+	expect(not result.ok and result.code != "" and result.message != "","explicit rejection "+kind)
+	expect(g.snapshot() == before,"atomic rejection including RNG/action/request state: "+kind)
 	return result
 
-func count(g, id: String, location: String = "") -> int:
+func count(g, id: String, location: String = "bag") -> int:
 	var n = 0
 	for item in g.snapshot().items:
-		if item.item_id == id and (location.is_empty() or location == item.location): n += 1
+		if item.item_id == id and (location == "" or item.location == location): n += 1
 	return n
 
-func fixture(g, state: Dictionary, label: String = "fixture"):
-	var path = temp_root+"/"+label+str(serial)+".json"
-	var file = FileAccess.open(path,FileAccess.WRITE)
-	file.store_string(JSON.stringify(state))
-	file.close()
-	var result = g.load_from(path)
-	expect(result.ok,"controlled fixture accepted: "+str(result))
+func fixture(g, state: Dictionary, label: String):
+	serial += 1
+	var path = temp_root+"/fixture-%s-%d.json" % [label,serial]
+	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(state,"",true,true)); file.close()
+	expect(g.load_from(path).ok,"controlled boundary fixture validates: "+label)
 
-func resolve(g):
-	var pending = g.view().pending
-	if pending.is_empty(): return
-	for option in pending.options:
-		if option.available:
-			act(g,"fulfill",{"order_id":pending.id,"item_id":option.item_id})
-			return
-	act(g,"decline",{"order_id":pending.id})
+func stock(g, id: String, target: int):
+	if count(g,id) < target: act(g,"buy",{"item_id":id,"quantity":target-count(g,id)})
 
-func finish_trade(g):
+func make(g, id: String, target: int):
+	if count(g,id) < target: act(g,"craft",{"recipe_id":id,"quantity":target-count(g,id)})
+
+func prepare_food(g, targets: Dictionary):
+	var needed = {}
+	for id in targets:
+		var amount = maxi(0,int(targets[id])-count(g,id))
+		for material in Catalog.RECIPES[id].inputs:
+			needed[material] = needed.get(material,0)+Catalog.RECIPES[id].inputs[material]*amount
+	for id in needed: stock(g,id,int(needed[id]))
+	act(g,"finish_shopping")
+	for id in targets:
+		make(g,id,int(targets[id]))
+		if targets[id] > 0: act(g,"display",{"item_id":id,"quantity":int(targets[id])})
+
+func trade(g, hagrid: bool = false, preferred: String = ""):
+	if g.view().phase == "preparation": act(g,"open_shop")
 	var guard = 0
-	while g.view().phase == "trading" and guard < 20:
+	while g.view().phase == "trading" and guard < 30:
 		guard += 1
-		if not g.view().pending.is_empty(): resolve(g)
+		var p = g.view().pending
+		if p.is_empty(): expect(g.advance(1000).ok,"ordinary automatic serving")
 		else:
-			var result = g.advance(1000)
-			expect(result.ok,"automatic trading tick succeeds")
-			audit(g)
-	expect(g.view().phase == "closing","customer queue completes without waiting indefinitely")
-	act(g,"settle")
+			var choice = ""
+			if hagrid or p.quest_id != "hagrid_patrol":
+				for option in p.options:
+					if option.available:
+						if choice == "": choice = option.item_id
+						if option.item_id == preferred: choice = option.item_id; break
+			if choice == "": act(g,"decline",{"order_id":p.id})
+			else: act(g,"fulfill",{"order_id":p.id,"item_id":choice})
+	expect(g.view().phase == "closing","finite queue completes")
+	if g.view().phase == "closing": act(g,"settle")
 
-func stock(g, id: String, desired: int):
-	var missing = maxi(0,desired-count(g,id,"bag"))
-	if missing == 0: return
-	if g.snapshot().supply.has(id):
-		act(g,"buy",{"item_id":id,"quantity":missing})
-	else:
-		for raw in Catalog.RECIPES[id].inputs:
-			var needed = missing*int(Catalog.RECIPES[id].inputs[raw])-count(g,raw,"bag")
-			if needed > 0: act(g,"buy",{"item_id":raw,"quantity":needed})
+func roundtrip(g, label: String):
+	var path = temp_root+"/"+label+".json"; var before = g.snapshot()
+	expect(g.save_to(path).ok,"save complete "+label)
+	var clone = Session.new(999)
+	expect(clone.load_from(path).ok,"restore complete "+label)
+	expect(clone.snapshot() == before,"exact roundtrip "+label)
+	return clone
 
-func make(g, id: String, desired: int):
-	var missing = maxi(0,desired-count(g,id,"bag"))
-	if missing > 0: act(g,"craft",{"recipe_id":id,"quantity":missing})
+func comparable(g) -> Dictionary:
+	var s = g.snapshot(); s.erase("requests"); return s
 
-func display_all(g, id: String):
-	var n = count(g,id,"bag")
-	if n > 0: act(g,"display",{"item_id":id,"quantity":n})
-
-# Strategies use only the same public commands available to players.
 func simulate(seed_value: int, strategy: String, existing = null) -> Dictionary:
 	var g = Session.new(seed_value) if existing == null else existing
-	var upgrade_days = []
-	var start = g.snapshot().day
-	for day in range(start,4):
-		expect(g.view().phase == "shopping" and g.view().day == day,"daily shopping phase")
-		var home = strategy in ["home","self_use"]
-		if day == 1 and home and count(g,"bell") == 0: act(g,"buy",{"item_id":"bell","quantity":1})
-		var pen_target = 4 if day == 2 else 3
-		var lamp_target = 4 if day == 1 else (3 if day == 2 else 4)
-		if home:
-			stock(g,"lamp",lamp_target)
-			if day >= 2: stock(g,"pen",1)
-		else:
-			stock(g,"pen",pen_target)
-			if strategy == "conservative" or day >= 2: stock(g,"lamp",1)
-		if strategy == "rain" and day == 2:
-			# Purchase and craft before day 3; retain it in bag for the forecast.
-			stock(g,"charm",1)
-		if strategy == "stationery" and day >= 2: stock(g,"charm",1)
+	var hot = strategy in ["hot_meals","kitchen_investment"]
+	var upgrades = []; var forecasts = []
+	if strategy in ["quick_service","rain_stockpile","unprepared"] and count(g,"stirring_cauldron") > 0:
+		act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
+	for day in [1,2,3]:
+		forecasts.append(g.view().forecast)
+		var targets = {"floating_pie":4 if day == 1 else 3}
+		if hot: targets.moon_stew = 3 if day < 3 else 4
+		elif strategy != "unprepared" and day >= 2: targets.ember_soup = 2 if strategy == "rain_stockpile" and day == 2 else 1
+		if hot and day == 3: targets.ember_soup = 1
+		var needed = {}
+		for id in targets:
+			for material in Catalog.RECIPES[id].inputs:
+				needed[material] = needed.get(material,0)+Catalog.RECIPES[id].inputs[material]*maxi(0,int(targets[id])-count(g,id))
+		for id in needed: stock(g,id,int(needed[id]))
 		act(g,"finish_shopping")
-		if home:
-			if day == 1:
-				for item in g.snapshot().items:
-					if item.item_id == "bell" and item.location == "bag": act(g,"install",{"uid":item.uid}); break
-			make(g,"lamp",lamp_target)
-			if day >= 2: make(g,"pen",1)
-		else:
-			make(g,"pen",pen_target)
-			if strategy == "conservative" or day >= 2: make(g,"lamp",1)
-		if strategy == "rain" and day == 2: make(g,"charm",1)
-		if strategy == "stationery" and day >= 2: make(g,"charm",1)
-		display_all(g,"lamp")
-		display_all(g,"pen")
-		if strategy == "stationery" and day >= 2: display_all(g,"charm")
-		if strategy == "rain" and day == 3: display_all(g,"charm")
-		act(g,"open_shop")
-		finish_trade(g)
-		if day == 1:
-			var upgrade = "supply_pass" if home else "shelf"
-			act(g,"upgrade",{"upgrade_id":upgrade})
-			upgrade_days.append({"id":upgrade,"day":day})
+		if hot and day == 1: act(g,"install",{"uid":1})
+		for id in targets:
+			make(g,id,int(targets[id])); act(g,"display",{"item_id":id,"quantity":int(targets[id])})
+		trade(g,false,"moon_stew" if hot else "")
+		if day == 1 and strategy != "unprepared":
+			var upgrade = "shelf" if hot else "supply_pass"
+			act(g,"upgrade",{"upgrade_id":upgrade}); upgrades.append({"id":upgrade,"day":day})
+		if day == 2 and hot:
+			act(g,"upgrade",{"upgrade_id":"supply_pass"}); upgrades.append({"id":"supply_pass","day":day})
 		if day < 3: act(g,"next_day")
-	var s = g.snapshot()
-	var gross = 0
-	var recoveries = 0
-	var purchases = {}
-	var processed = {}
+	var s = g.snapshot(); var gross = 0; var recoveries = 0; var purchases = {}; var crafts = {}
 	for sale in s.sales: gross += int(sale.revenue)-int(sale.cost)
 	for entry in s.ledger:
 		if entry.kind == "recover": recoveries += 1
 		if entry.kind == "buy": purchases[entry.args.item_id] = purchases.get(entry.args.item_id,0)+int(entry.args.quantity)
-		if entry.kind == "craft": processed[entry.args.recipe_id] = processed.get(entry.args.recipe_id,0)+int(entry.args.quantity)
-	var record = {"seed":seed_value,"strategy":strategy,"cash":s.cash,"inventory":s.items,"gross_profit":gross,"upgrade_days":upgrade_days,"sales":s.sales,"recoveries":recoveries,"purchases":purchases,"crafts":processed,"day":s.day,"phase":s.phase,"failure_reasons":[]}
-	for sale in s.sales:
-		if sale.revenue == 0: record.failure_reasons.append({"order_id":sale.order_id,"reasons":sale.reasons})
-	expect(s.day == 3 and s.phase == "settled","strategy completes three days")
-	expect(s.cash >= 0 and gross > 0,"strategy solvent with positive realised gross profit")
-	expect(recoveries == 0,"normal strategy needs no emergency recovery")
-	simulations.append(record)
-	traces.append({"seed":seed_value,"strategy":strategy,"ledger":s.ledger,"rng_state":s.rng_state})
+		if entry.kind == "craft": crafts[entry.args.recipe_id] = crafts.get(entry.args.recipe_id,0)+int(entry.args.quantity)
+	expect(g.view().finished and s.cash >= 0 and gross > 0,"strategy completes three days with positive dish gross margin")
+	expect(recoveries == 0 and s.expedition_attempts.is_empty() and s.quests.hagrid_patrol == "declined","ordinary routes need no emergency/combat/Hagrid reward")
+	var record = {"seed":seed_value,"strategy":strategy,"cash":s.cash,"inventory":s.items,"gross_profit":gross,"recoveries":recoveries,"upgrade_days":upgrades,"purchases":purchases,"crafts":crafts,"sales":s.sales,"forecasts":forecasts,"ledger":s.ledger}
+	simulations.append(record); traces.append({"seed":seed_value,"strategy":strategy,"actions":g.action_trace()})
 	return {"game":g,"report":record}
 
 func test_p02():
-	var result = simulate(int(seeds[0]),"stationery")
-	var s = result.game.snapshot()
-	expect(s.summaries.size() == 3,"three daily settlements")
-	for day in range(1,4):
-		var stages = {}
-		for entry in s.ledger:
-			if entry.day == day: stages[entry.kind] = true
-		for kind in ["buy","craft","display","open_shop","settle"]: expect(stages.has(kind),"day%d includes %s" % [day,kind])
-	expect(result.game.view().finished,"third day explicit completed view")
-	reject(result.game,"next_day")
-	expect("shelf" in s.upgrades and s.known.size() == 3,"upgrades and known recipes persist")
+	var r = simulate(int(seeds[0]),"quick_service")
+	expect(r.game.snapshot().summaries.size() == 3,"three settlements on one save")
+	expect(r.game.view().inventory.size() == 12 and r.game.view().recipes.size() == 5,"twelve SKU and five known recipes")
+	reject(r.game,"next_day")
+	roundtrip(r.game,"finished-restaurant")
 
 func test_p03():
 	var g = Session.new(7)
-	act(g,"buy",{"item_id":"feather","quantity":4})
-	act(g,"buy",{"item_id":"ink","quantity":4})
-	act(g,"buy",{"item_id":"timber","quantity":2})
-	expect(g.view().cash == 72,"purchases reduce cash by actual 28, not realised cost")
-	act(g,"finish_shopping")
-	act(g,"craft",{"recipe_id":"pen","quantity":4})
-	act(g,"craft",{"recipe_id":"lamp","quantity":2})
-	act(g,"display",{"item_id":"pen","quantity":4})
-	act(g,"display",{"item_id":"lamp","quantity":2})
-	act(g,"open_shop")
-	finish_trade(g)
-	var sum = g.view().summary
-	expect(sum.revenue == 70 and sum.sold_cost == 24 and sum.gross_profit == 46,"sold cost distinct from purchases: 3 pens + 2 lamps")
-	expect(g.view().cash == 138 and count(g,"pen") == 1,"cash138 with remaining pen cost4")
-	expect(Catalog.price("pen","friendly",0) == 11,"price half-up rounding")
-	expect(Catalog.price("pen","standard",25) == 15 and Catalog.price("pen","standard",999) == 15,"event price cap25%")
-	expect(Catalog.price("charm","premium",25) == 16,"composed integer half-up rounding")
-	# A lawful controlled order tests the exact budget boundary through the public command.
-	var b = Session.new(1)
-	act(b,"buy",{"item_id":"timber","quantity":1})
-	act(b,"finish_shopping")
-	act(b,"craft",{"recipe_id":"lamp","quantity":1})
-	act(b,"display",{"item_id":"lamp","quantity":1})
-	var state = b.snapshot()
-	for order in state.customers:
-		if not order.special: order.budget = 0
-	state.customers[2].budget = 17
-	fixture(b,state,"budget")
-	act(b,"open_shop")
-	b.advance(3000)
-	expect(not b.view().pending.is_empty(),"special order active")
-	act(b,"fulfill",{"order_id":b.view().pending.id,"item_id":"lamp"})
-	expect(b.snapshot().sales.back().revenue == 17,"budget equals price accepted")
-	var device = Session.new(1)
-	act(device,"buy",{"item_id":"bell","quantity":1})
-	act(device,"finish_shopping")
-	var original_items = device.snapshot().items
-	var original_cash = device.view().cash
-	act(device,"install",{"uid":original_items[0].uid})
-	expect(count(device,"bell","installed") == 1 and count(device,"bell","bag") == 0,"install moves one existing instance")
-	expect("waterproof" in device.view().inventory[5].tags,"installed device grants lamp effect")
-	act(device,"uninstall",{"uid":original_items[0].uid})
-	expect(device.snapshot().items == original_items and device.view().cash == original_cash,"uninstall restores same uid, cost and bag location without money change")
-	expect("waterproof" not in device.view().inventory[5].tags,"uninstall removes granted effect")
-	reject(device,"uninstall",{"uid":original_items[0].uid})
+	act(g,"buy",{"item_id":"flour","quantity":4}); act(g,"buy",{"item_id":"pumpkin","quantity":6}); act(g,"buy",{"item_id":"cream","quantity":2})
+	act(g,"finish_shopping"); act(g,"install",{"uid":1})
+	act(g,"craft",{"recipe_id":"floating_pie","quantity":4}); act(g,"craft",{"recipe_id":"moon_stew","quantity":2})
+	act(g,"uninstall",{"uid":1})
+	expect(g.view().recipes.filter(func(r): return r.recipe_id == "moon_stew")[0].available == false,"uninstall removes future cooking capability")
+	act(g,"display",{"item_id":"floating_pie","quantity":4}); act(g,"display",{"item_id":"moon_stew","quantity":2}); trade(g)
+	expect(g.view().summary.revenue == 80 and g.view().summary.sold_cost == 30 and g.view().summary.gross_profit == 50 and g.view().cash == 106,"actual ingredient cost and realised dish margin stay separate")
+	expect(g.snapshot().sales.any(func(s): return s.item_id == "moon_stew" and s.effect_id == "self_stir"),"crafted dish retains its magic after device removal")
+	expect(Catalog.price("floating_pie","friendly",0) == 11,"positive half-up rounding")
+	expect(Catalog.price("ember_soup","standard",25) == 18 and Catalog.price("ember_soup","standard",999) == 18,"rain contribution capped at25%")
 
 func test_p04():
 	var g = Session.new(7)
-	for q in [0,-1,1.5,"2",null]: reject(g,"buy",{"item_id":"feather","quantity":q})
-	reject(g,"buy",{"item_id":"unknown","quantity":1})
-	reject(g,"buy",{"item_id":"timber","quantity":20})
-	reject(g,"craft",{"recipe_id":"pen","quantity":1})
-	reject(g,"nonsense")
-	act(g,"finish_shopping")
-	reject(g,"craft",{"recipe_id":"pen","quantity":1})
-	reject(g,"craft",{"recipe_id":"unknown","quantity":1})
-	reject(g,"buy",{"item_id":"ink","quantity":1})
-	reject(g,"display",{"item_id":"bell","quantity":1})
-	reject(g,"install",{"uid":900})
-	var rich = Session.new(1)
-	var state = rich.snapshot(); state.cash = 1000; state.initial_cash = 1000
-	fixture(rich,state,"capacity")
-	act(rich,"buy",{"item_id":"ink","quantity":30})
-	act(rich,"buy",{"item_id":"feather","quantity":30})
-	act(rich,"buy",{"item_id":"moss","quantity":20})
-	reject(rich,"buy",{"item_id":"timber","quantity":1})
-	var h = Session.new(1)
-	act(h,"buy",{"item_id":"bell","quantity":1})
-	act(h,"buy",{"item_id":"timber","quantity":1})
-	act(h,"buy",{"item_id":"moss","quantity":1})
-	act(h,"buy",{"item_id":"feather","quantity":1})
-	act(h,"finish_shopping")
-	act(h,"install",{"uid":1})
-	reject(h,"display",{"item_id":"bell","quantity":1})
-	act(h,"craft",{"recipe_id":"lamp","quantity":1})
-	act(h,"craft",{"recipe_id":"charm","quantity":1})
-	act(h,"display",{"item_id":"lamp","quantity":1})
-	act(h,"display",{"item_id":"charm","quantity":1})
-	expect(reject(h,"display",{"item_id":"feather","quantity":1}).code == "capacity","actual third SKU hits shelf capacity")
-	act(h,"open_shop")
-	h.advance(3000)
-	expect(not h.view().pending.is_empty(),"required-effect rejection reaches special order")
-	var mismatch = reject(h,"fulfill",{"order_id":h.view().pending.get("id",""),"item_id":"charm"})
-	expect(mismatch.code == "unmatched" and "light" in mismatch.message,"on-shelf charm cannot bypass required light effect")
-	var poor = Session.new(1)
-	act(poor,"buy",{"item_id":"timber","quantity":1})
-	act(poor,"finish_shopping"); act(poor,"craft",{"recipe_id":"lamp","quantity":1}); act(poor,"display",{"item_id":"lamp","quantity":1})
-	var limited = poor.snapshot()
-	for order in limited.customers: order.budget = 0
-	fixture(poor,limited,"lowbudget")
-	act(poor,"open_shop"); poor.advance(3000)
-	expect(poor.snapshot().cash == 94,"ordinary sales cannot bypass budget")
-	reject(poor,"fulfill",{"order_id":poor.view().pending.id,"item_id":"lamp"})
-	reject(poor,"fulfill",{"order_id":"absent","item_id":"lamp"})
+	var poor = Session.new(7)
+	act(poor,"buy",{"item_id":"flour","quantity":12}); act(poor,"buy",{"item_id":"pumpkin","quantity":12})
+	expect(poor.view().cash == 0 and reject(poor,"buy",{"item_id":"cream","quantity":1}).code == "insufficient_cash","available ingredient with insufficient cash rejects atomically")
+	for q in [0,-1,1.5,"2",null]: reject(g,"buy",{"item_id":"flour","quantity":q})
+	reject(g,"buy",{"item_id":"pen","quantity":1}); reject(g,"buy",{"item_id":"moonheart","quantity":1})
+	reject(g,"craft",{"recipe_id":"floating_pie","quantity":1}); reject(g,"equip_weapon",{"weapon_id":"fan_wand"}); reject(g,"expedition_input",{"cast":true})
+	act(g,"buy",{"item_id":"pumpkin","quantity":1}); act(g,"buy",{"item_id":"cream","quantity":1}); act(g,"finish_shopping")
+	reject(g,"display",{"item_id":"pumpkin","quantity":1}); reject(g,"display",{"item_id":"stirring_cauldron","quantity":1})
+	reject(g,"craft",{"recipe_id":"moon_stew","quantity":1}); reject(g,"craft",{"recipe_id":"floating_pie","quantity":1})
+	act(g,"install",{"uid":1}); reject(g,"install",{"uid":1}); reject(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
+	act(g,"craft",{"recipe_id":"moon_stew","quantity":1}); act(g,"display",{"item_id":"moon_stew","quantity":1})
+	var s = g.snapshot()
+	for order in s.customers: order.budget = 0
+	fixture(g,s,"budget-zero")
+	act(g,"open_shop"); g.advance(3000)
+	expect(not g.view().pending.is_empty(),"special order actually reached")
+	expect("quick" in reject(g,"fulfill",{"order_id":g.view().pending.id,"item_id":"moon_stew"}).message,"on-menu hearty meal cannot bypass quick requirement")
+	expect(g.snapshot().sales.all(func(sale): return sale.revenue == 0),"ordinary service cannot bypass budget")
+
+func test_noop_request_binding():
+	var g = Session.new(1); var before = g.snapshot().ledger.duplicate(true)
+	expect(g.command("pause",{"value":false},"same-noop").ok,"success no-op accepted")
+	expect(g.snapshot().ledger == before and g.snapshot().requests.has("same-noop"),"no-op bound without economic row")
+	reject(g,"recover",{},"same-noop")
+	act(g,"finish_shopping"); act(g,"price",{"item_id":"floating_pie","tier":"standard"})
+	act(g,"price",{"item_id":"floating_pie","tier":"standard"},"old-price")
+	act(g,"price",{"item_id":"floating_pie","tier":"premium"})
+	var state = g.snapshot()
+	expect(g.command("price",{"item_id":"floating_pie","tier":"standard"},"old-price").code == "duplicate" and g.snapshot() == state,"stale no-op retry cannot reprice")
+	var clone = roundtrip(g,"noop-binding")
+	expect(clone.command("price",{"item_id":"floating_pie","tier":"standard"},"old-price").code == "duplicate","no-op binding persists")
 
 func test_p05():
 	test_noop_request_binding()
 	var g = Session.new(23)
-	act(g,"buy",{"item_id":"timber","quantity":4},"same-buy")
-	var before = g.snapshot()
-	expect(g.command("buy",{"item_id":"timber","quantity":4},"same-buy").code == "duplicate","same request id returns duplicate")
-	expect(g.snapshot() == before,"duplicate purchase no state change")
-	reject(g,"buy",{"item_id":"timber","quantity":3},"same-buy")
-	act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4}); act(g,"open_shop")
-	g.advance(3000)
-	var order = g.view().pending.id
-	act(g,"fulfill",{"order_id":order,"item_id":"lamp"},"special-once")
-	before = g.snapshot()
-	expect(g.command("fulfill",{"order_id":order,"item_id":"lamp"},"special-once").code == "duplicate","special retry idempotent")
-	expect(g.snapshot() == before,"special no duplicated revenue")
-	reject(g,"fulfill",{"order_id":order,"item_id":"lamp"})
-	finish_trade(g)
-	reject(g,"settle")
-	var path = temp_root+"/settled.json"
-	expect(g.save_to(path).ok,"save after settlement")
-	var restored = Session.new(99); expect(restored.load_from(path).ok,"restore settlement")
-	reject(restored,"settle")
-	act(restored,"next_day",{},"next-once")
-	before = restored.snapshot()
-	expect(restored.command("next_day",{},"next-once").code == "duplicate","next-day retry same ID")
-	expect(restored.snapshot() == before and restored.view().day == 2,"no double daily refresh or skip")
-	reject(restored,"next_day")
-	act(restored,"recover",{},"recover-once")
-	expect(restored.save_to(path).ok,"save after daily reward")
-	expect(g.load_from(path).ok,"restore reward")
-	reject(g,"recover")
-	expect(g.view().daily_recovery == 1,"daily reward flag preserved")
+	act(g,"recover",{},"reward-once"); var before = g.snapshot()
+	expect(g.command("recover",{},"reward-once").code == "duplicate" and g.snapshot() == before,"daily reward retry no change")
+	reject(g,"recover"); g = roundtrip(g,"reward-once"); reject(g,"recover")
+	act(g,"finish_shopping"); trade(g); reject(g,"settle")
+	act(g,"next_day",{},"day-once"); before = g.snapshot()
+	expect(g.command("next_day",{},"day-once").code == "duplicate" and g.snapshot() == before,"cross-day refresh once")
+	reject(g,"next_day")
 
 func test_p06():
-	var g = Session.new(99)
-	var zero = g.snapshot(); zero.cash = 0; zero.initial_cash = 0
-	fixture(g,zero,"zero")
-	expect(g.view().available_commands.recover.enabled,"visible zero-cost recovery")
-	act(g,"recover")
-	expect(g.view().cash == 12,"finite recovery supplies basic working capital")
-	reject(g,"recover")
-	var path = temp_root+"/zero-reward.json"
-	expect(g.save_to(path).ok and g.load_from(path).ok,"reward save/reload")
-	reject(g,"recover")
-	act(g,"buy",{"item_id":"feather","quantity":2}); act(g,"buy",{"item_id":"ink","quantity":2})
-	act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"pen","quantity":2}); act(g,"display",{"item_id":"pen","quantity":2}); act(g,"open_shop")
-	finish_trade(g)
-	expect(g.view().summary.revenue == 24 and g.view().cash == 24,"zero-funds player can resume normal business")
-	var recovery_count = 0
-	for entry in g.snapshot().ledger:
-		if entry.kind == "recover": recovery_count += 1
-	expect(recovery_count == 1,"recovery trace count one")
-	traces.append({"scenario":"zero-funds-recovery","recoveries":recovery_count,"ledger":g.snapshot().ledger})
-
-func prepared(seed_value: int):
-	var g = Session.new(seed_value)
-	act(g,"buy",{"item_id":"feather","quantity":4}); act(g,"buy",{"item_id":"ink","quantity":4}); act(g,"buy",{"item_id":"timber","quantity":4}); act(g,"buy",{"item_id":"moss","quantity":1})
-	return g
-
-func roundtrip(g, label: String):
-	var path = temp_root+"/"+label+".json"
-	var before = g.snapshot()
-	expect(g.save_to(path).ok,"write complete "+label)
-	var clone = Session.new(999)
-	expect(clone.load_from(path).ok,"load complete "+label)
-	expect(clone.snapshot() == before,"exact state roundtrip "+label)
-	expect(clone.snapshot().rng_state is String and clone.snapshot().seed is String,"lossless RNG strings "+label)
-	return clone
-
-func same_continuation(a, b):
-	if a.view().phase == "shopping":
-		for g in [a,b]:
-			act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"pen","quantity":4}); act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"craft",{"recipe_id":"charm","quantity":1}); act(g,"display",{"item_id":"pen","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4}); act(g,"open_shop")
-	for g in [a,b]:
-		if g.view().phase == "trading": finish_trade(g)
-		if g.view().phase == "settled" and g.view().day < 3: act(g,"next_day")
-	# Request ids intentionally differ between branches; economic state and RNG must match.
-	var sa = a.snapshot(); var sb = b.snapshot(); sa.erase("requests"); sb.erase("requests")
-	expect(sa == sb,"continued branch equals uninterrupted branch, including ledger/cursor/RNG")
+	var g = Session.new(99); var zero = g.snapshot()
+	zero.initial_cash = 0; zero.cash = 0; zero.items = []; zero.ledger = []; zero.next_uid = 1
+	fixture(g,zero,"zero-funds-empty")
+	expect(g.view().available_commands.recover.enabled,"visible zero-cost wash-pot recovery")
+	act(g,"recover"); reject(g,"recover"); g = roundtrip(g,"zero-recovery"); reject(g,"recover")
+	prepare_food(g,{"floating_pie":2}); trade(g)
+	expect(g.view().cash == 22 and g.view().summary.revenue == 24,"zero-funds empty inventory resumes actual business")
+	expect(reject(g,"upgrade",{"upgrade_id":"field_kit"}).code == "insufficient_cash","earned income threshold cannot bypass actual upgrade payment")
+	traces.append({"scenario":"zero-funds-recovery","ledger":g.snapshot().ledger,"recoveries":1})
 
 func test_p07():
-	var g = prepared(20261025)
+	var g = Session.new(20261025)
+	act(g,"buy",{"item_id":"flour","quantity":4}); act(g,"buy",{"item_id":"pumpkin","quantity":4})
 	var clone = roundtrip(g,"after-shopping")
-	same_continuation(g,clone)
-	g = prepared(20261025)
-	act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"pen","quantity":4}); act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"display",{"item_id":"pen","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4}); act(g,"open_shop")
-	g.advance(1500)
-	clone = roundtrip(g,"mid-trading")
-	same_continuation(g,clone)
-	g = prepared(20261025)
-	act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4}); act(g,"open_shop")
-	g.advance(3000)
-	expect(not g.view().pending.is_empty(),"pending special save point")
-	clone = roundtrip(g,"special-pending")
-	var frozen = g.snapshot(); g.advance(50000)
-	expect(g.snapshot() == frozen,"special demand freezes clock/economy/cursor")
-	same_continuation(g,clone)
-	g = prepared(20261025)
-	act(g,"finish_shopping"); act(g,"open_shop"); finish_trade(g)
-	clone = roundtrip(g,"after-settlement")
-	same_continuation(g,clone)
-	g = prepared(1); act(g,"finish_shopping"); act(g,"open_shop"); g.advance(500)
-	act(g,"pause",{"value":true})
-	frozen = g.snapshot(); g.advance(60000)
-	expect(g.snapshot() == frozen,"pause freezes economic state, cursor and phase clock")
-	act(g,"pause",{"value":false}); g.advance(500)
-	expect(g.view().cursor == 1,"resume continues saved clock")
-	# Populate persistent capabilities as well as economy before comparing a reload.
-	g = prepared(7)
-	act(g,"buy",{"item_id":"bell","quantity":1},"persistent-device")
-	var bell_uid = g.snapshot().items.back().uid
-	act(g,"finish_shopping"); act(g,"install",{"uid":bell_uid})
-	act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4})
-	act(g,"open_shop"); finish_trade(g); act(g,"upgrade",{"upgrade_id":"supply_pass"}); act(g,"next_day")
-	act(g,"recover",{},"persistent-recovery")
-	act(g,"buy",{"item_id":"pen","quantity":4})
-	act(g,"finish_shopping"); act(g,"price",{"item_id":"pen","tier":"friendly"})
-	act(g,"display",{"item_id":"pen","quantity":4}); act(g,"open_shop"); g.advance(1500)
-	expect(g.set_paused(true).ok,"public pause before persistent-state save")
-	expect(count(g,"bell","installed") == 1 and "supply_pass" in g.snapshot().upgrades,"save has nonempty equipment and upgrades")
-	expect(g.snapshot().daily_recovery == 1 and g.snapshot().clock_ms == 500,"save has used daily reward and fractional clock")
-	clone = roundtrip(g,"persistent-capabilities")
-	var restored = clone.snapshot()
-	expect(clone.command("buy",{"item_id":"bell","quantity":1},"persistent-device").code == "duplicate","reload preserves committed request across days")
-	expect(clone.snapshot() == restored,"duplicate after reload cannot rebuy device")
-	reject(clone,"recover")
-	clone.advance(60000)
-	expect(clone.snapshot() == restored,"loaded paused game preserves partial clock")
-	for game in [g,clone]: expect(game.set_paused(false).ok,"resume populated save")
-	same_continuation(g,clone)
+	for x in [g,clone]:
+		act(x,"finish_shopping"); act(x,"craft",{"recipe_id":"floating_pie","quantity":4}); act(x,"display",{"item_id":"floating_pie","quantity":4}); act(x,"open_shop"); x.advance(1500)
+	expect(comparable(g) == comparable(clone),"shopping reload continues identically")
+	clone = roundtrip(g,"during-service")
+	for x in [g,clone]: trade(x)
+	expect(comparable(g) == comparable(clone),"fractional service clock survives save")
+	act(g,"upgrade",{"upgrade_id":"field_kit"})
+	clone = roundtrip(g,"pending-growth")
+	expect(clone.view().progression.owned_weapons == ["bolt_wand"] and clone.view().progression.pending_unlocks == ["fan_wand","gust"],"paid growth remains pending on purchase day")
+	for x in [g,clone]: act(x,"next_day")
+	expect(comparable(g) == comparable(clone),"growth unlocks identically next day")
+	reject(clone,"next_day")
 
 func test_p08():
 	for seed_value in seeds:
 		var a = Session.new(int(seed_value)); var b = Session.new(int(seed_value))
-		expect(a.snapshot() == b.snapshot(),"same seed gives identical supply and demand")
-		for game in [a,b]: act(game,"buy",{"item_id":"moss","quantity":1},"replay-1")
-		expect(a.snapshot() == b.snapshot(),"same legal sequence exactly identical")
-		var c = roundtrip(a,"seed-%s" % seed_value)
-		var snap = c.snapshot()
-		expect(c.load_from(temp_root+"/seed-%s.json" % seed_value).ok,"repeat read same save")
-		expect(c.snapshot() == snap,"repeated read never rerolls")
-	var huge = Session.new(9223372036854775806)
-	var huge_clone = roundtrip(huge,"large-seed")
-	expect(huge_clone.snapshot().seed == "9223372036854775806","64bit seed remains exact through JSON")
+		expect(a.snapshot() == b.snapshot(),"same seed exact initial state")
+		for g in [a,b]: act(g,"buy",{"item_id":"flour","quantity":1},"seed-same")
+		expect(a.snapshot() == b.snapshot(),"same commands and seed reproduce supply/economy")
+		var clone = roundtrip(a,"seed-%s" % seed_value); var before = clone.snapshot()
+		expect(clone.load_from(temp_root+"/seed-%s.json" % seed_value).ok and clone.snapshot() == before,"repeated read cannot reroll")
+	var big = roundtrip(Session.new(9223372036854775806),"large-seed")
+	expect(big.snapshot().seed == "9223372036854775806","64-bit seed not rounded")
+
+func test_cost_provenance():
+	var g = Session.new(7); act(g,"buy",{"item_id":"flour","quantity":1})
+	var path = temp_root+"/cost.json"; expect(g.save_to(path).ok,"save valid cost with backup")
+	var bad = g.snapshot(); bad.items[1].cost = 9
+	expect(g.validate_snapshot(bad) != "","purchase cost corruption rejected")
+	var bytes = JSON.stringify(bad); var backup = FileAccess.get_file_as_string(path+".bak")
+	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(bytes); file.close()
+	var clone = Session.new(2); var result = clone.load_from(path)
+	expect(result.ok and result.code == "recovered_backup","bad cost restores backup")
+	expect(FileAccess.get_file_as_string(path) == bytes and FileAccess.get_file_as_string(path+".bak") == backup,"cost recovery preserves files")
+	act(clone,"recycle",{"item_id":"flour","quantity":1}); expect(clone.view().cash == 59,"cost corruption cannot mint recycle income")
+	g = Session.new(1); prepare_food(g,{"floating_pie":4})
+	bad = g.snapshot(); bad.items.back().cost += 1
+	expect(g.validate_snapshot(bad) != "","crafted cost must match consumed ingredients")
+	trade(g); bad = g.snapshot()
+	for sale in bad.sales:
+		if sale.revenue > 0: sale.cost += 1; bad.summaries[0].sold_cost += 1; bad.summaries[0].gross_profit -= 1; break
+	expect(g.validate_snapshot(bad) != "","realised margin must match actual outflow")
 
 func test_p09():
 	test_cost_provenance()
-	var g = prepared(7)
-	var path = temp_root+"/damage.json"
-	expect(g.save_to(path).ok,"first valid primary and backup")
-	var backup_state = g.snapshot()
-	act(g,"buy",{"item_id":"moss","quantity":1})
-	expect(g.save_to(path).ok,"rotate valid previous primary")
-	var backup_bytes = FileAccess.get_file_as_string(path+".bak")
-	var bad_states = ["{\"version\":", "this is not JSON"]
-	var invalid = g.snapshot(); invalid.cash = -1; bad_states.append(JSON.stringify(invalid))
-	invalid = g.snapshot(); invalid.items[0].location = "installed"; bad_states.append(JSON.stringify(invalid))
-	invalid = g.snapshot(); invalid.ledger = []; bad_states.append(JSON.stringify(invalid))
-	for bad in bad_states:
+	var g = Session.new(7); var path = temp_root+"/damaged.json"
+	act(g,"buy",{"item_id":"flour","quantity":1}); expect(g.save_to(path).ok,"valid primary+backup")
+	var good = g.snapshot(); var backup = FileAccess.get_file_as_string(path+".bak")
+	var invalid = good.duplicate(true); invalid.cash = -1
+	for bad in ["{","invalid JSON",JSON.stringify(invalid)]:
 		var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(bad); file.close()
-		var loaded = Session.new(1)
-		var result = loaded.load_from(path)
-		expect(result.ok and result.code == "recovered_backup","damaged primary restores known valid backup")
-		expect(loaded.snapshot() == backup_state,"backup state equals exact prior snapshot")
-		expect(FileAccess.get_file_as_string(path) == bad,"raw damaged primary preserved")
-		expect(FileAccess.get_file_as_string(path+".bak") == backup_bytes,"known valid backup preserved")
-		act(loaded,"buy",{"item_id":"ink","quantity":1})
-	var missing = temp_root+"/no-backup.json"
-	var file = FileAccess.open(missing,FileAccess.WRITE); file.store_string("{"); file.close()
-	var before = g.snapshot(); var failure = g.load_from(missing)
-	expect(not failure.ok and g.snapshot() == before,"no valid backup fails without partial load/new game")
-	invalid = g.snapshot(); invalid.version = 99
-	file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(invalid)); file.close()
-	before = g.snapshot(); failure = g.load_from(path)
-	expect(not failure.ok and failure.message == "不支持的存档版本" and g.snapshot() == before,"unsupported version clear failure even with backup")
-	expect(FileAccess.get_file_as_string(path+".bak") == backup_bytes,"unsupported version doesn't overwrite backup")
-	var malformed = g.snapshot(); malformed.erase("rng_state")
-	expect(not g.validate_snapshot(malformed).is_empty(),"missing save field rejected")
-
-func test_noop_request_binding():
-	var g = Session.new(1)
-	var ledger_before = g.snapshot().ledger.duplicate(true)
-	expect(g.command("pause",{"value":false},"noop-pause").ok,"successful no-op pause")
-	expect(g.snapshot().requests.has("noop-pause"),"successful no-op binds request id")
-	expect(g.snapshot().ledger == ledger_before,"no-op request adds no economic ledger entry")
-	var before = g.snapshot()
-	var conflict = g.command("recover",{},"noop-pause")
-	expect(not conflict.ok and conflict.code == "request_conflict","no-op id cannot be reused for a reward")
-	expect(g.snapshot() == before,"conflicting no-op request atomically rejected")
-	g = Session.new(1)
-	act(g,"finish_shopping")
-	act(g,"price",{"item_id":"pen","tier":"standard"},"price-initial")
-	ledger_before = g.snapshot().ledger.duplicate(true)
-	expect(g.command("price",{"item_id":"pen","tier":"standard"},"price-noop").ok,"successful no-op price")
-	expect(g.snapshot().ledger == ledger_before,"no-op price does not add a ledger row")
-	act(g,"price",{"item_id":"pen","tier":"premium"},"price-new")
-	before = g.snapshot()
-	expect(g.command("price",{"item_id":"pen","tier":"standard"},"price-noop").code == "duplicate","old no-op price retry stays duplicate")
-	expect(g.snapshot() == before and g.view().prices.pen == 14,"retry cannot restore an outdated price")
-	var clone = roundtrip(g,"noop-requests")
-	before = clone.snapshot()
-	expect(clone.command("price",{"item_id":"pen","tier":"standard"},"price-noop").code == "duplicate","no-op binding survives reload")
-	expect(clone.snapshot() == before,"reloaded no-op retry cannot mutate price")
-
-func test_cost_provenance():
-	var g = Session.new(7)
-	act(g,"buy",{"item_id":"ink","quantity":1})
-	var path = temp_root+"/cost-provenance.json"
-	expect(g.save_to(path).ok,"save cost-bearing item and valid backup")
-	var backup_bytes = FileAccess.get_file_as_string(path+".bak")
-	var bad = g.snapshot(); bad.items[0].cost = 9
-	expect(not g.validate_snapshot(bad).is_empty(),"isolated purchase cost corruption rejected")
-	var bad_bytes = JSON.stringify(bad)
-	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(bad_bytes); file.close()
-	var clone = Session.new(1)
-	var restored = clone.load_from(path)
-	expect(restored.ok and restored.code == "recovered_backup","bad cost restores known valid backup")
-	expect(clone.snapshot().items.size() == 1,"recovered backup contains the purchased item")
-	if clone.snapshot().items.size() != 1: return
-	expect(clone.snapshot().items[0].cost == 1,"restored cost equals actual purchase price")
-	expect(FileAccess.get_file_as_string(path) == bad_bytes and FileAccess.get_file_as_string(path+".bak") == backup_bytes,"cost recovery preserves damaged primary and backup")
-	act(clone,"recycle",{"item_id":"ink","quantity":1})
-	expect(clone.view().cash == 99,"recycled cost-one ink cannot mint four coins")
-	var h = Session.new(7)
-	act(h,"buy",{"item_id":"feather","quantity":2}); act(h,"buy",{"item_id":"ink","quantity":2})
-	act(h,"buy",{"item_id":"bell","quantity":1}); act(h,"finish_shopping")
-	act(h,"craft",{"recipe_id":"pen","quantity":2}); act(h,"install",{"uid":5})
-	act(h,"display",{"item_id":"pen","quantity":2}); act(h,"undisplay",{"item_id":"pen","quantity":1})
-	act(h,"uninstall",{"uid":5})
-	bad = h.snapshot()
-	for item in bad.items:
-		if item.item_id == "pen": item.cost += 1; break
-	expect(not h.validate_snapshot(bad).is_empty(),"crafted cost must equal actual consumed ingredients")
-	expect(h.validate_snapshot(h.snapshot()).is_empty(),"location changes preserve valid uid and cost provenance")
-	act(h,"open_shop"); finish_trade(h)
-	bad = h.snapshot()
-	for sale in bad.sales:
-		if sale.revenue > 0:
-			sale.cost += 1; bad.summaries[0].sold_cost += 1; bad.summaries[0].gross_profit -= 1; break
-	expect(not h.validate_snapshot(bad).is_empty(),"realised cost cannot diverge from the consumed item and ledger")
+		var result = g.load_from(path)
+		expect(result.ok and result.code == "recovered_backup" and g.snapshot() == good,"damaged primary recovers exact snapshot")
+		expect(FileAccess.get_file_as_string(path) == bad and FileAccess.get_file_as_string(path+".bak") == backup,"load never destroys corrupt/backup bytes")
+	var old = "{\"version\":1}"
+	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(old); file.close()
+	var result = g.load_from(path)
+	expect(not result.ok and result.message == "不支持的存档版本" and g.snapshot() == good,"v1 rejected clearly even with valid v2 backup")
+	expect(FileAccess.get_file_as_string(path) == old and FileAccess.get_file_as_string(path+".bak") == backup,"v1 source and backup preserved")
+	var earned = Session.new(1); prepare_food(earned,{"floating_pie":4}); trade(earned); act(earned,"upgrade",{"upgrade_id":"field_kit"})
+	var malformed = earned.snapshot(); malformed.sales[0] = "broken"
+	expect(earned.validate_snapshot(malformed) != "","malformed sales reject before earned-income calculation")
+	for bad_value in [null,[],{},"broken"]:
+		malformed = earned.snapshot()
+		for row in malformed.ledger:
+			if not row.removed.is_empty(): row.removed[0].uid = bad_value; break
+		expect(earned.validate_snapshot(malformed) != "","malformed consumed UID rejects without numeric coercion")
+		malformed = earned.snapshot()
+		for row in malformed.ledger:
+			if row.kind == "advance": row.events[0] = bad_value; break
+		expect(earned.validate_snapshot(malformed) != "","malformed sale event rejects without field access")
 
 func test_p10():
 	for seed_value in seeds:
-		var stationery = simulate(int(seed_value),"stationery").report
-		var home = simulate(int(seed_value),"home").report
-		expect(stationery.purchases != home.purchases and stationery.crafts != home.crafts,"routes differ in purchases and processing")
-		expect(stationery.upgrade_days[0].id != home.upgrade_days[0].id,"routes invest differently")
-		for strategy in ["conservative","self_use","rain"]: simulate(int(seed_value),strategy)
-	expect(simulations.size() >= 25,"five fixed seeds times five route/strategy runs")
+		var quick = simulate(int(seed_value),"quick_service").report
+		var hot = simulate(int(seed_value),"hot_meals").report
+		expect(quick.purchases != hot.purchases and quick.crafts != hot.crafts,"routes differ in ingredient and cooking choices")
+		expect(quick.upgrade_days[0].id != hot.upgrade_days[0].id,"routes invest in different next-day choices")
+		for strategy in ["conservative","kitchen_investment","rain_stockpile"]: simulate(int(seed_value),strategy)
 
 func test_p11():
-	var g = Session.new(23)
-	act(g,"buy",{"item_id":"bell","quantity":1})
-	var keep = roundtrip(g,"keep-sell-origin")
-	for game in [g,keep]:
-		act(game,"buy",{"item_id":"timber","quantity":4}); act(game,"buy",{"item_id":"feather","quantity":2}); act(game,"buy",{"item_id":"ink","quantity":2}); act(game,"finish_shopping"); act(game,"craft",{"recipe_id":"lamp","quantity":4}); act(game,"craft",{"recipe_id":"pen","quantity":2})
-	act(keep,"install",{"uid":1})
-	expect("waterproof" in keep.view().inventory[5].tags,"equipped bell actually changes lamp matching rule")
-	reject(keep,"display",{"item_id":"bell","quantity":1})
-	act(g,"display",{"item_id":"bell","quantity":1})
-	act(g,"display",{"item_id":"pen","quantity":2})
-	act(keep,"display",{"item_id":"lamp","quantity":4}); act(keep,"display",{"item_id":"pen","quantity":2})
-	for game in [g,keep]: act(game,"open_shop"); finish_trade(game); act(game,"next_day")
-	var sold_bell = false
-	for sale in g.snapshot().sales:
-		if sale.item_id == "bell": sold_bell = sale.revenue == 28
-	expect(sold_bell and count(g,"bell") == 0,"sell branch cash28 and no owned bell")
-	expect(count(keep,"bell","installed") == 1,"keep branch device remains uniquely installed")
-	for game in [g,keep]:
-		for day in [2,3]:
-			stock(game,"lamp",4); stock(game,"pen",2)
-			act(game,"finish_shopping"); make(game,"lamp",4); make(game,"pen",2); display_all(game,"lamp"); display_all(game,"pen"); act(game,"open_shop"); finish_trade(game)
-			if day < 3: act(game,"next_day")
-		expect(game.view().finished,"both opportunity-cost branches finish without reacquiring device")
-	var keep_rain = false; var sell_rain = false
-	for sale in keep.snapshot().sales:
-		if sale.day == 3 and sale.order_id == "d3-special": keep_rain = sale.revenue > 0 and "避雨铃赋予防水效果" in sale.reasons
-	for sale in g.snapshot().sales:
-		if sale.day == 3 and sale.order_id == "d3-special": sell_rain = sale.revenue > 0
-	expect(keep_rain and not sell_rain,"retained capability actually fulfills demand that sale branch cannot")
-
-func rain_branch(seed_value: int, solution: String):
-	var g = Session.new(seed_value)
-	if solution == "bell": act(g,"buy",{"item_id":"bell","quantity":1})
-	for day in range(1,4):
-		if day == 2:
-			expect(g.view().phase == "shopping" and g.view().forecast.day == 3,"rain forecast readable before second-day purchase")
-			expect("雨光苔" in g.view().forecast.text and "避雨铃" in g.view().forecast.text,"forecast explains stable source and both solutions")
-		stock(g,"pen",4)
-		if solution == "charm" and day == 2: stock(g,"charm",1)
-		act(g,"finish_shopping"); make(g,"pen",4)
-		if solution == "charm" and day == 2: make(g,"charm",1)
-		if solution == "bell" and day == 1: act(g,"install",{"uid":1})
-		display_all(g,"pen")
-		if solution == "charm" and day == 3: display_all(g,"charm")
-		act(g,"open_shop"); finish_trade(g)
-		if day < 3: act(g,"next_day")
-	var rain_sale = {}
-	for sale in g.snapshot().sales:
-		if sale.order_id == "d3-special": rain_sale = sale
-	return {"game":g,"sale":rain_sale}
+	var origin = Session.new(23); var keep = roundtrip(origin,"device-opportunity-origin")
+	act(origin,"recycle",{"item_id":"stirring_cauldron","quantity":1})
+	expect(origin.view().cash == 78 and keep.view().cash == 60,"retained zero-cost heirloom costs18 foregone cash")
+	var sold = simulate(23,"quick_service",origin); var retained = simulate(23,"hot_meals",keep)
+	expect(sold.game.view().finished and retained.game.view().finished,"both device branches finish without rare reacquisition")
+	expect(not sold.report.crafts.has("moon_stew") and retained.report.crafts.has("moon_stew"),"device changes actual recipes and matching")
+	var g = Session.new(1); act(g,"finish_shopping"); trade(g); act(g,"next_day")
+	var cash = g.view().cash
+	act(g,"buy",{"item_id":"stirring_cauldron","quantity":1}); act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
+	expect(g.view().cash == cash-12,"replacement buy30/sell18 cannot arbitrage")
 
 func test_p12():
 	for seed_value in seeds:
-		var prepared_rain = rain_branch(int(seed_value),"charm")
-		var unprepared = rain_branch(int(seed_value),"none")
-		var second = rain_branch(int(seed_value),"bell")
-		expect(prepared_rain.sale.revenue == 14 and prepared_rain.sale.item_id == "charm","stockpiled charm earns explained rain premium")
-		expect(unprepared.sale.revenue == 0 and count(unprepared.game,"charm") == 0,"unprepared branch gets neither goods nor rain sale")
-		expect(second.sale.revenue == 15 and second.sale.item_id == "pen","second legal waterproof effect solution works")
-		expect("第三日雨天需求 +25%（上限）" in prepared_rain.sale.reasons,"sale records match and event reason")
-		traces.append({"scenario":"rain-stockpile","seed":seed_value,"prepared":prepared_rain.sale,"unprepared":unprepared.sale,"second_solution":second.sale})
+		for strategy in ["quick_service","hot_meals"]:
+			var reports = simulations.filter(func(r): return r.seed == seed_value and r.strategy == strategy)
+			if reports.is_empty(): reports.append(simulate(int(seed_value),strategy).report)
+			var r = reports[0]; var forecast = r.forecasts[1]
+			expect(forecast.required == ["warming","heat_hold"] and forecast.solutions.size() == 2,"rain and two stable solutions readable before day2 buying")
+			var rain = r.sales.filter(func(s): return s.order_id == "d3-special")
+			expect(rain.size() == 1 and rain[0].revenue > 0 and "+25%" in str(rain[0].reasons),"prepared dish actually earns bounded rain premium")
+			expect(rain[0].item_id == ("ember_soup" if strategy == "quick_service" else "moon_stew"),"independent stable rain solution")
+		var unprepared = simulate(int(seed_value),"unprepared").report
+		expect(unprepared.sales.filter(func(s): return s.order_id == "d3-special")[0].revenue == 0,"unprepared pie gets no rain reward")
 
 func test_p13():
 	var bulk = Session.new(1); var each = Session.new(1)
 	for g in [bulk,each]:
-		act(g,"buy",{"item_id":"feather","quantity":4}); act(g,"buy",{"item_id":"ink","quantity":4}); act(g,"finish_shopping")
-	act(bulk,"craft",{"recipe_id":"pen","quantity":4})
-	for i in range(4): act(each,"craft",{"recipe_id":"pen","quantity":1})
-	expect(bulk.snapshot().items == each.snapshot().items and bulk.view().cash == each.view().cash,"batch and per-unit materials/cost/output identical without equipment")
-	reject(bulk,"craft",{"recipe_id":"pen","quantity":0}); reject(bulk,"craft",{"recipe_id":"pen","quantity":-1}); reject(bulk,"craft",{"recipe_id":"pen","quantity":1})
-	var batch_actions = 0; var each_actions = 0
-	for e in bulk.snapshot().ledger:
-		if e.kind == "craft": batch_actions += 1
-	for e in each.snapshot().ledger:
-		if e.kind == "craft": each_actions += 1
-	expect(batch_actions == 1 and each_actions == 4,"known bulk production reduces repeated input")
-	var g = Session.new(1)
-	act(g,"finish_shopping"); act(g,"open_shop"); finish_trade(g)
-	act(g,"upgrade",{"upgrade_id":"supply_pass"}); act(g,"next_day")
-	expect(g.snapshot().supply.has("pen"),"upgrade opens stable finished-goods supplier next day")
-	act(g,"buy",{"item_id":"pen","quantity":2})
-	act(g,"finish_shopping"); act(g,"display",{"item_id":"pen","quantity":2}); act(g,"open_shop"); finish_trade(g)
-	expect(g.view().summary.revenue > 0,"new supplier choice actually used in business")
-	var used_third_slot = false
-	for trace in traces:
-		if trace.get("strategy","") == "stationery":
-			var current = {}
-			for entry in trace.ledger:
-				if entry.kind == "next_day": current = {}
-				if entry.kind == "display":
-					current[entry.args.item_id] = true
-					if current.size() == 3: used_third_slot = true
-	expect(used_third_slot,"shelf upgrade's third display choice actually used")
+		act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1}); act(g,"buy",{"item_id":"flour","quantity":4}); act(g,"buy",{"item_id":"pumpkin","quantity":4}); act(g,"finish_shopping")
+	act(bulk,"craft",{"recipe_id":"floating_pie","quantity":4})
+	for i in range(4): act(each,"craft",{"recipe_id":"floating_pie","quantity":1})
+	expect(bulk.snapshot().items == each.snapshot().items and bulk.view().cash == each.view().cash,"base bulk input/cost/output equals individual cooking without device")
+	for q in [0,-1,1]: reject(bulk,"craft",{"recipe_id":"floating_pie","quantity":q})
+	act(bulk,"display",{"item_id":"floating_pie","quantity":4}); trade(bulk)
+	act(bulk,"upgrade",{"upgrade_id":"supply_pass"}); act(bulk,"upgrade",{"upgrade_id":"field_kit"})
+	expect(not bulk.snapshot().supply.has("ember_herb") and bulk.view().progression.owned_weapons == ["bolt_wand"],"upgrades cannot activate on purchase day")
+	reject(bulk,"upgrade",{"upgrade_id":"field_kit"}); act(bulk,"next_day")
+	expect(bulk.snapshot().supply.ember_herb >= 12 and "gust" in bulk.view().progression.skills,"next-day stable ingredient and earned skill activated")
+	act(bulk,"equip_weapon",{"weapon_id":"fan_wand"}); roundtrip(bulk,"equipped-growth")
+	prepare_food(bulk,{"ember_soup":1}); trade(bulk,true)
+	expect(bulk.snapshot().sales.any(func(s): return s.item_id == "ember_soup" and s.revenue > 0),"new supplier creates actual sold meal")
+	var no_sales = Session.new(1); act(no_sales,"recover"); act(no_sales,"recycle",{"item_id":"stirring_cauldron","quantity":1}); act(no_sales,"finish_shopping"); trade(no_sales)
+	expect(no_sales.view().cash >= 24,"boundary has money from non-dish sources")
+	reject(no_sales,"upgrade",{"upgrade_id":"field_kit"})
 
-func run(output_directory: String) -> Dictionary:
-	temp_root = output_directory+"/core-save-fixtures"
-	DirAccess.make_dir_recursive_absolute(temp_root)
-	var fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/prototype-scenarios.json"))
-	seeds = fixture_data.seeds
-	run_case("P02",test_p02); run_case("P03",test_p03); run_case("P04",test_p04); run_case("P05",test_p05)
-	run_case("P06",test_p06); run_case("P07",test_p07); run_case("P08",test_p08); run_case("P09",test_p09)
-	run_case("P10",test_p10); run_case("P11",test_p11); run_case("P12",test_p12); run_case("P13",test_p13)
-	var file = FileAccess.open(output_directory+"/core-simulations.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify({"schema_version":1,"seeds":seeds,"simulations":simulations},"\t")); file.close()
-	file = FileAccess.open(output_directory+"/core-traces.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify({"schema_version":1,"traces":traces},"\t")); file.close()
+func hagrid_ready(solution: String):
+	var g = Session.new(23)
+	stock(g,"flour",4); stock(g,"pumpkin",4); act(g,"finish_shopping")
+	if solution == "moon_stew": act(g,"install",{"uid":1})
+	make(g,"floating_pie",4); act(g,"display",{"item_id":"floating_pie","quantity":4}); trade(g)
+	if solution == "ember_soup": act(g,"upgrade",{"upgrade_id":"supply_pass"})
+	act(g,"next_day"); prepare_food(g,{solution:4 if solution == "moon_stew" else 1})
+	act(g,"open_shop"); g.advance(3000)
+	expect(g.view().pending.get("id","") == "d2-hagrid-patrol","second-day Hagrid genuinely pending")
+	return g
+
+func test_p15():
+	for solution in ["ember_soup","moon_stew"]:
+		var g = hagrid_ready(solution); var skipped = roundtrip(g,"hagrid-pending-"+solution)
+		var p = g.view().pending
+		expect(p.character_id == "hagrid" and p.quest_id == "hagrid_patrol" and p.rewards == [{"item_id":"ember_herb","quantity":2}],"persistent Hagrid identity and reward")
+		var before = g.snapshot(); g.advance(60000); expect(g.snapshot() == before,"Hagrid decision freezes clock/cursor")
+		var grass = count(g,"ember_herb",""); var cash = g.view().cash; var price = g.view().prices[solution]
+		act(g,"fulfill",{"order_id":p.id,"item_id":solution},"hagrid-complete-"+solution)
+		expect(count(g,"ember_herb","") == grass+2 and g.view().cash == cash+price and g.snapshot().quests.hagrid_patrol == "completed","one dish sells and two free herbs granted atomically")
+		before = g.snapshot()
+		expect(g.command("fulfill",{"order_id":p.id,"item_id":solution},"hagrid-complete-"+solution).code == "duplicate" and g.snapshot() == before,"same request cannot repeat quest reward")
+		reject(g,"fulfill",{"order_id":p.id,"item_id":solution}); g = roundtrip(g,"hagrid-completed-"+solution); reject(g,"fulfill",{"order_id":p.id,"item_id":solution})
+		act(skipped,"decline",{"order_id":p.id},"hagrid-skip-"+solution)
+		expect(skipped.snapshot().quests.hagrid_patrol == "declined" and count(skipped,"ember_herb","") == grass,"skip has no reward or penalty")
+		skipped = roundtrip(skipped,"hagrid-declined-"+solution)
+		for branch in [g,skipped]: trade(branch); act(branch,"next_day")
+		stock(g,"pumpkin",1); act(g,"finish_shopping"); act(g,"craft",{"recipe_id":"ember_soup","quantity":1})
+		expect(count(g,"ember_soup") > 0,"free quest ingredient returns to existing real recipe")
+		trade(g); act(skipped,"finish_shopping"); trade(skipped)
+		expect(g.view().finished and skipped.view().finished,"complete and skip branches both reach third settlement")
+	var full = Session.new(1); var rich = full.snapshot(); rich.cash = 1000; rich.initial_cash = 1000
+	fixture(full,rich,"reward-capacity-funds")
+	for id in ["flour","pumpkin","cream"]: act(full,"buy",{"item_id":id,"quantity":full.snapshot().supply[id]})
+	act(full,"finish_shopping"); act(full,"install",{"uid":1}); act(full,"craft",{"recipe_id":"moon_stew","quantity":1}); trade(full)
+	act(full,"upgrade",{"upgrade_id":"supply_pass"}); act(full,"next_day")
+	for id in full.snapshot().supply:
+		var amount = mini(80-full.snapshot().items.size(),int(full.snapshot().supply[id]))
+		if amount > 0: act(full,"buy",{"item_id":id,"quantity":amount})
+	expect(full.snapshot().items.size() == 80,"reward capacity fixture actually full")
+	for id in full.snapshot().supply:
+		if full.snapshot().supply[id] > 0:
+			expect(reject(full,"buy",{"item_id":id,"quantity":1}).code == "capacity","full inventory cannot buy one more available ingredient")
+			break
+	act(full,"finish_shopping"); act(full,"display",{"item_id":"moon_stew","quantity":1})
+	var state = full.snapshot()
+	for order in state.customers:
+		if not order.special: order.budget = 0
+	fixture(full,state,"reward-capacity-no-ordinary-sales")
+	act(full,"open_shop"); full.advance(3000)
+	expect(reject(full,"fulfill",{"order_id":"d2-hagrid-patrol","item_id":"moon_stew"},"full-reward").code == "capacity","whole quest rejected if two reward herbs cannot fit")
+	expect(not full.snapshot().requests.has("full-reward") and full.snapshot().quests.hagrid_patrol == "pending","failed reward leaves no commit or request marker")
+	act(full,"decline",{"order_id":"d2-hagrid-patrol"}); trade(full)
+	var budget = hagrid_ready("ember_soup"); state = budget.snapshot()
+	state.customers[2].budget = 13; state.pending.budget = 13; fixture(budget,state,"quest-budget-low")
+	expect("预算" in reject(budget,"fulfill",{"order_id":"d2-hagrid-patrol","item_id":"ember_soup"}).message,"budget below actual soup price rejected")
+	state = budget.snapshot(); state.customers[2].budget = 14; state.pending.budget = 14; fixture(budget,state,"quest-budget-exact")
+	act(budget,"fulfill",{"order_id":"d2-hagrid-patrol","item_id":"ember_soup"})
+	expect(budget.snapshot().sales.back().revenue == 14,"exact budget accepted")
+
+func run(output_directory: String, selected: String = "") -> Dictionary:
+	# Corruption/backup tests require fresh files, even when reusing a report folder.
+	temp_root = output_directory+"/core-save-fixtures-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(temp_root)
+	var fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/prototype-scenarios.json")); seeds = fixture_data.seeds
+	for id in ["P02","P03","P04","P05","P06","P07","P08","P09","P10","P11","P12","P13","P15"]:
+		if selected != "" and selected != "core" and selected != id: continue
+		run_case(id,Callable(self,"test_"+id.to_lower()))
+	for name in ["core-simulations","core-traces"]:
+		var file = FileAccess.open(output_directory+"/"+name+".json",FileAccess.WRITE)
+		file.store_string(JSON.stringify({"schema_version":1,"seeds":seeds,"simulations":simulations} if name == "core-simulations" else {"schema_version":1,"traces":traces},"\t",true,true)); file.close()
 	return {"schema_version":1,"suite":"prototype","cases":cases}
