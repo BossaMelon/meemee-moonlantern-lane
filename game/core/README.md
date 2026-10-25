@@ -10,7 +10,7 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 
 `view()`、`snapshot()`、`command(kind,args,request_id)`、`advance(delta_ms)`、`set_paused(value)`、`save_to(path)`、`load_from(path)`、`validate_snapshot(data)`、`action_trace()` 保持统一入口。快照与 view 均为深拷贝。未知 profile 返回明确错误，不回落到旧规则。旧 v2 行为及 API 见 [legacy_api.md](legacy_api.md)。
 
-服务波次、真实库存、菜单、温度与存档接口已可供 P05 接入。E02 `8a3350a` 已自然合并并接入真实 Session；成功创建 version2 模型后才扣次数及转移餐前效果。整个 quality-slice 的组合验收仍在补齐，完整 runner 对未齐必需项保持失败。
+服务波次、真实库存、菜单、温度与存档接口已可供 P05 接入。E02 `8a3350a` 已自然合并并接入真实 Session；成功创建 version2 模型后才扣次数及转移餐前效果。完整 runner 实际执行 Q01–Q05；缺依赖、失败、零断言或未知 suite 不会回落为旧原型通过。最终集成 gate、独立评审、Q06/QH 另行验收。
 
 ## 阶段与原子命令
 
@@ -67,12 +67,14 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 
 ## 存档与验收
 
-默认新档路径 `user://profiles/rain-night-v1/moonlantern.json`，同目录 .bak。v3包含 profile_id=rain-night-v1、rules_version=1。拒绝覆盖旧默认路径或已有其他版本/profile 的主档与备份；明确读取v2返回不支持，保持原字节。错误规则身份不会静默回退备份；损坏JSON可恢复同规则有效备份并保留损坏主档。实际独立用户目录由 H05 启动入口提供。
+默认新档路径 `user://profiles/rain-night-v1/moonlantern.json`，同目录 .bak。v3包含 profile_id=rain-night-v1、rules_version=1。拒绝覆盖旧默认路径或已有其他版本/profile 的主档与备份；明确读取v2返回不支持，保持原字节。错误规则身份不会静默回退备份；损坏JSON可恢复同规则有效备份并保留损坏主档。project.godot 使用 Godot 的 use_custom_user_dir/custom_user_dir_name 公共配置，把新运行入口放在 MeeMeeMoonlanternLane/rain-night-v1 独立用户目录；旧包配置保持原样。配置语义参见 [Godot 数据路径文档](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html)。
 
 validator 核对真实UID/取得成本/配方/成交与现金账、预留通道和容量、温度、波次提交、收入与成长、餐前效果来源。保存使用完整浮点精度；暂停与余数均可恢复，不补离线时间。
 
 - `tests/core/run_quality_service.gd -- --report ABS_REPORT`：服务专项，包含冻结新旧饼吞吐对照、三份保温真实UID、菜单优先序、混合温度、跨日、存档与原子拒绝。
-- `tests/run.gd -- --suite quality-slice --report ABS_REPORT`：完整雨夜入口；当前实际运行 Q03，其余未集成必需 case 为明确失败，进程非零。
+- `tests/run.gd -- --suite quality-slice --report ABS_REPORT`：完整雨夜入口；实际运行 Q01–Q05，消费冻结五种子；支持 --case Qxx 定向诊断，完整 gate 要求全部案例。
 - `tests/run.gd -- --suite prototype --report ABS_REPORT`：明确 legacy factory 的原15项。省略 --suite 仍为 prototype，以保留旧 gate 的协议。
 
 `tests/core/run_quality_expedition.gd -- --report ABS_REPORT` 执行实际 Session 两路移动/节点领取/保存、同一真实素材快照四用途分叉、两种餐前效果与创建失败原子性、跨晚节点身份专项；边界失败注入仅用于 create 返回空的反例，不作为取得素材或闭环证据。
+
+完整 quality suite 还执行正式 E02 几何/模型反例子进程、五种子两路线真实 Session 深处组合战斗、合法投资后的次晨散射实战、两条经营与无探索续营分支；在预警/活动孢子/硬直等实际状态保存恢复，按同一后续输入比较完整状态。profile_process.gd 在临时项目的独立用户目录中使用真实新旧默认 save/load，记录旧主档和备份SHA256并跨OS进程恢复。

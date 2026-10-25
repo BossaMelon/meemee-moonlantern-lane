@@ -17,11 +17,7 @@ func _initialize():
 	if suite_id != "prototype":
 		var result = {"schema_version":1,"suite":suite_id,"cases":[]}
 		if suite_id == "quality-slice":
-			var service = preload("res://tests/core/quality_service_cases.gd").new().run(report.get_base_dir())
-			result.cases.append({"id":"Q03","status":"passed" if service.failures.is_empty() else "failed","checks":service.checks,"failures":service.failures,"traces":service.traces})
-			# These required cases remain explicit failures until the real E02 integration is ready.
-			for id in ["Q01","Q02","Q04","Q05"]:
-				result.cases.append({"id":id,"status":"failed","checks":0,"failures":["P04 staged service API: real E02 integration and full quality acceptance not yet complete"]})
+			result = preload("res://tests/core/quality_suite.gd").new().run(report.get_base_dir(),selected)
 		else: result.cases.append({"id":"runner","status":"failed","checks":1,"failures":["Unknown suite: "+suite_id]})
 		_write_report(report,result)
 		return
@@ -54,7 +50,7 @@ func _write_report(report: String, result: Dictionary):
 		return
 	file.store_string(JSON.stringify(result,"\t"))
 	file.close()
-	var failed = false
+	var failed = result.cases.is_empty()
 	for test_case in result.cases:
 		if test_case.status != "passed" or test_case.checks < 1: failed = true
 	quit(1 if failed else 0)
