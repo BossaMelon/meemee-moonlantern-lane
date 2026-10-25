@@ -116,13 +116,18 @@ def main() -> int:
             run["product_exit_observed"] = result.get("product_exit_observed", False)
             run["saved_sha256"] = result.get("saved_sha256", "")
             run["automatic_restore_verified"] = result.get("automatic_restore_verified", False)
+            run["active_scene"] = result.get("active_scene")
+            run["active_assets_loaded"] = result.get("active_assets_loaded", False)
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
                              and (stage not in RESTORE_STAGES or run["automatic_restore_verified"] is True)
                              and (expected in ("complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
-                             and result.get("pixel_room_loaded") is True
+                             and run["active_scene"] in ("restaurant", "expedition")
+                             and run["active_assets_loaded"] is True
+                             and result.get("active_asset_evidence", {}).get("visible") is True
+                             and result.get("active_asset_evidence", {}).get("observed_after_render") is True
                              and result.get("display") not in (None, "headless"))
             write_report()
             print(f"{mode}/{stage}: {'PASS' if run['passed'] else 'FAIL'}; {run['checks']} checks; {log_path}", flush=True)

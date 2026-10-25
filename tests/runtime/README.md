@@ -33,6 +33,8 @@ python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --out
 
 监督器在每个进程结束后另存产品存档与备份的原始字节、SHA256，避免后续阶段覆盖唯一磁盘证据。这些文件与只读内存预期快照分别记录。
 
+素材证据在真实 viewport 绘制并截图后采集：餐厅要求可见饭店画布已加载；探险要求可见动作面板的渲染缓存中已有 mushroom-garden 背景与 meemee 角色纹理，记录其实际尺寸，测试不主动加载素材。报告分别提供 active_scene、active_assets_loaded 和对应 PNG；恢复直接进入战斗时，隐藏餐厅的 pixel_room_loaded 为不适用值，不把它伪报为已加载。supervisor 仍要求适用场景的正向加载证据与非 headless 显示。
+
 动作保存退出控件使用 E01 提交 `9fec5d4` 已发布的 `save_quit_button` / `save_quit_requested`，只读定位后通过当前设备的 InputEvent 激活；P02 信号接线必须已组合到候选，缺入口或保存后未退出均失败。恢复失败时另存完整实际快照及顶层差异字段，保留诊断证据。
 
 Mac 合成触屏路线在实例化场景前临时设置 `Input.emulate_touch_from_mouse=true`，以启用 [Godot 桌面 ScrollContainer 的触摸滚动路径](https://docs.godotengine.org/en/4.7/classes/class_scrollcontainer.html#class-scrollcontainer-signal-scroll-started)。报告记录此配置；不写 project.godot，不模拟实体设备认证，滚动仍由真实 ScreenTouch/ScreenDrag 事件执行。

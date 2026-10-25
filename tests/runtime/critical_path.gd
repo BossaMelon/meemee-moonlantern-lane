@@ -26,6 +26,7 @@ var startup_feedback = ""
 var startup_files: Dictionary = {}
 var automatic_restore_verified = false
 var input_count = 0
+var visual_evidence: Dictionary = {}
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -207,6 +208,38 @@ func screenshot(name: String):
 	var path=folder+"/"+attempt+"-"+name+".png"
 	expect(root.get_texture().get_image().save_png(path)==OK,"engine viewport PNG: "+name)
 	screenshots.append(path)
+	visual_evidence=inspect_visible_assets()
+	visual_evidence.viewport_png=path
+	visual_evidence.observed_after_render=true
+	visual_evidence.elapsed_ms=Time.get_ticks_msec()-started_ms
+	expect(visual_evidence.active_assets_loaded,"visible "+visual_evidence.active_scene+" pixel assets loaded after actual draw")
+
+func active_scene_name() -> String:
+	if not is_instance_valid(ui): return ""
+	return "expedition" if ui.game.view().phase=="expedition" else "restaurant"
+
+func inspect_visible_assets() -> Dictionary:
+	var scene=active_scene_name()
+	var evidence={"active_scene":scene,"visible":false,"active_assets_loaded":false}
+	if scene=="expedition" and is_instance_valid(ui.battle_panel):
+		var panel=ui.battle_panel
+		evidence.visible=panel.is_visible_in_tree() and ui.battle_host.is_visible_in_tree()
+		var rendered_textures: Dictionary={}
+		var character_loaded=false
+		# Read the renderer's populated cache only; never load a texture here.
+		for id in panel.textures:
+			if id!="mushroom-garden" and not str(id).begins_with("meemee_"): continue
+			var texture=panel.textures[id]
+			if texture is Texture2D and texture.get_width()>0 and texture.get_height()>0:
+				rendered_textures[id]=[texture.get_width(),texture.get_height()]
+				if str(id).begins_with("meemee_"): character_loaded=true
+		evidence.rendered_textures=rendered_textures
+		evidence.active_assets_loaded=evidence.visible and rendered_textures.has("mushroom-garden") and character_loaded
+	elif scene=="restaurant":
+		evidence.visible=ui.illustration.is_visible_in_tree()
+		evidence.room_loaded=not ui.illustration.missing.visible
+		evidence.active_assets_loaded=evidence.visible and evidence.room_loaded
+	return evidence
 
 func json_equal(a: Variant,b: Variant) -> bool:
 	return JSON.parse_string(JSON.stringify(a,"",true,true))==JSON.parse_string(JSON.stringify(b,"",true,true))
@@ -576,5 +609,11 @@ func write_report():
 	report["automatic_restore_verified"]=automatic_restore_verified
 	report["startup_files"]=startup_files
 	report["startup_feedback"]=startup_feedback
+	report["active_scene"]=active_scene_name()
+	report["active_asset_evidence"]=visual_evidence
+	report["active_assets_loaded"]=visual_evidence.get("active_scene")==report.active_scene and visual_evidence.get("active_assets_loaded",false)
+	# The last live rendered frame is authoritative; children may already be
+	# exiting when the product's tree_exiting observer writes the final report.
+	report["pixel_room_loaded"]=visual_evidence.get("room_loaded") if report.active_scene=="restaurant" else null
 	var file=FileAccess.open(folder+"/"+attempt+"-report.json",FileAccess.WRITE)
 	if file!=null: file.store_string(JSON.stringify(report,"  ")); file.close()
