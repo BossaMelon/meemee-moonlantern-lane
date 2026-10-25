@@ -30,6 +30,8 @@ var visual_evidence: Dictionary = {}
 var display_samples: Array = []
 var focus_events: Array = []
 var window_size_events: Array = []
+var combat_input_samples: Array = []
+var last_combat_input_summary: Dictionary = {}
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -42,8 +44,8 @@ func _initialize():
 	DirAccess.make_dir_recursive_absolute(folder)
 	input_file=FileAccess.open(folder+"/"+attempt+"-inputs.jsonl",FileAccess.WRITE)
 	started_ms=Time.get_ticks_msec()
-	root.focus_entered.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":true}))
-	root.focus_exited.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":false}))
+	root.focus_entered.connect(record_focus.bind(true))
+	root.focus_exited.connect(record_focus.bind(false))
 	root.size_changed.connect(record_window_size)
 	record_window_size()
 	call_deferred("run")
@@ -59,7 +61,7 @@ func expect(value: bool, message: String):
 
 func emit_input(event: InputEvent, local: bool = false):
 	input_count+=1
-	var entry={"elapsed_ms":Time.get_ticks_msec()-started_ms,"event":event.as_text(),"class":event.get_class(),"local":local,"pressed":event.is_pressed()}
+	var entry={"elapsed_ms":Time.get_ticks_msec()-started_ms,"sequence":input_count,"window_focused":root.has_focus(),"event":event.as_text(),"class":event.get_class(),"local":local,"pressed":event.is_pressed()}
 	if event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag: entry.position=[event.position.x,event.position.y]
 	if event is InputEventJoypadMotion: entry.axis=event.axis; entry.axis_value=event.axis_value
 	if event is InputEventScreenTouch or event is InputEventScreenDrag: entry.touch_index=event.index
@@ -279,6 +281,46 @@ func fullscreen_coverage() -> String:
 func record_window_size():
 	var window_size=DisplayServer.window_get_size()
 	window_size_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"mode":DisplayServer.window_get_mode(),"window_size":[window_size.x,window_size.y],"root_size":[root.size.x,root.size.y]})
+
+func observe_input_state() -> Dictionary:
+	# Diagnostic reads only. In particular, focus changes never clear/replay
+	# the driver's caches or submit a replacement command to the game core.
+	var sample={"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":root.has_focus(),"input_sequence":input_count,"action_event_count":action_events.size(),"driver_cache":{"pressed_keys":pressed_keys.duplicate(true),"pad_axes":pad_axes.duplicate(true),"pad_buttons":pad_buttons.duplicate(true),"active_touches":active_touches.duplicate(true)}}
+	if is_instance_valid(ui):
+		var view: Dictionary=ui.game.view()
+		sample.phase=view.phase
+		sample.paused=view.paused
+		if view.phase=="expedition":
+			sample.authoritative_input=view.expedition.get("input",{}).duplicate(true)
+			if is_instance_valid(ui.battle_panel) and ui.battle_panel.has_method("current_input"):
+				sample.product_device_input=ui.battle_panel.current_input().duplicate(true)
+	return sample
+
+func record_focus(focused: bool):
+	var sample=observe_input_state()
+	sample.signal_focused=focused
+	sample.observed_at="window_focus_signal"
+	focus_events.append(sample)
+	# Application/window notification order is not assumed. A second read on
+	# the next frame records whether the product actually released held input.
+	await process_frame
+	sample=observe_input_state()
+	sample.signal_focused=focused
+	sample.observed_at="frame_after_window_focus_signal"
+	focus_events.append(sample)
+
+func observe_combat_input(requested: Dictionary):
+	var sample=observe_input_state()
+	if sample.get("phase")!="expedition": return
+	var summary={"focused":sample.focused,"paused":sample.paused,"requested":{},"device":{},"authoritative":{}}
+	for action in ["cast","dodge","skill"]:
+		summary.requested[action]=requested.get(action,false)
+		summary.device[action]=sample.get("product_device_input",{}).get(action)
+		summary.authoritative[action]=sample.get("authoritative_input",{}).get(action)
+	if summary==last_combat_input_summary: return
+	last_combat_input_summary=summary.duplicate(true)
+	sample.requested_input=requested.duplicate(true)
+	combat_input_samples.append(sample)
 
 func active_scene_name() -> String:
 	if not is_instance_valid(ui): return ""
@@ -527,6 +569,7 @@ func battle(day: int, resume: bool = false):
 		if day>=2 and iteration>=16 and iteration<28: input.skill=true
 		inject_combat(input)
 		await process_frame
+		observe_combat_input(input)
 		iteration+=1
 		if iteration==30: await screenshot(mode+"-combat-day"+str(day))
 	var end: Dictionary=ui.game.view()
@@ -682,6 +725,7 @@ func write_report():
 	report["display_samples"]=display_samples
 	report["focus_events"]=focus_events
 	report["window_size_events"]=window_size_events
+	report["combat_input_samples"]=combat_input_samples
 	report["active_assets_loaded"]=visual_evidence.get("active_scene")==report.active_scene and visual_evidence.get("active_assets_loaded",false)
 	# The last live rendered frame is authoritative; children may already be
 	# exiting when the product's tree_exiting observer writes the final report.
