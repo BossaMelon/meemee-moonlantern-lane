@@ -96,27 +96,48 @@ func run():
 		Engine.time_scale=old_scale
 	await click("world_journal")
 	await act_click("primary","settle")
+	await screenshot("settled-growth")
 	observed_upgrade_cost=int(ui.game.view().upgrades.filter(func(row): return row.upgrade_id=="field_kit")[0].cost)
 	await act_click("upgrade_field_kit","upgrade")
 	await act_click("next_morning","next_day")
 	expect(ui.game.view().day==2 and "fan_wand" in ui.game.view().progression.owned_weapons,"real legal next_day immediately unlocks purchased wand")
 	await click("world_gear")
+	await screenshot("next-morning-gear")
 	await act_click("equip_fan_wand","equip_weapon")
 	expect(ui.game.view().progression.equipped_weapon=="fan_wand","actual next morning equipment command succeeds")
-	await click("sheet_close")
-	await click("pause")
+	await act_click("start_expedition","start_expedition")
+	expect(ui.game.view().phase=="expedition" and is_instance_valid(ui.battle_panel),"legal next-morning departure mounts the real E02 scene")
+	expect(ui.game.view().expedition.version==2 and ui.game.view().expedition.weapon_id=="fan_wand","real E02 model receives the newly equipped wand")
+	await battle_click(ui.battle_panel.pause_button,"battle_pause")
+	expect(ui.game.view().paused,"actual E02 pause signal reaches Main Session")
+	await screenshot("actual-next-morning-expedition")
 	await act_save()
 	write_report()
-	await click("quit")
+	await battle_click(ui.battle_panel.save_quit_button,"battle_save_quit")
 	expect(false,"real product save-and-quit closes engine")
 
+func battle_click(button: Button, id: String):
+	expect(is_instance_valid(button) and button.is_visible_in_tree() and not button.disabled,"actual visible E02 control "+id)
+	var rect=button.get_global_rect()
+	expect(Rect2(Vector2.ZERO,ui.size).encloses(rect),"E02 control fits actual viewport "+id)
+	for down in [true,false]:
+		var event=InputEventMouseButton.new()
+		event.position=rect.get_center()
+		event.button_index=MOUSE_BUTTON_LEFT
+		event.pressed=down
+		ui.get_viewport().push_input(event,true)
+		await process_frame
+	await frames()
+	trace.append({"id":id,"rect_virtual":str(rect),"phase":ui.game.view().phase})
+
 func act_save():
-	await click("save")
+	await battle_click(ui.battle_panel.save_button,"battle_save")
 	expect(FileAccess.file_exists(ui.save_path),"real UI saves only isolated temporary profile path")
 	var saved=JSON.parse_string(FileAccess.get_file_as_string(ui.save_path))
 	expect(saved.version==3 and saved.profile_id=="rain-night-v1","actual file is new profile v3")
 
 func write_report():
 	var file=FileAccess.open(folder+"/rain-flow-report.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify({"suite":"rain-night-real-main-headless","checks":checks,"failures":failures,"trace":trace,"actions":actions,"observed_upgrade_cost":observed_upgrade_cost,"source_sha256":sources,"engine":Engine.get_version_info().string,"claims":"Real Main/Session through InputEventMouseButton; no direct test core commands, fake inventory or transaction injection. Headless business integration only; not Q06/physical/fullscreen/fun.","simulation_scale":"12x during active service only; no human-duration claim","save_path":ui.save_path if is_instance_valid(ui) else folder},"  "))
+	var native=DisplayServer.get_name()!="headless"
+	file.store_string(JSON.stringify({"suite":"rain-night-real-main-native" if native else "rain-night-real-main-headless","checks":checks,"failures":failures,"trace":trace,"actions":actions,"observed_upgrade_cost":observed_upgrade_cost,"source_sha256":sources,"engine":Engine.get_version_info().string,"claims":"Real Main/Session through InputEventMouseButton; no direct test core commands, fake inventory or transaction injection. Not Q06, physical input certification or fun evidence.","render_claim":"Raw actual native viewport PNGs and display metadata" if native else "Headless SubViewport geometry only; no native-window or PNG claim","simulation_scale":"12x during active service only; no human-duration claim","save_path":ui.save_path if is_instance_valid(ui) else folder},"  "))
 	file.close()

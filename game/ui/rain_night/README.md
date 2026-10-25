@@ -21,4 +21,15 @@
 
 三波预报从既有 demand_board 的正式 `n{day}-w{1..3}-c{01..09}` ID 分组，特殊委托另计；缺失波明确显示摘要待提供，不当作零位客人。P04 真实 view 必须提供采购前的完整三波需求。离开原因只读已有 sales/reasons，不由 UI 猜测缺货、拥堵或预算结果。
 
-鼠标/触屏/手柄验收应从真实世界入口打开浮层，再注入 InputEvent；不要调用组件内部回调或直接 emit pressed。关闭/B/Esc 与焦点归还沿主 UI 已有协议。最终真实新 Session 与 E02 到齐后再给新游戏运行证据，组件数据示例和 headless 断言不替代之。
+鼠标/触屏/手柄验收应从真实世界入口打开浮层，再注入 InputEvent；不要调用组件内部回调或直接 emit pressed。关闭/B/Esc 与焦点归还沿主 UI 已有协议。
+
+定向检查入口都要求新的 `/private/tmp/` 目录以隔离保存文件：
+
+```sh
+Godot --headless --path . --script game/ui/checks/rain_night_components.gd -- /private/tmp/NEW_COMPONENT_CHECK
+Godot --headless --path . --script game/ui/checks/rain_night_pad.gd -- /private/tmp/NEW_HOST_PAD_CHECK
+Godot --headless --path . --script game/ui/checks/rain_night_flow.gd -- /private/tmp/NEW_REAL_FLOW
+python3 tools/with_render_lock.py -- Godot --fullscreen --path . --script game/ui/checks/rain_night_native.gd -- /private/tmp/NEW_NATIVE_FLOW
+```
+
+`components` 使用合成 typed-view；`pad` 用真实 Main 与 GUI 准备料理，再注入 D-pad/A/B；`flow` 从采购走真实三波、次晨升级装备、E02 出发与暂停保存退出。仅在营业中用 12x 模拟，不代表人类游玩时长。`native` 复用同一真实输入流程，改挂实际根窗口并保存原始 PNG 和窗口/视口/显示驱动元数据，不后期缩放。完整三输入、料理效果实战、稀材和退出恢复由 P06 runtime suite 验证；这些定向检查不自行声称 Q06、实体设备或趣味通过。
