@@ -2,13 +2,21 @@
 
 主场景 `scenes/main.tscn` 使用 `main.gd`。经营与持久状态由 P01 `GameSession` 负责，动作模拟及动作控件由 E01 负责；UI 不写回 `view()`，每次提交意图使用新 request ID。料理/成长规则来源是冻结契约 `4d06f59` 的 docs05。
 
+## 场景交互接口
+
+恢复点为 `codex/p02-before-scene-ui-996d3f4`。本轮将常驻侧栏与 tabbar 移除，默认仅显示全屏餐厅、日程/天气/金币和暂停入口。世界物件是实际 Button 热点，鼠标/触屏命中物件、手柄方向聚焦后确认；悬停/聚焦显示物件名称与边缘反馈。
+
+公开定位继续使用 `get_action_control(id)`，但没有隐藏旧导航。房内入口：`world_craft` 备餐桌、`world_stove` 灶台→菜谱册，`world_menu` 菜单板→份数/定价，`world_counter` 柜台/客人→接单交付/开门，`world_journal` 桌上账本→日程/收工/升级，`world_gear` 门口装备→探险，`world_storage` 柜格→储藏，`world_lane` 巷口→街巷。街巷：`world_stall` 实际食材摊→采购，`world_home` 店门→回餐厅。打开浮层后仅其中可见操作可聚焦；`sheet_close` / B / Esc 返回场景并把焦点交回原物件。公开 `get_open_sheet()` 返回浮层种类或空串，`get_world_view()` 返回 room/lane，供 P03 只读定位；不得调用内部导航冒充输入。
+
+暂停/保存/恢复/退出位于真实暂停浮层，`pause` 打开，`resume` 继续；存档自动恢复与拒绝恢复时的写入保护、E01失败保存解冻/成功退出冻结保持原协议。全屏验收用官方 `--fullscreen`，记录 DisplayServer/Window 模式及 screen/window/viewport/PNG 尺寸；窗口兼容必须显式 `--windowed`，不放大全屏截图、不调用 CUA。
+
 ## 页面与素材
 
-采购、备餐、菜单、装备、手账可用鼠标、触屏或焦点确认。特殊需求自动打开委托页；需求、预算和奖励固定在滚动区外，可切到菜单查份数，再回委托交付或跳过。储藏原料、备好料理、菜单剩余和装配厨具分开显示。暂停禁用经营输入，仍可查看、保存和恢复；坏档有明确反馈。
+餐厅与街巷的物件热点可用鼠标、触屏或焦点确认。特别客人出现在柜台，需求、预算与奖励在点单纸浮层中展示；合上后可到墙上菜单板查份数，再回柜台交付或跳过。储藏柜按需展开原料与料理。暂停册页包含保存、恢复、退出；坏档有明确反馈。
 
 启动时自动恢复已有主档，按现有 SaveStore 规则回退有效备份；没有主档和备份才新开。恢复失败或版本拒绝时显示错误、暂停并禁用保存，退出动作明确标示保留原档；产品退出及窗口关闭均不写回。成功恢复前不接管已有文件，重新点击恢复成功后才能保存。
 
-`pixel_assets.gd` 只读 A01 的 manifest、实际 PNG 和九宫格信息。`shop_canvas.gd` 读取餐厅空房壳、布局清单、独立人物/家具及脚底 pivot，原生 384×256 整数倍显示；街巷同样使用真实背景。制作成功与实际成交触发 `effect_id` 对应的浮空送餐、暖焰/蒸汽、自搅、星火轨迹和彗尾。海格感谢只在实际交付成功后触发；这些动画不决定经济结果。
+`pixel_assets.gd` 只读 A01 的 manifest、实际 PNG 和九宫格信息。`shop_canvas.gd` 读取餐厅空房壳、布局清单、独立人物/家具及脚底 pivot，所有层共享原生 384×256 的 nearest-filter 适配变换；街巷同样使用真实背景。制作成功与实际成交触发 `effect_id` 对应的浮空送餐、暖焰/蒸汽、自搅、星火轨迹和彗尾。海格感谢只在实际交付成功后触发；这些动画不决定经济结果。
 
 ## 主界面与动作边界
 
@@ -17,6 +25,12 @@ E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bi
 动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；退出意图在释放输入与写文件前冻结经营及动作处理，成功后直接请求退出，避免帧末退出前再推进会话。失败时恢复处理、调用 E01 `cancel_save_quit()`、暂停并显示实际错误，保留窗口；继续后动作可再次推进。
 
 ## 输入回归
+
+新版结构预览入口为 `scene_preview.gd`：官方 `--fullscreen`、真实世界热点、Viewport 本地坐标的 InputEvent，产出无浮层/食材摊/菜谱/黑板/营业/暂停 PNG及各尺寸、实际模式、源码hash。该检查只证明一个真实经营片段；旧版 `restaurant.gd`、`advanced.gd`、`small_layout.gd` 等保留历史证据，旧导航入口在新版已删除，当前不据旧脚本声称新版全量通过。P03负责正式新入口与三输入适配。
+
+```sh
+Godot --fullscreen --path . --script game/ui/checks/scene_preview.gd -- /private/tmp/NEW_SCENE_PREVIEW
+```
 
 `get_action_control(action_id)` 供运行验证读取真实按钮和位置；不能直接发 `pressed` 信号或调用核心命令冒充 UI 输入。
 

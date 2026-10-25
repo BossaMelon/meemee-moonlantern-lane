@@ -81,8 +81,8 @@ func _draw():
 	var image = Art.background("restaurant-lane" if showing_lane else str(layout.get("background","restaurant-shell")))
 	if is_instance_valid(missing): missing.visible = image == null
 	if image == null: return
-	# The layout reserves a native 384×256 area; no smoothing or fractional zoom.
-	draw_scale = maxf(1.0,floorf(minf(size.x/NATIVE_SIZE.x,size.y/NATIVE_SIZE.y)))
+	# Fit the authored room to the actual viewport; every layer shares one nearest-filter transform.
+	draw_scale = minf(size.x/NATIVE_SIZE.x,size.y/NATIVE_SIZE.y)
 	draw_origin = ((size-NATIVE_SIZE*draw_scale)/2.0).floor()
 	draw_set_transform(draw_origin,0,Vector2.ONE*draw_scale)
 	draw_texture(image,Vector2.ZERO)
