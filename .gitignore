@@ -12,3 +12,5 @@ evidence/
 .vscode/
 *.tmp
 *.log
+__pycache__/
+*.py[cod]
