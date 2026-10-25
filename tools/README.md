@@ -1,0 +1,114 @@
+# 工程 gate
+
+本工具只依赖 Python 3.10+ 标准库，不调用大模型、付费服务或外部测试平台。
+玩法测试使用固定 Godot **4.7.2 标准版 / GDScript**。引擎和构建产物不入 Git。
+
+## 入口与当前阶段
+
+```sh
+python3 tools/gate.py --stage harness
+python3 tools/gate.py --stage prototype --godot /absolute/path/to/Godot
+python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
+```
+
+也可以用进程环境变量 `GODOT` 或 PATH 中的 `godot` / `godot4` 指定引擎。
+`--report PATH` 改变 gate 证据 JSON 的保存位置，默认 `output/gate-report.json`；
+`--timeout SECONDS` 设置每条命令的超时，默认 120 秒。
+
+**harness 通过只表示开发底座有效，不表示游戏已实现。** 它验证：
+
+- [验收契约](../contracts/prototype-v1.json) 的 schema、非空必需自动验收集合；
+- [场景描述](../tests/fixtures/prototype-scenarios.json) 对必需自动验收 ID 的覆盖；
+- [任务归属](../harness/tasks.json) 的路径安全、跨 owner 互斥和依赖无环；
+- PR 正文 `Task-IDs: H01` 对应的实际 base/head diff 必须落在认领路径；
+- 项目上下文文件存在、Markdown 本地链接有效；
+- harness 自身的反假绿回归测试实际执行且没有失败、错误或跳过；
+- 一旦存在 `project.godot`、`.gd` 或 `.tscn`，CI 必须增加无条件 prototype job。
+
+当前还没有游戏代码，`--stage prototype` **应该失败**。
+它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+
+## 游戏执行器合同
+
+prototype gate 读取 `contracts/prototype-v1.json` 中 `mode=automated` 且
+`required=true` 的条目；人工试玩与实际平台、输入设备验证不由此报告替代。
+gate 先核验引擎 `--version` 为 4.7.2，再调用：
+
+```sh
+Godot --headless --path REPOSITORY --script tests/run.gd -- --report ABSOLUTE_FRESH_REPORT
+```
+
+执行器必须以非零状态退出表示失败，并写 UTF-8 JSON：
+
+```json
+{
+  "schema_version": 1,
+  "suite": "prototype",
+  "cases": [
+    {"id": "P02", "status": "passed", "checks": 12}
+  ]
+}
+```
+
+示例只说明一条记录的结构，不是完整原型报告。
+所有必需自动 ID 必须各出现一次、状态 `passed`、整数 `checks >= 1`。
+未知、重复、人工或 runtime ID，`failed`、`skipped`、零检查、报告缺失、
+命令错误或超时都会失败。报告写入每次新建的临时目录，旧报告不能冒用。
+测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
+
+gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。
+工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
+
+PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，
+例如 `Task-IDs: P01,H01`。CI 直接读取 GitHub 事件 JSON 的 base/head/body，
+不执行正文。diff 用合并基点到 PR head 计算；重命名源/目标、删除路径均要被认领。
+本地用可重复的 `--task` 与完整 `--base` SHA 检查当前工作树（含未跟踪文件）。
+不指定这两个参数的本地运行会明确记录 `scope: not-requested`，不声称检查了 PR 归属。
+
+## CI 与首个游戏 PR 的启用要求
+
+当前 [gate workflow](../.github/workflows/gate.yml) 只有 `harness` job。
+它在所有 PR 和 `main` 推送上执行，无路径过滤。依赖的官方 Actions 固定到提交，
+证据保留 7 天。首个包含游戏源码的 PR 必须同时加入下列 **prototype job**；
+缺少 job、条件跳过、`continue-on-error` 或用 shell 吞掉 gate 退出码都会被拒绝。
+
+```yaml
+  prototype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Fetch pinned Godot
+        run: |
+          mkdir -p .tools
+          curl -fL --retry 2 --max-time 180 https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip -o .tools/godot.zip
+          echo 'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  .tools/godot.zip' | sha256sum --check
+          unzip -q .tools/godot.zip -d .tools
+          chmod +x .tools/Godot_v4.7.2-stable_linux.x86_64
+      - name: Execute prototype contracts
+        run: python3 tools/gate.py --stage prototype --godot .tools/Godot_v4.7.2-stable_linux.x86_64
+```
+
+这是待启用的最小模板；当前 harness-only 阶段不运行或伪造 prototype job。
+runtime 出现后，validator 要求该固定 job 名及直接 gate 命令，禁止在 job 或 gate
+step 上加入条件和失败吞并。更复杂的 YAML 写法应先更新并验证 validator。
+
+源码 PR 的作者不得合并自己的候选；总负责人核对当前 head 的 gate、
+独立评审与实际运行证据后，用 GitHub 原生合并。私有仓库服务器是否能强制
+required checks 取决于当前账户能力；不能配置时必须明确记录，不能声称服务器已保护。
+
+## 已核验的工具来源
+
+2026-10-25，官方 release 元数据与本地二进制核验：
+
+- Mac：`4.7.2.stable.official.ed1daf0bf`；下载 ZIP SHA256：
+  `c58a24e31d720be9d62f60cb5627c4e695fb72f21b0cfe1bc9ccaa9a3b3ba63e`。
+- Linux x86_64 ZIP SHA256：
+  `cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4`。
+- 来源：[Godot 官方 4.7.2 release](https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable)。
+
+Mac 原型和无显示测试可立即推进。Windows 导出、iOS 构建、触屏/实体手柄、
+人类趣味验证各有独立证据要求；当前未运行这些验证，且本机缺完整 Xcode。
