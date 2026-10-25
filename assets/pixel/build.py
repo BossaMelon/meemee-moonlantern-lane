@@ -81,6 +81,20 @@ SHEETS = {
         ("button_focus", (100,770,700,1040), (96,40), "stretch"),
         ("inventory_slot", (825,690,1180,1055), (48,48), "stretch"),
     ]),
+    "world_ui_v2": ("world-ui-v2", (64,64), [
+        ("world_recipe_book", (50,130,775,615), (64,48), "fit"),
+        ("world_order_note", (785,80,1230,620), (32,48), "fit"),
+        ("world_ledger", (45,640,670,1200), (48,48), "fit"),
+        ("world_menu_board", (700,630,1240,1210), (48,64), "fit"),
+    ]),
+    "plain_ui_v2": ("plain-ui-v2", (128,72), [
+        ("ui_paper_panel", (25,155,570,455), (128,64), "stretch"),
+        ("ui_button_plain", (575,265,1035,450), (96,32), "stretch"),
+        ("ui_button_plain_focus", (1045,265,1515,450), (96,32), "stretch"),
+        ("ui_coin", (130,550,425,855), (20,20), "fit"),
+        ("ui_day", (625,550,915,855), (20,20), "fit"),
+        ("ui_pause", (1165,580,1395,850), (20,20), "fit"),
+    ]),
 }
 for group, names in {
     "characters": ["meemee_idle","meemee_blink","meemee_serve","meemee_stir",
@@ -187,14 +201,28 @@ def build():
                 record["pivot"]=[0,0]
                 record["nine_slice_margins"]=[14,14,14,14] if name=="dialogue_panel" else [12,12,12,12]
                 record["content_margins"]=[18,16,18,16] if name=="dialogue_panel" else [14,12,14,12]
+            if group == "plain_ui_v2":
+                record["pivot"] = [0,0]
+                if name == "ui_paper_panel":
+                    record["nine_slice_margins"] = [6,12,16,6]
+                    record["content_margins"] = [10,14,18,10]
+                elif name.startswith("ui_button_plain"):
+                    record["nine_slice_margins"] = [10,6,10,6]
+                    record["content_margins"] = [12,8,12,8]
+            if group in ("world_ui_v2", "plain_ui_v2"):
+                record["art_revision"] = 2
+                record["usage"] = "contextual world object" if group == "world_ui_v2" else "short paper overlay; render text live"
             manifest["sprites"][name]=record
         sheet.save(ROOT/"atlases"/(group+".png"))
     for name in ["restaurant-interior","restaurant-lane","restaurant-shell","mushroom-garden"]:
-        source=Image.open(ROOT/"source"/(name+".png")).convert("RGBA")
+        source_name = "mushroom-garden-v2" if name == "mushroom-garden" else name
+        source=Image.open(ROOT/"source"/(source_name+".png")).convert("RGBA")
         dimensions=(480,270) if name=="mushroom-garden" else (384,256)
         out=palette_export(source.resize(dimensions,Image.Resampling.NEAREST))
         path=ROOT/"backgrounds"/(name+".png"); out.save(path)
-        manifest["backgrounds"][name]={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
+        manifest["backgrounds"][name]={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+source_name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
+        if name == "mushroom-garden":
+            manifest["backgrounds"][name].update({"art_revision":2,"logical_size":[960,540],"playfield":"large quiet low-contrast shapes; decoration at perimeter only"})
     for path in sorted((ROOT/"source").glob("*.png")):
         im=Image.open(path)
         manifest["sources"][path.name]={"size":list(im.size),"mode":im.mode,"sha256":sha(path),"runtime":False}
@@ -246,6 +274,7 @@ def preview(manifest):
         record=manifest["sprites"][name]; im=Image.open(ROOT/record["file"]); p=record["pivot"]
         garden.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
     garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/garden-composite.png")
+    garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/garden-v2-concept.png")
     sprites=list(manifest["sprites"].items())
     cw,ch,cols=288,280,4
     board=Image.new("RGB",(cw*cols,ch*((len(sprites)+cols-1)//cols)),"#c5d0ca")
@@ -260,6 +289,17 @@ def preview(manifest):
         board.paste(im,(x+(cw-im.width)//2,y+10),im)
         d.text((x+8,y+ch-22),name,fill="#edc46e" if i%2 else "#25283f")
     board.save(ROOT/"preview/contact-sheet.png")
+    v2=[(name,record) for name,record in sprites if record.get("art_revision")==2]
+    board2=Image.new("RGB",(640,((len(v2)+1)//2)*210),"#3c514c")
+    d2=ImageDraw.Draw(board2)
+    for i,(name,record) in enumerate(v2):
+        x,y=(i%2)*320,(i//2)*210
+        im=Image.open(ROOT/record["file"])
+        scale=min(4,300//im.width,175//im.height)
+        im=im.resize((im.width*scale,im.height*scale),Image.Resampling.NEAREST)
+        board2.paste(im,(x+(320-im.width)//2,y+8),im)
+        d2.text((x+12,y+190),name,fill="#f8e4b6")
+    board2.save(ROOT/"preview/world-ui-v2-contact.png")
 
 
 if __name__=="__main__":
