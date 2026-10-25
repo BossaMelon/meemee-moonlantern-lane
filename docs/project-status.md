@@ -4,9 +4,15 @@
 
 **Steam 可售品质目标未完成。** 用户实际反馈是“不好玩、地图和战斗单调”，这是下一阶段第一优先级。三日原型保留为技术基线；功能、画面局部修正或自动检查通过，均不能推导为人类趣味、续玩意愿或商品品质合格。
 
+**本轮可移植性跟进待集成。** 主线仍为 `7b542888b771cf1fd2e75280d51c57378e91a4df`，r2 已交付；[W01 PR #40](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/40) `8bd734a`、[P07 PR #39](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/39)、[E03 PR #38](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/38) 与 [V01 PR #41](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/41) 均未合入主线。V01/E04 本轮维护依赖与精确路径仅追加登记在任务清单；历史 P06 雨夜验收与 E02 玩法记录保留。组合独立主审冻结 `6d4bc2ddc192223c82ffa57dc54034f76c731273` 对比 base `7b54288`，正在进行。
+
+root 已接受原 SHA 的 PCK 612 项与字体旧证据，并实读 [Windows run 40242094964](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40242094964)：source `72b1f0a1f8caff916ccc7c200b76c1fdf570d67e` 上字体 226 checks、754 字符/645 汉字、200 处实际绑定、4 布局通过，缺字为零，五项源码哈希匹配；**Windows 源码整项仍为 false**。Q02 组件硬编码 `/tmp` 创建失败后对 null 调用 `store_string`，连续脚本错误使子进程未 quit，最终超时；E04 正在修复测试路径与失败返回，不是已证实的性能慢。原失败和字体报告保留 `/private/tmp/w01-win-40242094964/`，不提高时限或跳 case。
+
+字体影响的原生定向证据各保留原 SHA：全屏 `cbfcc20` 为 661 checks，窄屏 `044610b` 为 683 checks，合计 20 张原 PNG；首轮窄屏失败保留。root 已接受 9 个 PID/3 个进程组退出、锁释放，旧档与既有包未改。以上局部资源/运行证据不替代完整 Windows 门禁、Windows 原生导出或发布；QH、商业 IP 授权/替换方案、Windows native 与实体设备均待验。
+
 ## 当前阶段：雨夜备餐品质切片
 
-规格 [雨夜备餐](06-quality-slice.md) 已冻结；正式产品候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 已由 root 接受组合 Q06 覆盖，游戏全链及 D01 修复已合 main，r2 实际 Mac 包的 headless 与两种原生入口验收均获 root 接受，下一步为真人试玩。[PR #20](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/20) head `a079f070c669b80a20fccf7e9f0d399b75e2dceb` 经 root 逐条主审和三项定向修订、当前 [harness](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40214137553/job/121231502812)/[prototype](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40214137553/job/121231502969) 通过后，exact-head 原生合入 main `48583436efe5037a9c70baefbbcf1f55c881dad1`。该落点冻结规格；本页当前主线基线为 `ae17427850031f22c7bf0b7fe633d709d3094e30`；源码、实际包 headless、已接受的原生入口 QA 与待验的 QH 分开记录，Goal/Steam 可售品质仍未完成。
+规格 [雨夜备餐](06-quality-slice.md) 已冻结；正式产品候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 已由 root 接受组合 Q06 覆盖，游戏全链及 D01 修复已合 main，r2 实际 Mac 包的 headless 与两种原生入口验收均获 root 接受，下一步为真人试玩。[PR #20](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/20) head `a079f070c669b80a20fccf7e9f0d399b75e2dceb` 经 root 逐条主审和三项定向修订、当前 [harness](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40214137553/job/121231502812)/[prototype](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40214137553/job/121231502969) 通过后，exact-head 原生合入 main `48583436efe5037a9c70baefbbcf1f55c881dad1`。该落点冻结规格；本页当前主线基线为 `7b542888b771cf1fd2e75280d51c57378e91a4df`；源码、实际包 headless、已接受的原生入口 QA 与待验的 QH 分开记录，Goal/Steam 可售品质仍未完成。
 
 阶段任务已由 [PR #22](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/22) `de10da2` 登记，root 审阅并 exact-head 合入 main `9b20940b095824a1edc6e2d49d0cf9d13e0fd84f`。owner/chat/模型/Standard 与各原角色保持一致，允许路径和依赖只以 [任务清单](../harness/tasks.json) 为准。旧任务不改，不新增 chat，不扩大到 Windows 导出或 Steam SDK。
 
@@ -20,11 +26,11 @@
 | P06 | runtime_verification（原 P03） | [PR #27](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/27) 已合入 PR #31（`8c15ef4`）；正式验收候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 的窄屏 touch 553/0、完整全屏 touch 1450/0 已由 root 实读接受，结合原 SHA mouse/pad、F04/history 与三 P2 定向证据接受 Q06 组合覆盖。原始证据与边界见下文；QH/实体硬件/Windows/iOS 未验。 |
 | A02 | pixel_art（原 A01） | 六件必要 sprite 已由 PR #21 交付。后续四件地面/浅渠/连续长桩资产 [PR #30](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/30) 内容 `9d2a3fa`，root 读代码、看 native/scale/layout，核旧 131 tracked 素材路径 blob、全部旧 manifest 记录与 SOURCES 不变；独立审美接受组件。native 更新 `fc08c8b` 资产无差、当前双 CI 绿后原生合 main `06252e00899c77359239fe0beb9cee5aa1688385`。原组件报告不单独代表 Q06；四资产已由 P06 正式场景消费/实际运行核验，人类趣味待验。 |
 | D01 | engineering_delivery（沿用 H05 同 owner/chat/model/tier） | [PR #34](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/34) `4cbcc2e` 的两 P2 已定向闭合并合 main `5b9d252`；[PR #36](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/36) 单行 JSON 数值兼容修复、26 项回归及当前 gate 经 root 接受后合 main `ae174278`。固定 `13e5c50` 的全新 r2 实际包 headless 三阶段通过，root 已独立核验接受；两种实际包原生入口 QA 亦已接受。 |
-| W01 | engineering_delivery | 真实 Windows 源码验证已登记、尚未实现；允许路径与依赖以任务清单为准，待 root 验收合入登记后另派实施。目标是 Windows 2022、固定官方 editor 4.7.2 与 Python UTF-8 下的冷导入、现有双 suite、默认保存/子进程/错误日志证据；另仅补 Linux 冷导入准备和失败日志检查，保留原必需 jobs 与直接双 suite 门禁。当前没有 Windows 游戏包、实机或真人趣味证明。 |
-| P07 | ui_implementation | OFL 随包字体已登记、尚未实施；共享 provider `get_font() -> Font` 与主店铺接入由本 owner 完成，panel 留给 E03，依赖与允许路径以任务清单为准。 |
-| E03 | expedition_implementation | panel 字体消费与 PNG ResourceLoader 加载已登记、尚未实施；同一 owner 处理该文件，依赖 P07，不改地形、玩法或 pixel 美术。 |
+| W01 | engineering_delivery | [PR #40](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/40) `8bd734a` 已实现 Windows 源码冷导入、真实双 suite 调用与错误/进程守卫，待集成；字体局部通过，完整 source 门禁因 Q02 测试路径错误保持失败，详见顶部实际报告。 |
+| P07 | ui_implementation | [PR #39](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/39) 已实现 OFL 随包字体、共享 provider 与主店铺绑定，待集成；Windows 实际 font probe 226 项通过，边界与原 SHA 见顶部。 |
+| E03 | expedition_implementation | [PR #38](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/38) 已实现 panel 字体消费与 PNG ResourceLoader 加载，待集成；root 接受原 PCK 612 项证据，不代表 Windows native 导出通过。 |
 
-Windows 后续边界：W01 不替代完整 Windows 原生导出，后者仍须单独交付验收；中文字体与项目内 PNG 的导出加载兼容风险尚待修复，不写为已完成。后续 Windows 新 job 同样冷导入，只能上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；新增授权不含 `tools/gate.py` 或 `tools/test_gate.py`；真实 Windows 不兼容必须保留失败，不削检查或跳 case，具体修复另由 root 授权。本次三任务仅登记，不改 CI 或实现；D02/P08 未登记，原生导出验证 driver 接口须后续依据真实 CLI 能力冻结，不用 release `--script` 求假绿。Mac r2 与旧档不动，真人玩一晚的 QH 优先级不变。
+Windows 后续边界：W01 不替代完整 Windows 原生导出，后者仍须单独交付验收；字体与 PNG 资源已有上述局部兼容证据，整项平台验收仍待完成。Windows job 冷导入，仅上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；授权不含 `tools/gate.py` 或 `tools/test_gate.py`，保留真实失败、不削检查或跳 case。本轮 H03 仅追加 V01/E04 登记并更新状态，不改实现；D02/P08 未登记，原生导出验证 driver 接口须依据真实 CLI 能力冻结，不用 release `--script` 求假绿。Mac r2 与旧档不动，真人玩一晚的 QH 优先级不变。
 
 110 取舍机制已实际闭合：root 复算 20 个热锅双买分支，现金账差额均为 0；标准档双买余 16 后可合法购买 3 份缩小篮，高价档余 52 后可购买正式 10 份篮并继续次晚。40 个正常模拟覆盖两价、两路、五种子和探索/不探索，均未依赖应急恢复。该证据来自真实命令与正式 `512bd72` 报告，替代旧 60/100 数值的缺口声明；不据此宣称全局平衡、人类趣味或 Steam 品质合格。
 
