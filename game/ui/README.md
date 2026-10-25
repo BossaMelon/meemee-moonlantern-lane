@@ -10,9 +10,9 @@
 
 ## 主界面与动作边界
 
-E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`，发出 `returned`、`pause_requested`、`save_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
+E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`，发出 `returned`、`pause_requested`、`save_requested`、`save_quit_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
 
-动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。
+动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；保存失败保持窗口、暂停并显示实际错误，只有保存成功才退出。
 
 ## 输入回归
 
@@ -24,6 +24,9 @@ Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- mouse
 Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- touch pad
 Godot --path . --max-fps 60 --script game/ui/checks/advanced.gd
 Godot --path . --max-fps 60 --script game/ui/checks/restart.gd -- --advanced --portrait
+Godot --path . --max-fps 60 --script game/ui/checks/small_layout.gd
+Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd
+Godot --path . --max-fps 60 --script game/ui/checks/battle_exit.gd -- --resume
 ```
 
 脚本注入真实 `InputEvent`，每条路线使用 `output/restaurant-ui/` 内独立临时存档，不写玩家默认文件。缺料理核心、控件、匹配菜或完整路径均退出非零；报告保留源码 SHA256、显示驱动、输入轨迹和断言。有显示的运行使用 viewport PNG。鼠标路线含主界面/E01 真实移动、施法、闪避、新技能、暂停/保存/返回冒烟；E01 的完整三输入动作与确定性报告另由其任务交付，不能用该冒烟替代。
@@ -31,5 +34,7 @@ Godot --path . --max-fps 60 --script game/ui/checks/restart.gd -- --advanced --p
 `advanced.gd` 从第一日实际 UI 开始，借用 E01 只读位置决策策略并转换为真实键盘事件，击败普通怪取得星火菇；经营收入取得新装备，第三日再经实战取月心菇、制作并卖出高级料理。只在采集时将仿真加速至 3 倍，报告明确记录，不代表人类游玩时长。`restart.gd` 在新的引擎进程中经恢复、保存和保存退出按钮核对已有文件；`--portrait` 使用 640×960。
 
 PNG 通过 Godot ResourceLoader 加载，源码入口须先完成正式引擎导入前置；启动器归 H01 维护。已有缓存的渲染证据不证明冷启动。
+
+`small_layout.gd` 用真实触屏事件检查 1280×720 与 844×390 的采购、装备、备餐与营业。短横屏合并顶部状态栏、保留完整像素房间及可用滚动区；数量条标签不自动换行，按钮保持紧凑。`battle_exit.gd` 经 E01 产品按钮验证保存失败留窗和成功退出；再从新进程 `--resume` 核对完整动作存档。
 
 这些报告不替代仓库 prototype gate、系统窗口观察、iOS 真机、实体手柄或人类趣味验收。不调用 CUA/getApp，不生成 Computer Use 权限请求。旧通用 UI 恢复点仍在 PR 6，不在料理候选保留旧商品验收入口。

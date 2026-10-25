@@ -131,6 +131,8 @@ func _build_theme():
 	ui_theme.set_color("font_color","Button",CREAM)
 	ui_theme.set_color("font_disabled_color","Button",Color("8796aa"))
 	var normal = Art.skin("button_normal")
+	# Compact E01 uses 16px text; keep the shared pixel skin at least 48px high.
+	if normal: normal.content_margin_top=maxf(normal.content_margin_top,13)
 	ui_theme.set_stylebox("normal","Button",normal if normal else _style(Color("374568"),Color("a5714f")))
 	ui_theme.set_stylebox("hover","Button",_style(Color("493b3d"),GOLD,2))
 	ui_theme.set_stylebox("pressed","Button",_style(Color("70483c"),GOLD,2))
