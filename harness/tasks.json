@@ -69,7 +69,8 @@
       "id": "P02",
       "owner": "ui_implementation",
       "allowed_paths": [
-        "scenes/**",
+        "scenes/main.tscn",
+        "scenes/ui/**",
         "game/ui/**",
         "assets/SOURCES.md"
       ],
@@ -95,6 +96,23 @@
         "H01",
         "H02",
         "H03"
+      ]
+    },
+    {
+      "id": "E01",
+      "owner": "expedition_implementation",
+      "chat_id": "01a172d3-48a0-74d1-a9ff-5c30499d3760",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default",
+      "allowed_paths": [
+        "game/expedition/**",
+        "scenes/expedition/**",
+        "tests/expedition/**"
+      ],
+      "depends_on": [
+        "H02",
+        "P01"
       ]
     },
     {
