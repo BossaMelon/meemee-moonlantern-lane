@@ -313,7 +313,27 @@ exit 0
         $summary.imported_texture_count=@(Get-ChildItem -LiteralPath (Join-Path $source '.godot/imported') -File -Filter '*.ctex').Count
         if ($summary.imported_texture_count -lt 1) { throw 'Cold import did not produce actual texture resources.' }
         $gateReport=Join-Path $ReportDirectory 'gate-report.json'
-        $null = Invoke-Owned $python @((Join-Path $source 'tools/gate.py'),'--stage','prototype','--godot',$engine,'--report',$gateReport) $source $GateTimeoutSeconds 'gate'
+        try {
+            $null = Invoke-Owned $python @((Join-Path $source 'tools/gate.py'),'--stage','prototype','--godot',$engine,'--report',$gateReport) $source $GateTimeoutSeconds 'gate'
+        } catch {
+            $gateFailure=$_
+            # gate.py discards TimeoutExpired output. Preserve the original failure;
+            # a bounded rerun adds diagnostics only, never replacement acceptance.
+            if (Test-Path -LiteralPath $gateReport -PathType Leaf) {
+                $failedGate=Read-Log $gateReport | ConvertFrom-Json -AsHashtable
+                if (($failedGate.errors -join "`n") -match 'command timed out after 120s:.*quality-slice') {
+                    $summary.quality_timeout_diagnostic=@{acceptance=$false; original_gate_status=$failedGate.status}
+                    $diagnosticLog=Join-Path $ReportDirectory 'quality-diagnostic-engine.log'
+                    try {
+                        $null = Invoke-Owned $engine @('--headless','--path',$source,'--log-file',$diagnosticLog,'--script','tests/run.gd','--','--suite','quality-slice','--report',(Join-Path $ReportDirectory 'quality-diagnostic-cases.json')) $source 120 'quality-diagnostic' $diagnosticLog
+                        $summary.quality_timeout_diagnostic.result='completed; original gate still failed'
+                    } catch {
+                        $summary.quality_timeout_diagnostic.result=$_.Exception.Message
+                    }
+                }
+            }
+            throw $gateFailure
+        }
         $gate=Get-Content -LiteralPath $gateReport -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         if ($gate.status -ne 'passed' -or $gate.gate -ne 'prototype' -or $gate.candidate.sha -ne $sha) { throw 'Actual source gate did not pass for this source SHA.' }
         if ((($gate.case_reports.Keys | Sort-Object) -join ',') -ne 'prototype,quality-slice') { throw 'Both actual suites must be present.' }

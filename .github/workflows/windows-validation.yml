@@ -63,3 +63,5 @@ jobs:
             ${{ runner.temp }}/w01-source/*-stdout.log
             ${{ runner.temp }}/w01-source/*-stderr.log
             ${{ runner.temp }}/w01-source/import-engine.log
+            ${{ runner.temp }}/w01-source/quality-diagnostic-engine.log
+            ${{ runner.temp }}/w01-source/quality-diagnostic-cases.json

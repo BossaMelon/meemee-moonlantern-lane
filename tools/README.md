@@ -243,6 +243,8 @@ Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub
 stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` 也拒收。
 随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
 不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
+若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次同 suite、同 120 秒上限的诊断，
+补存控制台、独立引擎日志和实际 case 报告（若完成）；原 gate 失败始终保留，诊断不能替代验收。
 
 每个外部命令先暂停创建、加入本次未命名 Windows Job Object 后才恢复执行；
 包括其正常继承的子进程，整组必须变空。超时仅终止该 job，关闭句柄也会回收该 job；
