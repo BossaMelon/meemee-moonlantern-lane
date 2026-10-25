@@ -356,7 +356,7 @@ func _resize_layout():
 	_wire_focus()
 
 func _layout_sheet():
-	var limits={"pause":Vector2(460,368),"craft":Vector2(700,480),"shopping":Vector2(820,660),"shelf":Vector2(820,680)}
+	var limits={"pause":Vector2(460,368),"craft":Vector2(700,480),"shopping":Vector2(820,660),"shelf":Vector2(820,620),"order":Vector2(660,480),"counter":Vector2(580,340),"storage":Vector2(600,420),"gear":Vector2(720,620),"journal":Vector2(760,600)}
 	var preferred: Vector2=limits.get(tab,Vector2(800,680))
 	var sheet_size=Vector2(minf(preferred.x,size.x-32),minf(preferred.y,size.y-112))
 	if compact: sheet_size=Vector2(minf(710,size.x-24),size.y-24)
@@ -614,8 +614,6 @@ func _build_shopping():
 			if view.phase=="shopping" and reason.is_empty(): reason = "本次份数超过供货或可用金币，请调低份数。"
 			card.add_child(_label(reason,17,MUTED))
 	body.add_child(_button("recover","帮邻店洗锅 · +12 金（每日一次）",_act.bind("recover",{}),_enabled("recover")))
-	body.add_child(_button("shopping_expedition","合上，去门口看看装备",_close_sheet))
-	_build_stock("ingredient","储藏食材")
 
 func _choose_recipe(id: String):
 	recipe_selected=id
