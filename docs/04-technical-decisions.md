@@ -4,7 +4,7 @@
 
 ## 1. 已选路线及理由
 
-**Godot 4.7.2 标准版 + GDScript + Compatibility 2D 渲染器。** 最先在当前 Mac 上交付；最终 Windows 与 iOS。采用温暖手绘 Q 版、非像素、固定斜俯视的小店；前期占位素材，不先建设世界地图。
+**Godot 4.7.2 标准版 + GDScript + Compatibility 2D 渲染器。** 最先在当前 Mac 上交付；最终 Windows 与 iOS。采用原创 2D 像素美术、固定三分之四斜俯视的小店。用环境、角色、奇物及魔法行为建立可信世界；先完成三日原型，不先建设世界地图。
 
 事实：Godot 官网当前 macOS 稳定下载为 4.7.2，标准版不要求 .NET；引擎为 MIT 许可，分发时保留必要许可声明。[官方下载](https://godotengine.org/download/macos/)、[许可](https://godotengine.org/license/)。本机已实际执行 `.tools/Godot.app/Contents/MacOS/Godot --version`，得到 `4.7.2.stable.official.ed1daf0bf`；引擎可执行不代表游戏已实现或已运行。
 
@@ -30,8 +30,10 @@ Windows 可使用 Godot 导出模板产生原生可执行文件，但导出成�
 
 ## 4. 开发与逻辑边界
 
+- 实施方式：仅使用用户可见的独立 chat，由总协调拆派和创建；禁止 sub-agent。各任务的模型、推理强度和聊天 ID 以任务清单为准，全部使用 Standard（`service_tier=default`），禁止 Fast/Ultrafast，不更改全局设置。配置值与逐请求有效 tier 分别记录，未暴露的请求级证据不得推定。
 - Godot 标准版与 CLI：agent 编写场景、资源、脚本与导出配置，用户无需手动配置编辑器。使用实际 4.7.2 API，官方版本文档和运行结果共同核验。[命令行开发](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)
 - 核心：`game/core/` 采用不依赖节点、渲染或 UI 的 `RefCounted` 逻辑，负责经济与阶段转换。P01 完成并发布实际接口后，P02 才依它实现 UI；当前不虚构函数名；核心 owner 将接口说明与代码一同交付在 `game/core/README.md`，避免 UI 据探索文档猜 API。`project.godot` 由 P01 建立以运行真实 headless 测试，主场景完成前不宣称可玩入口。
+- 像素资源：A01 独占 `assets/pixel/**`；P02 负责 `scenes/**`、`game/ui/**` 与 `assets/SOURCES.md`，消费 A01 资源并记录来源，不重写美术 owner 的素材。
 - 存档：有版本号的完整 JSON 写入 `user://`，覆盖阶段、时钟、待处理事件、库存、现金、升级、已读内容和随机种子/内部状态。失败不能覆盖唯一有效存档；恢复后随机结果和交易防重语义保持一致。
 - 测试：优先引擎自带 `SceneTree` runner 与 Python 标准库 gate，不先增加测试插件、运行时网络、LLM 或付费服务。实际实现可按证据调整，但必须同步契约与任务依赖。
 
@@ -65,3 +67,7 @@ runner 报告协议：
 证据至少绑定 candidate/base SHA、实际工具版本、完整命令、退出码、测试结果和必要日志/截图。只为真实失效路径补测，复用仍然有效的证据。非平凡候选做一次独立评审，修复后定向验证；合并由总负责人完成。
 
 实际窗口运行、截图查看、目标设备验证和人类趣味反馈是不同证据。自动化可证明经济与状态正确性，不能证明咩咩愿意再玩一天；无人类试玩时保持“趣味待验证”。[官方长期任务实践](https://developers.openai.com/blog/run-long-horizon-tasks-with-codex)
+
+## 6. 源码托管与服务器检查
+
+源码仓库现为 public，未发布游戏。main 服务器保护已实际 GET 核验：strict=true，必需检查为 `harness` 与 `prototype`，enforce_admins=true，必须经 PR、required reviews=0，禁止强推和删除，要求解决对话，linear history=false。未引入第二账号审批要求。变更与回查的当前证据维护在项目状态；服务端保护不能代替负责人对产物与未验项的检查。

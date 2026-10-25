@@ -6,11 +6,11 @@
 
 ## 当前状态
 
-2026-10-25：已保留初步研究与设计，建立私有源码仓库；工程 harness 已验收合并，当前正在实施 P01 核心逻辑。开发基线选用 Godot 4.7.2 标准版、GDScript 和 Compatibility 渲染器；本机引擎实际报告 `4.7.2.stable.official.ed1daf0bf`。
+2026-10-25：已保留初步研究与设计，源码仓库现为 public；工程 harness 已验收合并，正在集成核心、UI、像素美术与原型 CI。开发基线选用 Godot 4.7.2 标准版、GDScript 和 Compatibility 渲染器；本机引擎实际报告 `4.7.2.stable.official.ed1daf0bf`。
 
 **目前尚无已交付的可玩入口，三日原型仍在实现，未进行人类试玩或发布。** 实际进度、证据和风险以 [项目状态](docs/project-status.md) 为准。
 
-最先在当前 Mac 上交付可打开的原型；最终目标为 Windows 和 iOS，触屏与手柄从原型阶段纳入。2D 表现采用温暖手绘 Q 版、非像素、固定斜俯视的小店；前期使用少量占位素材，不先制作大世界。
+最先在当前 Mac 上交付可打开的原型；最终目标为 Windows 和 iOS，触屏与手柄从原型阶段纳入。2D 表现采用原创像素美术、固定三分之四斜俯视的小店，通过环境、角色与奇物构建可信的魔法世界；先完成三日循环，不先制作大世界。
 
 ## 首个可玩交付
 
@@ -20,16 +20,16 @@
 
 ## 开发与检查
 
-先读 [AGENTS.md](AGENTS.md) 与 [开发接手说明](docs/03-agent-handoff.md)。每个有变更的 agent 在隔离工作树和任务分支开发，提交 PR，由总负责人验收合并；共享 checkout 保持 `main`。
+先读 [AGENTS.md](AGENTS.md) 与 [开发接手说明](docs/03-agent-handoff.md)。实施只在可见独立 chat 中进行，禁止 sub-agent；仅总协调拆派任务。模型与推理强度按任务清单指定，全部使用 Standard。每个实施 chat 在隔离工作树和任务分支开发、提交 PR，由总负责人验收合并；共享 checkout 保持 `main`。
 
-harness 合并后，统一检查入口为：
+统一检查入口为：
 
 ```sh
 python3 tools/gate.py --stage harness
 python3 tools/gate.py --stage prototype --godot /absolute/path/to/Godot --report output/prototype-gate.json
 ```
 
-这两个命令定义检查契约，不是当前游戏启动说明。`prototype` 在游戏和必需用例尚不存在时应失败；`harness` 通过也不能宣称游戏完成。可玩入口由 UI 任务完成实际运行后再补充，无需用户手动搭场景。
+这两个命令定义检查契约；`prototype` 在游戏或必需用例不存在时必须失败，`harness` 通过不能宣称游戏完成。Mac 源码启动器由工程 PR #7 提供，待该 PR 与 UI 主场景集成后使用 `./tools/启动月灯巷.command`；它依赖本地 Godot，不是独立导出的应用。实际可玩状态见项目状态，无需用户手动搭场景。
 
 ## 文档导航
 
