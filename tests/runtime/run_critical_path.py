@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run P03 rendered input paths in fresh Godot processes; no UI automation APIs."""
+"""Run P03/P06 input paths in fresh Godot processes; no UI automation APIs."""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +16,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+import quality_runtime
 
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
@@ -72,13 +73,39 @@ def main() -> int:
     parser.add_argument("--godot", default=os.environ.get("GODOT"), required=not os.environ.get("GODOT"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--modes", nargs="+", choices=["mouse", "touch", "pad"], default=["mouse", "touch", "pad"])
-    parser.add_argument("--stage", choices=[x[0] for x in STAGES] + list(AUXILIARY_STAGES), help="Targeted continuation using existing real save/checkpoint files")
+    parser.add_argument("--suite", choices=["prototype", "quality-slice"], default="prototype")
+    parser.add_argument("--legacy-evidence", action="append", default=[], metavar="MODE=PATH", help="Completed P03 evidence containing the selected mode's real archived save pair")
+    parser.add_argument("--headless-diagnostic", action="store_true", help="Quality suite only: real input/restore diagnostic with no runtime, screenshot or Q06 pass")
+    parser.add_argument("--seed-evidence", type=Path, help="Narrow only: native P06 evidence containing this mode's successful real spore-warning save")
+    parser.add_argument("--stage", choices=sorted({x[0] for x in STAGES + quality_runtime.STAGES} | set(AUXILIARY_STAGES) | set(quality_runtime.AUXILIARY_STAGES)), help="Targeted continuation or fresh quality focus experiment")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
     window_mode = parser.add_mutually_exclusive_group()
     window_mode.add_argument("--fullscreen", action="store_true", help="Use the actual fullscreen viewport without assigning a test resolution")
     window_mode.add_argument("--windowed", action="store_true", help="Explicit windowed mode (the default), including narrow layout checks")
     parser.add_argument("--timeout", type=int, default=300)
     args = parser.parse_args()
+    quality = args.suite == "quality-slice"
+    stages = quality_runtime.STAGES if quality else STAGES
+    auxiliary = quality_runtime.AUXILIARY_STAGES if quality else AUXILIARY_STAGES
+    restore_stages = {stage for stage, _ in stages if stage != "start"} | ({"restore-smoke"} if not quality else set())
+    if args.stage and args.stage not in ({stage for stage, _ in stages} | set(auxiliary)):
+        parser.error("--stage does not belong to the selected suite")
+    if args.headless_diagnostic and (not quality or args.fullscreen):
+        parser.error("headless diagnostic requires quality-slice and cannot claim fullscreen")
+    if quality and args.stage == "focus" and (args.headless_diagnostic or args.fullscreen):
+        parser.error("focus experiment requires a real windowed display")
+    if bool(args.seed_evidence) != bool(quality and args.stage == "narrow"):
+        parser.error("--seed-evidence is required only for the narrow checkpoint replay")
+    if quality and args.stage == "narrow":
+        restore_stages.add("narrow")
+    legacy = {}
+    for item in args.legacy_evidence:
+        mode, separator, path = item.partition("=")
+        if not separator or mode not in args.modes or mode in legacy or not Path(path).is_absolute():
+            parser.error("--legacy-evidence must be a unique selected MODE=ABS_PATH")
+        legacy[mode] = Path(path)
+    if quality and (args.stage is None or args.stage in auxiliary) and set(legacy) != set(args.modes):
+        parser.error("each quality mode needs its own --legacy-evidence MODE=ABS_PATH")
     if args.fullscreen and args.size:
         parser.error("--fullscreen cannot be combined with --size; fullscreen uses the actual screen viewport")
     root = Path(__file__).resolve().parents[2]
@@ -104,6 +131,13 @@ def main() -> int:
                    "Every restart checkpoint requires the real product save-and-quit control and observed process exit.",
                    "Source launcher/cache-free packaging verification is a separate required check."]
     }
+    if quality:
+        evidence.update(suite="P06 rain-night rendered main-scene path", runtime_verified=False,
+                        Q06_status="pending_native_modes_layout_and_focus_evidence", human_status="not_assessed",
+                        scope="Rain-night one-night to legal next-morning trial. Q01–Q05 and human QH remain separate.",
+                        headless_diagnostic=args.headless_diagnostic)
+        if args.headless_diagnostic:
+            evidence["suite"] = "P06 rain-night headless input diagnostic"
     report_path = output / ("evidence.json" if args.stage is None else f"evidence-{args.stage}.json")
 
     def write_report() -> None:
@@ -113,26 +147,55 @@ def main() -> int:
     for mode in args.modes:
         folder = output / mode
         folder.mkdir(exist_ok=True)
+        manifest = None
+        run_root = root
+        save_path = folder / "restaurant-save.json"
+        if quality:
+            try:
+                if args.stage is None or args.stage in auxiliary:
+                    manifest = quality_runtime.prepare(root, godot, folder, legacy[mode], mode,
+                                                       evidence["candidate_commit"], evidence["candidate_tree"])
+                    if args.seed_evidence:
+                        quality_runtime.seed_checkpoint(manifest, args.seed_evidence.resolve(strict=True), mode, folder)
+                else:
+                    manifest = json.loads((folder / "runtime-isolation.json").read_text())
+                changed = quality_runtime.validate_manifest(manifest, evidence["candidate_commit"], evidence["candidate_tree"])
+                if changed:
+                    raise ValueError(f"Isolation/source guards changed: {changed}")
+                run_root = Path(manifest["source"])
+                save_path = Path(manifest["probe"]["save_path"])
+            except (ValueError, OSError, KeyError, subprocess.SubprocessError) as error:
+                evidence["preflight_error"] = str(error)
+                write_report()
+                print(f"Quality preflight failed before product launch: {error}", flush=True)
+                return 2
         if args.stage is None and (folder / "restaurant-save.json").exists():
             raise SystemExit(f"Refusing to overwrite existing evidence/save: {folder}. Use a new output directory or --stage.")
-        for stage, expected in ([(args.stage, AUXILIARY_STAGES[args.stage])] if args.stage in AUXILIARY_STAGES else STAGES):
+        for stage, expected in ([(args.stage, auxiliary[args.stage])] if args.stage in auxiliary else stages):
             if args.stage is not None and stage != args.stage:
                 continue
             attempt = stage + "-" + uuid.uuid4().hex[:8]
             config = folder / f"{attempt}-config.json"
             settings = {"output": str(folder), "mode": mode, "stage": stage, "attempt": attempt, "fullscreen": args.fullscreen}
+            if quality:
+                probe = manifest["probe"]
+                settings.update(expected_user_dir=probe["user_dir"], expected_custom_dir=probe["custom_user_dir_name"],
+                                expected_save_path=probe["save_path"], headless_diagnostic=args.headless_diagnostic)
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
-            command = [str(root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
-                       "--script", "tests/runtime/critical_path.gd", "--", "--config", str(config)]
+            script = "tests/runtime/" + {"focus":"focus_boundary.gd","history":"history_boundary.gd","narrow":"narrow_boundary.gd"}.get(stage,"rain_night_path.gd") if quality else "tests/runtime/critical_path.gd"
+            command = [str(run_root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
+                       "--script", script, "--", "--config", str(config)]
+            if args.headless_diagnostic:
+                command.insert(1, "--headless")
             run = {"mode": mode, "stage": stage, "command": command, "environment": {"GODOT": godot}, "expected_checkpoint": expected}
             evidence["runs"].append(run)
             write_report()
             started = time.monotonic()
             log_path = folder / f"{attempt}-process.log"
             with log_path.open("w") as log:
-                with subprocess.Popen(command, cwd=root, env=dict(os.environ, GODOT=godot), stdout=log, stderr=subprocess.STDOUT) as proc:
+                with subprocess.Popen(command, cwd=run_root, env=dict(os.environ, GODOT=godot), stdout=log, stderr=subprocess.STDOUT) as proc:
                     run["process_id"] = proc.pid
                     try:
                         run["exit_code"] = proc.wait(timeout=args.timeout)
@@ -145,7 +208,7 @@ def main() -> int:
             # primary/backup; an expected snapshot is not a saved-file artifact.
             run["product_save_artifacts"] = []
             for suffix in ("", ".bak"):
-                source = folder / ("restaurant-save.json" + suffix)
+                source = Path(str(save_path) + suffix)
                 if source.is_file():
                     saved = folder / (attempt + "-product-save.json" + suffix)
                     shutil.copyfile(source, saved)
@@ -190,24 +253,37 @@ def main() -> int:
                     and image_geometry_matches(sample, dimensions)
                     and (full_coverage if args.fullscreen else sample.get("viewport_size") == dimensions))
             run["display_verified"] = display_valid
-            run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
+            mechanics_passed = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
-                             and (stage not in RESTORE_STAGES or run["automatic_restore_verified"] is True)
-                             and (expected in ("complete", "display-checked", "navigation-complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
-                             and run["active_scene"] in ("restaurant", "expedition")
+                             and (stage not in restore_stages or run["automatic_restore_verified"] is True)
+                             and (expected in ("complete", "display-checked", "navigation-complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64)))
+            rendering_passed = (run["active_scene"] in ("restaurant", "expedition")
                              and run["active_assets_loaded"] is True
                              and result.get("active_asset_evidence", {}).get("visible") is True
                              and result.get("active_asset_evidence", {}).get("observed_after_render") is True
                              and result.get("display") not in (None, "headless") and display_valid
                              and result.get("verification_kind") == "rendered_runtime" and result.get("rendering_verified") is True)
+            if quality:
+                run["isolation_changes"] = quality_runtime.validate_manifest(manifest, evidence["candidate_commit"], evidence["candidate_tree"])
+                run["quality_errors"] = quality_runtime.result_errors(result, manifest, sources)
+                mechanics_passed = mechanics_passed and not run["isolation_changes"] and not run["quality_errors"]
+            run["diagnostic_passed"] = bool(args.headless_diagnostic and mechanics_passed
+                                             and result.get("display") == "headless"
+                                             and result.get("rendering_verified") is False
+                                             and not result.get("screenshots") and not run["display_samples"])
+            run["passed"] = bool(not args.headless_diagnostic and mechanics_passed and rendering_passed)
             write_report()
-            print(f"{mode}/{stage}: {'PASS' if run['passed'] else 'FAIL'}; {run['checks']} checks; {log_path}", flush=True)
-            if not run["passed"]:
+            accepted = run["diagnostic_passed"] if args.headless_diagnostic else run["passed"]
+            print(f"{mode}/{stage}: {'DIAGNOSTIC OK' if run['diagnostic_passed'] else 'PASS' if run['passed'] else 'FAIL'}; {run['checks']} checks; {log_path}", flush=True)
+            if not accepted:
                 print(json.dumps({k: run[k] for k in ("exit_code", "engine_errors", "failures", "checkpoint")}, ensure_ascii=False))
                 return 1
     evidence["passed"] = bool(evidence["runs"]) and all(x["passed"] for x in evidence["runs"])
+    if quality:
+        evidence["runtime_verified"] = evidence["passed"]
+        evidence["diagnostic_passed"] = bool(args.headless_diagnostic and evidence["runs"] and all(x["diagnostic_passed"] for x in evidence["runs"]))
     evidence["coverage"] = "targeted stage only" if args.stage else "all requested modes and restart stages"
     write_report()
     return 0

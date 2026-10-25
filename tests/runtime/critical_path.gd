@@ -117,8 +117,8 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		DisplayServer.window_set_size(size)
 	if not failures.is_empty(): return
 	ui=Main.instantiate()
-	# Configuration only: no seed/economy/phase/state replacement.
-	ui.save_path=folder+"/restaurant-save.json"
+	configure_save_path()
+	if not failures.is_empty(): return
 	startup_files=save_file_hashes()
 	root.add_child(ui)
 	# _ready() performs the product's automatic load. Observe it before any
@@ -144,6 +144,17 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		expect(ui.size==root.get_visible_rect().size,"main scene fills actual fullscreen viewport")
 	else:
 		expect(ui.size==Vector2(size),"viewport uses requested dimensions")
+
+func configure_save_path():
+	# P03 keeps its existing isolated path. P06 overrides this hook to inspect
+	# the product default without assigning a path or changing the Session.
+	ui.save_path=folder+"/restaurant-save.json"
+
+func is_economic_control(id: String) -> bool:
+	return id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
+
+func is_presentation_control(id: String) -> bool:
+	return id.begins_with("world_") or id.begins_with("recipe_") or id=="sheet_close"
 
 func activate_visible(id: String):
 	var control=ui.get_action_control(id)
@@ -245,27 +256,34 @@ func scroll_gesture_origin(clip: Rect2) -> Vector2:
 		if not blocked: return point
 	return clip.get_center()
 
+func observe_scroll(_button: Button, _moment: String, _point: Vector2=Vector2.ZERO):
+	pass # Optional read-only diagnostics; input/scroll behavior is unchanged.
+
 func scroll_to(button: Button):
 	if not ui.scroll.is_ancestor_of(button): return
 	for _i in range(50):
 		var clip=ui.scroll.get_global_rect()
 		var rect=button.get_global_rect()
+		observe_scroll(button,"iteration")
 		if clip.encloses(rect): return
 		if _i in [0,1,49]: trace.append({"scroll_target":str(button.get_meta("action_id",button.name)),"iteration":_i,"clip":str(clip),"target_rect":str(rect),"scroll_vertical":ui.scroll.scroll_vertical})
 		var direction=1 if rect.get_center().y>clip.get_center().y else -1
 		if mode=="touch":
 			var at=scroll_gesture_origin(clip)
+			observe_scroll(button,"touch_start",at)
 			var touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at; touch.pressed=true; emit_gui_pointer(touch)
 			for j in range(1,7):
 				var drag=InputEventScreenDrag.new()
 				drag.index=0; drag.position=at-Vector2(0,direction*j*20); drag.relative=Vector2(0,-direction*20)
 				emit_gui_pointer(drag); await frames(1)
+				observe_scroll(button,"touch_drag",drag.position)
 			# Hold before lifting to end the gesture without a kinetic fling.
 			# Otherwise the button can move between its measured rect and tap.
 			await create_timer(0.25,true,false,true).timeout
 			touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_gui_pointer(touch)
+			observe_scroll(button,"touch_release",touch.position)
 		else:
 			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_gui_pointer(motion)
 			var wheel=InputEventMouseButton.new()
@@ -316,10 +334,10 @@ func activate_control(button: Button, id: String):
 				emit_gui_pointer(event)
 			await frames(1)
 	await frames(3)
-	var economic=id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
+	var economic=is_economic_control(id)
 	if economic and action_count==count_before: await screenshot(mode+"-intent-failure-"+id)
 	if economic: expect(action_count==count_before+1,"one real control input emits exactly one economic intent: "+id)
-	if id.begins_with("world_") or id.begins_with("recipe_") or id=="sheet_close": expect(action_count==count_before,"presentation control emits no economic intent: "+id)
+	if is_presentation_control(id): expect(action_count==count_before,"presentation control emits no economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
 	if id.begins_with("craft_"):
