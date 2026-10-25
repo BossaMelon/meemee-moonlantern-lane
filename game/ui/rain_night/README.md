@@ -21,6 +21,8 @@
 
 同一 trading 波次的柜台实时更新复用已有控件，只更新文字和必要订单行；历史开关位于会增减的订单行之前，计时和配送都不替换其 Button、按压或焦点。真正换阶段/波次或切到特殊委托时才正常换页。展开历史仍是只读操作，经营照常推进。
 
+装饰卡片 `_card()` 明确采用 `MOUSE_FILTER_PASS`，让文字/空白处的触摸拖动沿现有容器抵达 ScrollContainer；可操作 Button 保持自己的输入处理边界，不递归改按钮的过滤器。依据 [Godot 4.7 MouseFilter](https://docs.godotengine.org/en/4.7/classes/class_control.html#enum-control-mousefilter)：PanelContainer 默认 STOP；默认的强制滚动传播只针对滚轮，不能代替触摸拖动传播。
+
 菜单优先序只在 preparation/intermission 且核心 available_commands 明确允许时可改；同 ID 集合、无重复才允许应用。本地草稿不会写回 view。预留身份来自 service.reservations 的真实 item_uid，显示并排除其可操作份数。开波使用构建按钮时的确切 next_wave_id，不自动重选或跳过过期 ID。
 
 三波预报从既有 demand_board 的正式 `n{day}-w{1..3}-c{01..09}` ID 分组，特殊委托另计；缺失波明确显示摘要待提供，不当作零位客人。P04 真实 view 必须提供采购前的完整三波需求。离开原因只读已有 sales/reasons，不由 UI 猜测缺货、拥堵或预算结果。
@@ -34,12 +36,15 @@ Godot --headless --path . --script game/ui/checks/rain_night_components.gd -- /p
 Godot --headless --path . --script game/ui/checks/rain_night_pad.gd -- /private/tmp/NEW_HOST_PAD_CHECK
 Godot --headless --path . --script game/ui/checks/rain_night_flow.gd -- /private/tmp/NEW_REAL_FLOW
 Godot --headless --path . --script game/ui/checks/service_history_hold.gd -- /private/tmp/NEW_HISTORY_HOLD
+Godot --headless --path . --script game/ui/checks/card_touch_scroll.gd -- /private/tmp/NEW_CARD_TOUCH
 python3 tools/with_render_lock.py -- Godot --fullscreen --path . --script game/ui/checks/rain_night_native.gd -- /private/tmp/NEW_NATIVE_FLOW
 ```
 
 `components` 使用合成 typed-view；`pad` 用真实 Main 与 GUI 准备料理，再注入 D-pad/A/B；`flow` 从采购走真实三波、次晨升级装备、E02 出发与暂停保存退出。仅在营业中用 12x 模拟，不代表人类游玩时长。
 
 `service_history_hold` 在挂载 Main 前用合法 Session 命令准备营业夹具；挂载后只注入真实鼠标/手柄 InputEvent，跨至少250ms按压覆盖普通计时与实际配送，观察单次切换、实例/焦点/按压、动态送达文字及零 UI 经济意图。额外以12x正常仿真到真实波间核对固定页脚和停时；不发 pressed、不暂停营业或在按压中调用测试侧核心命令。
+
+`card_touch_scroll` 在实际844×390 Main 中，先用真实D-pad焦点准备菜单起点，再以 `Input.parse_input_event` 的 ScreenTouch/ScreenDrag 和引擎正常桌面触摸模拟拖动彗星馅饼装饰卡片，检查滚动和批量按钮可达；另核对购买/制作按钮点击、350ms长按各一次、拖离不误操作。仅读取滚动值，不直接设值、不换滚轮、不发pressed；合法Session夹具仅在挂载UI前准备。headless结果不代替原生窄屏QA复验。
 
 `native` 只验证呈现整改，复用真实经营流程到次晨装备即保存退出，不进入战斗。历史和投资区使用实际鼠标滚轮 InputEvent 导航，不能直接改滚动值或发 pressed。根窗口原图不后期缩放，逐图记录 Window/DisplayServer mode、尺寸、screen DPI/scale、stretch 与 PNG/UI 坐标映射、真实窗口焦点与焦点控件；focus signals 单独留在同一报告。等待 frame_post_draw 超过5秒即报告失败退出。用 `--windowed --resolution 844x390` 启动并在输出目录后附 `--small` 检查小窗口。headless 调用仅为无图的布局预检，不充当原生证据。原生运行必须先获负责人时段分配，再用全程共享锁串行执行。
 
