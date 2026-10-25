@@ -25,8 +25,23 @@ python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
 - harness 自身的反假绿回归测试实际执行且没有失败、错误或跳过；
 - 一旦存在 `project.godot`、`.gd` 或 `.tscn`，CI 必须增加无条件 prototype job。
 
-当前还没有游戏代码，`--stage prototype` **应该失败**。
-它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+`--stage prototype` 实际运行核心测试；它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+当前完成程度与运行证据只维护在 [项目状态](../docs/project-status.md)。
+
+## Mac 源码启动器
+
+在完整项目目录中双击 [启动月灯巷.command](启动月灯巷.command)，或运行：
+
+```sh
+./tools/启动月灯巷.command
+GODOT=/absolute/path/to/Godot ./tools/启动月灯巷.command
+```
+
+启动器按顺序使用 `GODOT`、本工作树 `.tools/Godot.app`、原始 checkout 的
+`.tools/Godot.app`、PATH 中的 `godot`。它要求实际版本 4.7.2、完整项目及已存在的
+`res://` 主场景；依赖未完成时明确失败，不把核心测试通过冒充可玩 UI。
+路径可含空格，额外参数原样交给 Godot。此入口依赖本地引擎和源码，是 Mac 源码原型启动器；
+独立导出的 `.app`、签名与跨设备分发仍须另行验证。
 
 ## 游戏执行器合同
 
@@ -68,9 +83,9 @@ PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分�
 
 ## CI 与首个游戏 PR 的启用要求
 
-当前 [gate workflow](../.github/workflows/gate.yml) 只有 `harness` job。
-它在所有 PR 和 `main` 推送上执行，无路径过滤。依赖的官方 Actions 固定到提交，
-证据保留 7 天。首个包含游戏源码的 PR 必须同时加入下列 **prototype job**；
+当前 [gate workflow](../.github/workflows/gate.yml) 包含 `harness` 和 `prototype` job。
+它们在所有 PR 和 `main` 推送上执行，无路径过滤。依赖的官方 Actions 固定到提交，
+证据保留 7 天。游戏源码必须始终保留下列 **prototype job**；
 缺少 job、条件跳过、`continue-on-error` 或用 shell 吞掉 gate 退出码都会被拒绝。
 运行时 workflow 的 `pull_request` 触发还必须没有路径、分支或事件类型过滤，
 避免代码 PR 根本不触发检查。validator 只支持当前 canonical `on:` 事件块、
@@ -95,13 +110,13 @@ PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分�
         run: python3 tools/gate.py --stage prototype --godot .tools/Godot_v4.7.2-stable_linux.x86_64
 ```
 
-这是待启用的最小模板；当前 harness-only 阶段不运行或伪造 prototype job。
+这是已启用 job 的核心命令；实际 workflow 还上传成功的 gate 报告。
 runtime 出现后，validator 要求该固定 job 名及直接 gate 命令，禁止在 job 或 gate
 step 上加入条件和失败吞并。更复杂的 YAML 写法应先更新并验证 validator。
 
 源码 PR 的作者不得合并自己的候选；总负责人核对当前 head 的 gate、
-独立评审与实际运行证据后，用 GitHub 原生合并。私有仓库服务器是否能强制
-required checks 取决于当前账户能力；不能配置时必须明确记录，不能声称服务器已保护。
+独立评审与实际运行证据后，用 GitHub 原生合并。服务器 required checks 必须实际查询，
+只以查询结果记录保护状态；当前状态与 CI 链接统一见项目状态。
 
 ## 已核验的工具来源
 
