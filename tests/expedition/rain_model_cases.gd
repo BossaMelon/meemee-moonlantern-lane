@@ -21,7 +21,7 @@ func events(result: Dictionary, type: String) -> Array:
 	return result.events.filter(func(e): return e.type == type)
 func freeze(s: Dictionary):
 	for e in s.enemies: e.engaged = false
-func run() -> Dictionary:
+func run(output_dir: String = "") -> Dictionary:
 	var s = make()
 	valid(s,"new quality state")
 	expect(s.version == 2 and s.remaining_ms == null and s.elapsed_ms == 0 and s.meal_effect == null,"typed quality public state")
@@ -197,8 +197,11 @@ func run() -> Dictionary:
 				var target: Dictionary = bad if section == "" else (bad[section] if section == "player" else bad[section][0])
 				target[field] = null if source[field] is bool else false
 				expect(Model.validate(bad) != "","malformed persisted type rejected %s.%s" % [section,field])
-	var boundaries = ReturnBoundaries.new().run(Callable(),"/tmp/e02-rain-model-returns")
-	checks += boundaries.checks
-	failures.append_array(boundaries.failures)
+	var boundaries = ReturnBoundaries.new().run(Callable(),output_dir)
+	if boundaries.get("checks") is int and boundaries.get("failures") is Array:
+		checks += boundaries.checks
+		failures.append_array(boundaries.failures)
+	else:
+		expect(false,"return boundary runner must provide structured checks/failures")
 	print("E02 rain model: ",checks," checks, ",failures.size()," failures")
 	return {"checks":checks,"failures":failures.duplicate()}
