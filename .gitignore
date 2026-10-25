@@ -1,0 +1,14 @@
+# Local toolchains and engine import caches
+.tools/
+.godot/
+
+# Generated builds and raw verification output
+output/
+evidence/
+
+# Local editor and operating-system state
+.DS_Store
+.idea/
+.vscode/
+*.tmp
+*.log
