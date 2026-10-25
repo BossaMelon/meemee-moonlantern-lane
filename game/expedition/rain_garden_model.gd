@@ -282,6 +282,14 @@ static func _damage(s: Dictionary, enemy: Dictionary, result: Dictionary, dodgin
 
 static func _walk_enemy(s: Dictionary, e: Dictionary, result: Dictionary):
 	var goal = _pos(s.player)
+	# The player is smaller: an enemy still approaches a player hugging a wall.
+	if not Map.point_clear(goal,ENEMY_RADIUS):
+		var nearest = INF
+		var reachable_goal = goal
+		for point in Map._graph(ENEMY_RADIUS).points.values():
+			var distance = point.distance_squared_to(goal)
+			if distance < nearest: nearest = distance; reachable_goal = point
+		goal = reachable_goal
 	var target_key = "%d:%d" % [int(goal.x/32),int(goal.y/32)]
 	e.path_refresh_ms = maxi(0,e.path_refresh_ms-STEP)
 	if e.path_refresh_ms == 0 or e.path_target != target_key:
@@ -426,6 +434,9 @@ static func _projectiles(s: Dictionary, result: Dictionary):
 		b.x = wall.position.x; b.y = wall.position.y
 		b.remaining = maxf(0.0,b.remaining-delta.length())
 		if not target.is_empty():
+			if not target.engaged:
+				target.engaged = true
+				_event(s,result,"encounter_engaged",{"entity_id":target.id,"encounter_id":target.encounter_id})
 			var facing = Vector2(target.direction_x,target.direction_y)
 			var front = (-direction).dot(facing) >= cos(deg_to_rad(60.0))
 			if target.shielded and front: _event(s,result,"blocked",{"entity_id":target.id,"cast_id":b.cast_id,"reason":"front_shield"})
@@ -454,6 +465,8 @@ static func _coordinates(e: Dictionary) -> bool:
 static func validate(value: Variant) -> String:
 	if not value is Dictionary: return "动作状态须为对象"
 	var s: Dictionary = value
+	var template = create(1,"shape",1,"bolt_wand",["gust"],false,{"ruleset":"rain-night-v1","map_id":Map.MAP_ID,"map_revision":Map.REVISION,"meal_effect":null})
+	if not _shape(s,template): return "雨园字段类型非法"
 	if not s.has_all(["version","ruleset","map_id","map_revision","terrain","hazards","resource_nodes","collision_records","next_collision","next_hazard","next_skill","meal_effect","status","day","run_id","remaining_ms","elapsed_ms","remainder_ms","tick","rng_state","weapon_id","skills","input","next_projectile","next_cast","entrance_armed","return_reason","player","enemies","projectiles","drops"]): return "雨园状态缺少字段"
 	if not _integer(s.version,2,2) or not s.ruleset is String or s.ruleset != "rain-night-v1" or not s.map_id is String or s.map_id != Map.MAP_ID or not _integer(s.map_revision,Map.REVISION,Map.REVISION): return "雨园版本或地图不匹配"
 	if not _same(s.terrain,Map.data()): return "地图revision几何不匹配"
@@ -486,6 +499,9 @@ static func validate(value: Variant) -> String:
 	for i in range(s.enemies.size()):
 		var e = s.enemies[i]
 		var spawn: Dictionary = Map.SPAWNS[i]
+		var enemy_template = _enemy("shape","sparkcap",Vector2.ZERO,2,0)
+		enemy_template.encounter_id = "entry"
+		if not _shape(e,enemy_template): return "敌人字段类型非法"
 		if not e is Dictionary or not e.has_all(["id","kind","encounter_id","engaged","x","y","hp","state","telegraph","shielded","timer_ms","exposed_ms","direction_x","direction_y","attack_index","attack_id","attack_hit","wave_radius","hit_casts","drop_spawned","stagger_remaining_ms","stagger_attack_id","last_contact","path","path_index","path_target","path_refresh_ms","cast_cooldown_ms","target_x","target_y"]): return "敌人状态不完整"
 		if e.id != spawn.id or e.kind != spawn.kind or e.encounter_id != spawn.encounter_id or not e.engaged is bool or not _coordinates(e) or not Map.point_clear(_pos(e),ENEMY_RADIUS): return "敌人身份或位置非法"
 		if not _integer(e.hp,0,4 if e.kind == "moonheart" else 2) or e.state not in ["idle","telegraph","dash","wave","stagger","spore_windup","spore_release","defeated"] or (e.hp == 0) != (e.state == "defeated"): return "敌人生命或阶段非法"
@@ -508,9 +524,11 @@ static func validate(value: Variant) -> String:
 		if not e.telegraph is Dictionary: return "敌人预警非法"
 		if e.state == "telegraph":
 			var t: Dictionary = e.telegraph
+			if not _shape(t,{"shape":"cone","direction_x":0,"direction_y":0,"radius":0,"angle_degrees":0,"remaining_ms":0}): return "预警字段类型非法"
 			if not t.has_all(["shape","direction_x","direction_y","radius","angle_degrees","remaining_ms"]) or t.shape not in ["cone","ring"]: return "敌人预警缺字段"
 			if not _finite_axis(t.direction_x) or not _finite_axis(t.direction_y) or not _number(t.radius,0,180) or not _number(t.angle_degrees,0,360) or t.remaining_ms != e.timer_ms: return "预警与攻击不一致"
 		elif e.state == "spore_windup":
+			if not _shape(e.telegraph,{"shape":"spore","remaining_ms":0}): return "投孢预警字段类型非法"
 			if not e.telegraph.has_all(["shape","remaining_ms"]) or e.telegraph.shape != "spore" or e.telegraph.remaining_ms != e.timer_ms: return "投孢预警非法"
 		elif not e.telegraph.is_empty(): return "非预警阶段保留预警"
 		if not e.path is Array or e.path.size() > 600 or not _integer(e.path_index,0,e.path.size()) or not e.path_target is String or not _integer(e.path_refresh_ms,0,250) or not _number(e.target_x,0,WIDTH) or not _number(e.target_y,0,HEIGHT): return "导航状态非法"
@@ -519,6 +537,7 @@ static func validate(value: Variant) -> String:
 		enemies[e.id] = e
 	var hazard_ids = {}
 	for h in s.hazards:
+		if not _shape(h,{"id":"","source":"","x":0,"y":0,"radius":0,"state":"","remaining_ms":0,"hit_player":false,"speed_scale":0,"born_tick":0}): return "孢子区字段类型非法"
 		if not h is Dictionary or not h.has_all(["id","source","x","y","radius","state","remaining_ms","hit_player","speed_scale","born_tick"]): return "孢子区缺字段"
 		if not _sequence_id(h.id,"%s:h" % s.run_id,s.next_hazard) or hazard_ids.has(h.id) or not h.source is String or not enemies.has(h.source) or enemies[h.source].kind != "sporecaster": return "孢子区身份非法"
 		if not _coordinates(h) or h.radius != 45 or h.speed_scale != 0.65 or h.state not in ["warning","active"] or not h.hit_player is bool or not _integer(h.remaining_ms,1,800 if h.state == "warning" else 3000) or not _integer(h.born_tick,0,s.tick): return "孢子区属性非法"
@@ -527,11 +546,14 @@ static func validate(value: Variant) -> String:
 	var projectile_ids = {}
 	var warning_projectiles = {}
 	for b in s.projectiles:
+		if not _shape(b,{"id":0,"cast_id":0,"owner":"","x":0,"y":0,"vx":0,"vy":0}): return "弹体字段类型非法"
 		if not b is Dictionary or not b.has_all(["id","cast_id","owner","x","y","vx","vy"]): return "弹体缺字段"
 		if not _integer(b.id,1,int(s.next_projectile)-1) or projectile_ids.has(str(b.id)) or not _coordinates(b) or not Map.point_clear(_pos(b),4.0) or b.owner not in ["player","enemy"] or not _number(b.vx,-1200,1200) or not _number(b.vy,-675,675): return "弹体身份或运动非法"
 		if b.owner == "player":
+			if not _shape(b,{"remaining":0}): return "玩家弹体字段类型非法"
 			if not b.has("remaining") or not _integer(b.cast_id,1,int(s.next_cast)-1) or not _number(b.remaining,0,300): return "玩家弹体非法"
 		else:
+			if not _shape(b,{"source":"","hazard_id":"","remaining_ms":0,"born_tick":0}): return "飞行孢子字段类型非法"
 			if not b.has_all(["source","hazard_id","remaining_ms","born_tick"]) or b.cast_id != 0 or not b.hazard_id is String or not hazard_ids.has(b.hazard_id) or warning_projectiles.has(b.hazard_id): return "飞行孢子身份非法"
 			var h: Dictionary = hazard_ids[b.hazard_id]
 			if b.source != h.source or h.state != "warning" or not _integer(b.remaining_ms,1,800) or b.remaining_ms != h.remaining_ms or b.born_tick != h.born_tick: return "飞行孢子与预警不一致"
@@ -548,6 +570,7 @@ static func validate(value: Variant) -> String:
 		if not _same(node,expected): return "资源revision配置非法"
 	var drop_ids = {}
 	for d in s.drops:
+		if not _shape(d,{"id":"","enemy_id":"","item_id":"","x":0,"y":0,"collected":false,"blocked":false}): return "掉落字段类型非法"
 		if not d is Dictionary or not d.has_all(["id","enemy_id","item_id","x","y","collected","blocked"]): return "掉落缺字段"
 		if not d.enemy_id is String or not enemies.has(d.enemy_id) or not d.collected is bool or not d.blocked is bool or not _coordinates(d): return "掉落属性非法"
 		var e: Dictionary = enemies[d.enemy_id]
@@ -558,6 +581,7 @@ static func validate(value: Variant) -> String:
 		if s.status == "cleared" and e.hp > 0: return "尚有敌人却已清场"
 	var collision_ids = {}
 	for record in s.collision_records:
+		if not _shape(record,{"collision_id":"","entity_id":"","obstacle_id":"","attack_index":0,"motion":"","tick":0}): return "碰撞记录字段类型非法"
 		if not record is Dictionary or not record.has_all(["collision_id","entity_id","obstacle_id","attack_index","motion","tick"]): return "碰撞记录缺字段"
 		if not _sequence_id(record.collision_id,"%s:c" % s.run_id,s.next_collision) or collision_ids.has(record.collision_id) or not record.entity_id is String or not record.obstacle_id is String or record.motion not in ["walk","dodge","dash","push","bolt","spore"] or not _integer(record.attack_index,0,2147483647) or not _integer(record.tick,0,s.tick): return "碰撞记录非法"
 		var known_obstacle = record.obstacle_id in ["boundary-left","boundary-right","boundary-top","boundary-bottom"]
@@ -588,3 +612,12 @@ static func _same(a: Variant, b: Variant) -> bool:
 			if not _same(a[i],b[i]): return false
 		return true
 	return a == b
+
+static func _shape(value: Variant, template: Variant) -> bool:
+	if template == null: return true # Nullable meal has its own exact three-field check.
+	if template is int or template is float: return (value is int or value is float) and is_finite(float(value))
+	if typeof(value) != typeof(template): return false
+	if template is Dictionary:
+		for key in template:
+			if not value.has(key) or not _shape(value[key],template[key]): return false
+	return true # Array elements use their own identity/relationship checks above.

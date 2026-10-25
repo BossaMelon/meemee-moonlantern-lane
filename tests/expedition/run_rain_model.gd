@@ -82,6 +82,56 @@ func _initialize():
 	expect(s.hazards.size() == 1 and s.hazards[0].id == warning_id and s.projectiles.size() == projectile_count,"gust keeps warning and emitted projectile")
 	expect(events(result,"spore_cleared").size() == 1 and events(result,"spore_cleared")[0].hazard_id == clear_id,"gust identifies cleared active zone")
 	valid(s,"gust mixed state snapshot")
+	# Elite collision opens a 1200ms window; ordinary push does not apply stagger.
+	s = make(); freeze(s)
+	var elite = s.enemies[3]; elite.engaged = true; elite.x = 670; elite.y = 250
+	elite.state = "dash"; elite.timer_ms = 500; elite.direction_x = 1; elite.direction_y = 0
+	elite.attack_index = 1; elite.attack_id = "%s:%s:a1" % [s.run_id,elite.id]
+	result = Model.advance(s,100)
+	expect(elite.state == "stagger" and elite.stagger_remaining_ms == 1200 and not elite.shielded,"elite dash into rect breaks shield for exact stagger")
+	expect(events(result,"enemy_staggered").size() == 1,"elite stagger event emitted once")
+	valid(s,"elite stagger snapshot")
+	var saved_stagger: Dictionary = JSON.parse_string(JSON.stringify(s))
+	Model.advance(s,357); Model.advance(saved_stagger,357)
+	expect(s == saved_stagger and elite.stagger_remaining_ms == 850,"stagger continuation preserves identity/time")
+	s = make(); freeze(s); s.player.x = 180
+	var pushed = s.enemies[0]; pushed.x = 210; pushed.y = 270
+	result = Rain._result(); Rain._gust(s,result)
+	expect(pushed.x <= 218.001 and pushed.state != "stagger" and events(result,"enemy_staggered").is_empty(),"gust push stops at stump without dash stagger")
+	# An emitted elite wave survives gust and does not restart its radius/timer.
+	s = make(); freeze(s); elite = s.enemies[3]; elite.x = 800; elite.y = 350; elite.state = "wave"; elite.timer_ms = 800; elite.wave_radius = 36
+	elite.attack_index = 2; elite.attack_id = "%s:%s:a2" % [s.run_id,elite.id]
+	s.player.x = 840; s.player.y = 350
+	result = Rain._result(); Rain._gust(s,result)
+	expect(elite.state == "wave" and elite.timer_ms == 800 and elite.wave_radius == 36,"gust leaves emitted elite ring active")
+	# Both projectile owners are blocked before reaching an actor/landing behind a stump.
+	s = make(); freeze(s); s.player.x = 200; s.player.y = 270
+	var rush = s.enemies[0]; rush.x = 330
+	hold(s,{"aim_x":1.0,"cast":true}); result = Model.advance(s,500)
+	expect(rush.hp == 2 and events(result,"obstacle_hit").any(func(e): return e.motion == "bolt"),"stump blocks player projectile before enemy")
+	s = make(); freeze(s); caster = s.enemies[2]; caster.x = 330; caster.y = 270; s.player.x = 200
+	result = Rain._result(); Rain._throw_spore(s,caster,result)
+	Model.advance(s,800)
+	expect(s.hazards.is_empty() and s.projectiles.is_empty(),"stump cancels enemy projectile landing without active spores")
+	valid(s,"blocked enemy projectile state")
+	# Real idle movement takes the same water scale; dash is independent of water.
+	var e_dry = make(); var e_wet = make(); freeze(e_dry); freeze(e_wet)
+	for pair in [[e_dry,480.0],[e_wet,365.0]]:
+		var entity: Dictionary = pair[0].enemies[0]
+		entity.engaged = true; entity.x = 380; entity.y = pair[1]; entity.timer_ms = 1500
+		pair[0].player.x = 650; pair[0].player.y = pair[1]
+	Model.advance(e_dry,50); Model.advance(e_wet,50)
+	expect(absf(e_dry.enemies[0].x-381.75) < 0.001 and absf(e_wet.enemies[0].x-381.1375) < 0.001,"enemy walking respects water speed")
+	for model in [e_dry,e_wet]:
+		model.enemies[0].state = "dash"; model.enemies[0].timer_ms = 500; model.enemies[0].direction_x = 1; model.enemies[0].direction_y = 0
+	dx = e_dry.enemies[0].x; wx = e_wet.enemies[0].x
+	Model.advance(e_dry,50); Model.advance(e_wet,50)
+	expect(absf(e_dry.enemies[0].x-dx-11) < 0.001 and absf(e_wet.enemies[0].x-wx-11) < 0.001,"enemy dash ignores water")
+	s = make(); freeze(s); s.player.x = 223; s.player.y = 270
+	s.enemies[0].engaged = true; s.enemies[0].timer_ms = 1500; s.enemies[0].x = 500; s.enemies[0].y = 400
+	Model.advance(s,50)
+	expect(not s.enemies[0].path.is_empty(),"larger enemy can navigate toward player hugging smaller footprint boundary")
+	valid(s,"wall-hug navigation state")
 	# Food extends the first valid action, never a request in cooldown.
 	s = make({"effect_id":"light_step","source_item_uid":42,"used":false}); freeze(s)
 	s.player.dodge_cooldown_ms = 100
@@ -130,5 +180,18 @@ func _initialize():
 			for field in ["map_id","map_revision","terrain","meal_effect","elapsed_ms"]:
 				var bad = a.duplicate(true); bad[field] = false
 				expect(Model.validate(bad) != "","corrupt state rejected "+field)
+	# Every persisted primitive/container has a type rejection before arithmetic.
+	var fixtures: Array = [make()]
+	var flying = make(); flying.player.x = 635; flying.player.y = 405; flying.enemies[2].engaged = true; flying.enemies[2].timer_ms = 0
+	Model.advance(flying,450); fixtures.append(flying)
+	for model in fixtures:
+		for section in ["", "player", "enemies", "hazards", "projectiles", "resource_nodes"]:
+			var source: Dictionary = model if section == "" else (model[section] if section == "player" else (model[section][0] if not model[section].is_empty() else {}))
+			for field in source:
+				if source[field] == null: continue
+				var bad = model.duplicate(true)
+				var target: Dictionary = bad if section == "" else (bad[section] if section == "player" else bad[section][0])
+				target[field] = null if source[field] is bool else false
+				expect(Model.validate(bad) != "","malformed persisted type rejected %s.%s" % [section,field])
 	print("E02 rain model: ",checks," checks, ",failures.size()," failures")
 	quit(1 if not failures.is_empty() else 0)
