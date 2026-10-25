@@ -19,6 +19,8 @@
 
 可见订单用“第几批 · 几号单”，料理来源用制作批次与份号；原始 `order_id` / `item_uid` / `prepared_wave_id` 保留在对应 Label 的只读 metadata 与既有定位 ID 中。折叠的订单需从真实 `service_history_toggle` 展开后才能定位。`next_wave_summary` 显示真实下一批需求，缺数据不显示虚构零人；`departure_summary` 位于出发操作旁，显示当前魔杖、技能及餐前效果来源。日结两个投资列复用既有杖/料理图标，费用和购买后余额从当前 view 读取。
 
+同一 trading 波次的柜台实时更新复用已有控件，只更新文字和必要订单行；历史开关位于会增减的订单行之前，计时和配送都不替换其 Button、按压或焦点。真正换阶段/波次或切到特殊委托时才正常换页。展开历史仍是只读操作，经营照常推进。
+
 菜单优先序只在 preparation/intermission 且核心 available_commands 明确允许时可改；同 ID 集合、无重复才允许应用。本地草稿不会写回 view。预留身份来自 service.reservations 的真实 item_uid，显示并排除其可操作份数。开波使用构建按钮时的确切 next_wave_id，不自动重选或跳过过期 ID。
 
 三波预报从既有 demand_board 的正式 `n{day}-w{1..3}-c{01..09}` ID 分组，特殊委托另计；缺失波明确显示摘要待提供，不当作零位客人。P04 真实 view 必须提供采购前的完整三波需求。离开原因只读已有 sales/reasons，不由 UI 猜测缺货、拥堵或预算结果。
@@ -31,10 +33,13 @@
 Godot --headless --path . --script game/ui/checks/rain_night_components.gd -- /private/tmp/NEW_COMPONENT_CHECK
 Godot --headless --path . --script game/ui/checks/rain_night_pad.gd -- /private/tmp/NEW_HOST_PAD_CHECK
 Godot --headless --path . --script game/ui/checks/rain_night_flow.gd -- /private/tmp/NEW_REAL_FLOW
+Godot --headless --path . --script game/ui/checks/service_history_hold.gd -- /private/tmp/NEW_HISTORY_HOLD
 python3 tools/with_render_lock.py -- Godot --fullscreen --path . --script game/ui/checks/rain_night_native.gd -- /private/tmp/NEW_NATIVE_FLOW
 ```
 
 `components` 使用合成 typed-view；`pad` 用真实 Main 与 GUI 准备料理，再注入 D-pad/A/B；`flow` 从采购走真实三波、次晨升级装备、E02 出发与暂停保存退出。仅在营业中用 12x 模拟，不代表人类游玩时长。
+
+`service_history_hold` 在挂载 Main 前用合法 Session 命令准备营业夹具；挂载后只注入真实鼠标/手柄 InputEvent，跨至少250ms按压覆盖普通计时与实际配送，观察单次切换、实例/焦点/按压、动态送达文字及零 UI 经济意图。额外以12x正常仿真到真实波间核对固定页脚和停时；不发 pressed、不暂停营业或在按压中调用测试侧核心命令。
 
 `native` 只验证呈现整改，复用真实经营流程到次晨装备即保存退出，不进入战斗。历史和投资区使用实际鼠标滚轮 InputEvent 导航，不能直接改滚动值或发 pressed。根窗口原图不后期缩放，逐图记录 Window/DisplayServer mode、尺寸、screen DPI/scale、stretch 与 PNG/UI 坐标映射、真实窗口焦点与焦点控件；focus signals 单独留在同一报告。等待 frame_post_draw 超过5秒即报告失败退出。用 `--windowed --resolution 844x390` 启动并在输出目录后附 `--small` 检查小窗口。headless 调用仅为无图的布局预检，不充当原生证据。原生运行必须先获负责人时段分配，再用全程共享锁串行执行。
 
