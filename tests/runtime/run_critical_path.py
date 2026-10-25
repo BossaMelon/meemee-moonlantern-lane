@@ -76,6 +76,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=["prototype", "quality-slice"], default="prototype")
     parser.add_argument("--legacy-evidence", action="append", default=[], metavar="MODE=PATH", help="Completed P03 evidence containing the selected mode's real archived save pair")
     parser.add_argument("--headless-diagnostic", action="store_true", help="Quality suite only: real input/restore diagnostic with no runtime, screenshot or Q06 pass")
+    parser.add_argument("--seed-evidence", type=Path, help="Narrow only: native P06 evidence containing this mode's successful real spore-warning save")
     parser.add_argument("--stage", choices=sorted({x[0] for x in STAGES + quality_runtime.STAGES} | set(AUXILIARY_STAGES) | set(quality_runtime.AUXILIARY_STAGES)), help="Targeted continuation or fresh quality focus experiment")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
     window_mode = parser.add_mutually_exclusive_group()
@@ -93,6 +94,10 @@ def main() -> int:
         parser.error("headless diagnostic requires quality-slice and cannot claim fullscreen")
     if quality and args.stage == "focus" and (args.headless_diagnostic or args.fullscreen):
         parser.error("focus experiment requires a real windowed display")
+    if bool(args.seed_evidence) != bool(quality and args.stage == "narrow"):
+        parser.error("--seed-evidence is required only for the narrow checkpoint replay")
+    if quality and args.stage == "narrow":
+        restore_stages.add("narrow")
     legacy = {}
     for item in args.legacy_evidence:
         mode, separator, path = item.partition("=")
@@ -150,6 +155,8 @@ def main() -> int:
                 if args.stage is None or args.stage in auxiliary:
                     manifest = quality_runtime.prepare(root, godot, folder, legacy[mode], mode,
                                                        evidence["candidate_commit"], evidence["candidate_tree"])
+                    if args.seed_evidence:
+                        quality_runtime.seed_checkpoint(manifest, args.seed_evidence.resolve(strict=True), mode, folder)
                 else:
                     manifest = json.loads((folder / "runtime-isolation.json").read_text())
                 changed = quality_runtime.validate_manifest(manifest, evidence["candidate_commit"], evidence["candidate_tree"])
@@ -177,7 +184,7 @@ def main() -> int:
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
-            script = "tests/runtime/focus_boundary.gd" if quality and stage == "focus" else "tests/runtime/rain_night_path.gd" if quality else "tests/runtime/critical_path.gd"
+            script = "tests/runtime/" + {"focus":"focus_boundary.gd","history":"history_boundary.gd","narrow":"narrow_boundary.gd"}.get(stage,"rain_night_path.gd") if quality else "tests/runtime/critical_path.gd"
             command = [str(run_root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
                        "--script", script, "--", "--config", str(config)]
             if args.headless_diagnostic:

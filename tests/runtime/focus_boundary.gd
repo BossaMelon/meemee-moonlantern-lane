@@ -14,6 +14,11 @@ func sample_boundary(label: String) -> Dictionary:
 	var sample=observe_input_state()
 	sample.boundary=label
 	sample.application_notifications=witness.events.duplicate(true)
+	var expedition: Dictionary=ui.game.view().expedition
+	sample.expedition_status=expedition.status
+	sample.player_hp=expedition.player.hp
+	sample.player_position=[expedition.player.x,expedition.player.y]
+	sample.tick=expedition.tick
 	focus_samples.append(sample)
 	write_report()
 	return sample
@@ -55,6 +60,8 @@ func run():
 	if not failures.is_empty(): return
 	var returned=sample_boundary("native_window_returned_without_input")
 	await screenshot(mode+"-focus-returned")
+	for observed in [before,lost,returned]:
+		expect(observed.phase=="expedition" and observed.expedition_status=="active" and observed.player_hp>0 and not observed.paused,"focus boundary stays alive in active combat without automatic pause or return")
 	expect(lost.input_sequence==before.input_sequence and returned.input_sequence==before.input_sequence,"no injected input during loss and return")
 	expect(json_equal(lost.driver_cache,before.driver_cache) and json_equal(returned.driver_cache,before.driver_cache),"driver held caches remain unchanged through native focus boundary")
 	expect(json_equal(lost.product_device_input,ZERO_INPUT) and json_equal(lost.authoritative_input,ZERO_INPUT),"product clears device and authoritative held input after actual native focus loss")

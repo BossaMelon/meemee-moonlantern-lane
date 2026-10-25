@@ -15,12 +15,12 @@ import uuid
 from pathlib import Path
 
 from check_source_launch import git_tree
-from quality_support import file_states, isolation_changes, prepare_isolation
+from quality_support import file_states, isolation_changes, prepare_isolation, snapshot_differences
 
 STAGES = [("start", "spore-warning"), ("after-spore", "intermission"),
           ("after-intermission", "delivery-in-flight"), ("after-delivery", "upgrade-pending"),
           ("after-upgrade", "next-morning-equipped"), ("after-equipped", "complete")]
-AUXILIARY_STAGES = {"focus": "focus-complete"}
+AUXILIARY_STAGES = {"focus": "focus-complete", "history": "history-complete", "narrow": "narrow-complete"}
 DEFAULT_SAVE = "user://profiles/rain-night-v1/moonlantern.json"
 REQUIRED = ("game/ui/rain_night/panels.gd", "game/core/rain_night_session.gd",
             "tests/expedition/rain_driver.gd", "tests/runtime/rain_night_path.gd",
@@ -131,6 +131,53 @@ def validate_manifest(manifest: dict, commit: str, tree: str) -> list[str]:
     actual_paths = {str(path) for path in Path(manifest["source"]).rglob("*")
                     if path.is_file() and ".godot" not in path.parts}
     return changed + [path for path, value in guards.items() if observed[path] != value] + sorted(actual_paths - set(guards))
+
+
+def seed_checkpoint(manifest: dict, evidence: Path, mode: str, folder: Path) -> None:
+    """Copy one actual, successful spore save unchanged into a fresh owned profile."""
+    source = json.loads(evidence.read_text())
+    if source.get("suite") != "P06 rain-night rendered main-scene path" or not re.fullmatch(r"[0-9a-f]{40}", source.get("candidate_commit", "")):
+        raise ValueError("Seed requires identified native P06 evidence")
+    runs = [r for r in source.get("runs", []) if r.get("mode") == mode and r.get("checkpoint") == "spore-warning"]
+    if len(runs) != 1:
+        raise ValueError("Seed requires exactly one real spore checkpoint")
+    run = runs[0]
+    if run.get("passed") is not True or run.get("exit_code") != 0 or run.get("product_exit_observed") is not True or run.get("isolation_changes") or run.get("engine_errors") or run.get("quality_errors"):
+        raise ValueError("Seed checkpoint did not pass actual save/exit/guards")
+    artifacts = run.get("product_save_artifacts", [])
+    if len(artifacts) != 2:
+        raise ValueError("Seed requires archived primary and backup")
+    saved = {}
+    guarded = [evidence, Path(run["stage_report"])]
+    for artifact in artifacts:
+        path = Path(artifact["path"])
+        suffix = ".bak" if path.name.endswith(".json.bak") else "" if path.name.endswith(".json") else None
+        if not path.is_absolute() or suffix is None or suffix in saved or hashlib.sha256(path.read_bytes()).hexdigest() != artifact["sha256"]:
+            raise ValueError("Seed archive path, role or hash is invalid")
+        saved[suffix] = path
+        guarded.append(path)
+    if hashlib.sha256(saved[""].read_bytes()).hexdigest() != run.get("saved_sha256"):
+        raise ValueError("Seed primary differs from the actual exit save")
+    origin = Path(run["stage_report"]).parent
+    expected = origin / "spore-warning-expected.json"
+    context = origin / "spore-warning-context.json"
+    snapshot = json.loads(saved[""].read_text())
+    if snapshot.get("version") != 3 or snapshot.get("profile_id") != "rain-night-v1" or snapshot_differences(snapshot, json.loads(expected.read_text())):
+        raise ValueError("Seed is not the exact recorded rain-night snapshot")
+    if json.loads(context.read_text()).get("producer_process_id") != run.get("process_id"):
+        raise ValueError("Seed producer context does not match actual process")
+    guarded += [expected, context]
+    target = Path(manifest["probe"]["save_path"])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    for suffix, path in saved.items():
+        with Path(str(target) + suffix).open("xb") as stream:
+            stream.write(path.read_bytes())
+    for path in [expected, context]:
+        with (folder / path.name).open("xb") as stream:
+            stream.write(path.read_bytes())
+    manifest["guarded_files"].update(file_states(guarded))
+    manifest["seed"] = {"evidence": str(evidence), "candidate_commit": source["candidate_commit"], "run": run, "checkpoint": "spore-warning", "unchanged_archive_copy": True}
+    write_json(folder / "runtime-isolation.json", manifest)
 
 
 def result_errors(result: dict, manifest: dict, expected_sources: dict) -> list[str]:

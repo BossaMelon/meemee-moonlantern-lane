@@ -256,27 +256,34 @@ func scroll_gesture_origin(clip: Rect2) -> Vector2:
 		if not blocked: return point
 	return clip.get_center()
 
+func observe_scroll(_button: Button, _moment: String, _point: Vector2=Vector2.ZERO):
+	pass # Optional read-only diagnostics; input/scroll behavior is unchanged.
+
 func scroll_to(button: Button):
 	if not ui.scroll.is_ancestor_of(button): return
 	for _i in range(50):
 		var clip=ui.scroll.get_global_rect()
 		var rect=button.get_global_rect()
+		observe_scroll(button,"iteration")
 		if clip.encloses(rect): return
 		if _i in [0,1,49]: trace.append({"scroll_target":str(button.get_meta("action_id",button.name)),"iteration":_i,"clip":str(clip),"target_rect":str(rect),"scroll_vertical":ui.scroll.scroll_vertical})
 		var direction=1 if rect.get_center().y>clip.get_center().y else -1
 		if mode=="touch":
 			var at=scroll_gesture_origin(clip)
+			observe_scroll(button,"touch_start",at)
 			var touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at; touch.pressed=true; emit_gui_pointer(touch)
 			for j in range(1,7):
 				var drag=InputEventScreenDrag.new()
 				drag.index=0; drag.position=at-Vector2(0,direction*j*20); drag.relative=Vector2(0,-direction*20)
 				emit_gui_pointer(drag); await frames(1)
+				observe_scroll(button,"touch_drag",drag.position)
 			# Hold before lifting to end the gesture without a kinetic fling.
 			# Otherwise the button can move between its measured rect and tap.
 			await create_timer(0.25,true,false,true).timeout
 			touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_gui_pointer(touch)
+			observe_scroll(button,"touch_release",touch.position)
 		else:
 			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_gui_pointer(motion)
 			var wheel=InputEventMouseButton.new()

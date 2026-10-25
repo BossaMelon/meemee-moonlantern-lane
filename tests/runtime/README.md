@@ -102,3 +102,7 @@ P05 `571b7d4` 的正式可读文案协议已接入：订单、预留份号及料
 失焦和恢复期间不发送输入，不清测试缓存、不补按键、不调用 `Control.grab_focus` 或发通知。只有证实产品自动清输入后，才释放物理输入并发送新按下，随后通过真实暂停/保存/保存退出结束。无真实焦点转换、残留保持输入或无原生绘制均失败；headless/fullscreen 不接受此专项。此新增脚本不改写旧完整路线报告的候选 SHA。
 
 API 合约：[Window.mode](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-property-mode)、[DisplayServer.window_move_to_foreground](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html#class-displayserver-method-window-move-to-foreground)。
+
+修复候选的定向阶段：`--stage history` 从实际默认新游戏购买5份飞饼原料，经真实料理/菜单/开门输入建立营业；三种输入分别在普通tick和真实配送边界按住小结300ms，记录控件实例、焦点、位置、pressed状态、toggle次数、营业计时/销售变化及零经济意图。`--stage narrow --size 844 390 --seed-evidence ABS_NATIVE_EVIDENCE` 仅从所选模式成功的真实孢子预警主备档复制到新隔离目录，再按原窄屏战斗/备餐路径继续。源报告、主备档hash、完整expected快照和producer PID均先验证并加入guards；不构造或改写游戏状态。
+
+窄屏脚本在原滚动算法的只读观测钩子中记录触摸起止/drag、scrollbar value/max/page、目标与clip、节点实例、焦点和指针下阻挡控件；没有赋值scroll_vertical、替换鼠标滚轮或放宽可见/等待条件。F04专项同时要求整个失焦边界仍存活、phase=expedition、status=active、未自动暂停，防止死亡/返程清输入被误判修复。

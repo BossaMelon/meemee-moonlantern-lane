@@ -1,5 +1,7 @@
 """Supervisor boundary tests; none of these synthetic fixtures are game evidence."""
 from pathlib import Path
+import hashlib
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -77,6 +79,44 @@ class DefaultProfileBoundaryTests(unittest.TestCase):
             runtime.prepare(self.root, '/not/an/engine', self.root/'out', self.root/'old.json', 'mouse', 'a'*40, 'b'*40)
         launch.assert_not_called()
         self.assertFalse((self.root/'out').exists())
+
+    def test_real_checkpoint_copy_requires_exact_archive_snapshot_and_producer(self):
+        origin = self.root/'original'; origin.mkdir()
+        expected = origin/'spore-warning-expected.json'
+        context = origin/'spore-warning-context.json'
+        stage = origin/'stage-report.json'; stage.write_text('{}')
+        snapshot = {'version': 3, 'profile_id': 'rain-night-v1', 'requests': {'real-id': {'ok': True}}}
+        expected.write_text(json.dumps(snapshot))
+        context.write_text(json.dumps({'producer_process_id': 789}))
+        artifacts = []
+        for suffix in ('', '.bak'):
+            path = origin/('actual.json'+suffix); path.write_bytes(expected.read_bytes())
+            artifacts.append({'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+        run = {'mode': 'touch', 'checkpoint': 'spore-warning', 'passed': True, 'exit_code': 0,
+               'product_exit_observed': True, 'process_id': 789, 'stage_report': str(stage),
+               'saved_sha256': artifacts[0]['sha256'], 'product_save_artifacts': artifacts}
+        evidence = origin/'evidence.json'
+        evidence.write_text(json.dumps({'suite': 'P06 rain-night rendered main-scene path',
+                                       'candidate_commit': 'a'*40, 'runs': [run]}))
+        out = self.root/'new'; out.mkdir()
+        manifest = {'probe': {'save_path': str(out/'profile/save.json')}, 'guarded_files': {}}
+        expected.write_text(json.dumps(snapshot | {'requests': {}}))
+        with self.assertRaisesRegex(ValueError, 'exact recorded'):
+            runtime.seed_checkpoint(manifest, evidence, 'touch', out)
+        self.assertFalse((out/'profile').exists())
+        expected.write_text(json.dumps(snapshot))
+        context.write_text(json.dumps({'producer_process_id': 888}))
+        with self.assertRaisesRegex(ValueError, 'producer'):
+            runtime.seed_checkpoint(manifest, evidence, 'touch', out)
+        context.write_text(json.dumps({'producer_process_id': 789}))
+        runtime.seed_checkpoint(manifest, evidence, 'touch', out)
+        self.assertEqual((out/'profile/save.json').read_bytes(), expected.read_bytes())
+        self.assertEqual((out/'profile/save.json.bak').read_bytes(), expected.read_bytes())
+        self.assertEqual((out/context.name).read_bytes(), context.read_bytes())
+        self.assertEqual(manifest['seed']['candidate_commit'], 'a'*40)
+        self.assertIn(str(evidence), manifest['guarded_files'])
+        with self.assertRaises(FileExistsError):
+            runtime.seed_checkpoint(manifest, evidence, 'touch', out)
 
 
 if __name__ == '__main__':
