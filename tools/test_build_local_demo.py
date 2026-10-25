@@ -286,6 +286,26 @@ class PackagingProtocolTests(FixtureCase):
         self.assertFalse(demo.same_snapshot([1, 2], [2, 1]))
         self.assertFalse(demo.same_snapshot({'requests': {'id': 1}}, {'requests': {}}))
 
+    def test_saved_json_numbers_accept_godot_integral_float_version(self):
+        binary = self.engine / 'Contents/MacOS/Godot'
+        # Godot JSON.parse_string parses saved integer tokens as floats; a
+        # report then serializes saved_state.version as 3.0, unlike snapshot 3.
+        binary.write_text(binary.read_text().replace('saved_state=json.loads(save.read_text())',
+                                                    'saved_state=json.loads(save.read_text(),parse_int=float)'))
+        result = self.build()
+        self.assertTrue(result['verification']['headless_main_default_save_restore_verified'])
+        self.assertIs(type(result['probe_reports']['save']['saved_state']['version']), float)
+
+    def test_version_guard_still_rejects_boolean_string_fraction_null_and_nonfinite(self):
+        result = self.build(); original = result['probe_reports']['save']
+        for version in (True, False, '3', 3.5, None, float('nan'), float('inf'), -float('inf'), 4):
+            report = json.loads(json.dumps(original))
+            report['snapshot']['version'] = version; report['saved_state']['version'] = version
+            with self.subTest(version=version), self.assertRaises(demo.BuildError):
+                demo.validate_probe(report, result['executions'][0], 'save', result['profiles']['verify'],
+                                    original['build_id'], Path(original['executable']), original['main_scene'],
+                                    result['source_files_sha256'])
+
 
 class ReviewEdgeRegressions(FixtureCase):
     def tamper_configuration(self, stage, kind="content"):
