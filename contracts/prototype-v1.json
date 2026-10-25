@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "milestone": "three-day-prototype",
+  "acceptance": [
+    {
+      "id": "P01",
+      "stage": "prototype",
+      "mode": "runtime",
+      "required": true,
+      "claim": "Mac 本地构建可由玩家直接打开，核心玩法离线可用。",
+      "evidence_kinds": ["runtime_log", "screenshot", "artifact_manifest"],
+      "pass_conditions": [
+        "在记录了 macOS 与 Godot 实际版本的环境中启动实际候选，出现可操作的第一日界面。",
+        "从启动到三日结算不要求编辑器手动配置、外部账号、网络服务或运行时大模型。",
+        "交付入口、启动说明和候选构建路径可追溯；只成功导入或构建不能满足本项。"
+      ]
+    },
+    {
+      "id": "P02",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "同一存档能连续完成三日经营闭环。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "依次完成第一至第三日的淘货、鉴定或加工、陈列、成交、结算，并从前两日进入次日。",
+        "跨日保留现金、库存、升级和已知信息；第三日提供明确的结束或保存入口。",
+        "按正常玩家规则完成，不使用测试专用加钱、跳阶段、修改库存或重新开档。"
+      ]
+    },
+    {
+      "id": "P03",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "每笔经济变更都有来源，现金与库存可复算。",
+      "evidence_kinds": ["automated_case_report", "ledger_trace"],
+      "pass_conditions": [
+        "初始现金加全部已提交收入减全部已提交支出等于当前现金，采购成本与售出毛利分开计算。",
+        "每种物品的初始数量加购入、奖励与加工产出，减售出、回收与加工消耗，等于库存、陈列及装配中的总量。",
+        "库存、现金不为负；陈列或装配不能复制同一件物品，拆卸按规则还原。",
+        "需求标签、顾客预算、定价取整和活动加成上限的边界由实际断言覆盖。"
+      ]
+    },
+    {
+      "id": "P04",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "无效或无法完成的操作被原子拒绝。",
+      "evidence_kinds": ["automated_case_report", "state_snapshot"],
+      "pass_conditions": [
+        "资金不足、材料不足、未知 ID、非法数量、错误阶段和超容量操作返回明确失败。",
+        "失败操作前后全部经济状态和随机状态保持相同，不部分扣款、吞货或消耗随机抽取。",
+        "普通成交与特殊需求不能绕过预算、必需标签或可出售库存限制。"
+      ]
+    },
+    {
+      "id": "P05",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "重复输入、结算和恢复不会重复提交收益。",
+      "evidence_kinds": ["automated_case_report", "ledger_trace"],
+      "pass_conditions": [
+        "同一成交、特殊订单、日结或奖励被重复提交时，至多改变一次现金与库存。",
+        "结算后保存再恢复，不能重新领取当日利润、奖励或免费恢复收益。",
+        "重复进入次日不能跳过一天或重复刷新供货与每日次数。"
+      ]
+    },
+    {
+      "id": "P06",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "零现金、空库存时仍有明确且有限的恢复路径。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "从零现金空库存状态，仅用玩家可见的零采购成本恢复机制，可重新取得基础经营资金或商品并完成营业。",
+        "恢复机制有明确每日上限，重复调用或读档不能无限刷取；基础货源不因随机性永久缺失。",
+        "恢复不要求借贷、重置存档、外部网络或稀有物品；模拟报告记录恢复次数。"
+      ]
+    },
+    {
+      "id": "P07",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "完整存档能够在关键阶段精确往返。",
+      "evidence_kinds": ["automated_case_report", "state_snapshot", "save_fixture"],
+      "pass_conditions": [
+        "至少在淘货后、营业中、特殊需求待处理及结算后分别保存并恢复。",
+        "恢复保留版本、日期、阶段、现金、库存、陈列、装配、升级、已知配方、订单游标、每日次数、已提交交易及随机状态。",
+        "恢复后的继续操作与未中断分支得到相同经济结果；营业中剩余顾客与阶段时钟不被重置获利。"
+      ]
+    },
+    {
+      "id": "P08",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "随机变化可复现，存档恢复不能重抽有利结果。",
+      "evidence_kinds": ["automated_case_report", "action_trace", "simulation_report"],
+      "pass_conditions": [
+        "固定种子和相同合法操作序列产生相同供货、需求与结算结果。",
+        "中途保存恢复后继续，与未中断序列一致；重复读取同一档不会重新抽供货或特殊属性。",
+        "至少五个固定种子运行同一组策略，记录失败原因，不以单个幸运种子代表稳定性。"
+      ]
+    },
+    {
+      "id": "P09",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "损坏或不支持的存档不会静默毁掉有效进度。",
+      "evidence_kinds": ["automated_case_report", "save_fixture", "state_snapshot"],
+      "pass_conditions": [
+        "主存档截断、非法 JSON 或非法状态时，保留至少一个已知有效备份并提供明确恢复结果。",
+        "无有效备份或版本不支持时返回清楚错误，不静默新开档、覆盖坏档及备份或部分装载非法状态。",
+        "恢复成功后的经济状态等于对应有效快照，并通过守恒与防重复提交检查。"
+      ]
+    },
+    {
+      "id": "P10",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "文具与家居两条路线都有效，且经营行为不同。",
+      "evidence_kinds": ["automated_case_report", "simulation_report", "action_trace"],
+      "pass_conditions": [
+        "两路线各自在相同五个种子下完成三日，现金不为负，累计实现毛利为正，常规策略不依赖应急恢复。",
+        "轨迹在进货组合以及加工、自用、陈列或升级中的至少一项决策上不同；不能只更换路线名称或同一商品的售价。",
+        "两路线均出现可兑现的下一日投资；报告期末现金、库存、升级日、成交及未成交原因与恢复次数。",
+        "另跑保守周转、自用升级和雨天备货三种策略；其得分不被解释为人类趣味或全局最优证明。"
+      ]
+    },
+    {
+      "id": "P11",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "同一奇物存在可理解的留用或出售机会成本。",
+      "evidence_kinds": ["automated_case_report", "action_trace", "state_snapshot"],
+      "pass_conditions": [
+        "从同一可获得奇物的快照分叉，出售分支取得明确现金并失去该件自用能力；留用分支占用物品或槽位并获得明确新能力。",
+        "两个分支均能完成三日，不用随机再次掉落该奇物才能继续主流程。",
+        "至少一次留用能力确实改变可执行配方、顾客匹配或陈列规则，不能仅有文案或无条件加钱。"
+      ]
+    },
+    {
+      "id": "P12",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "第三日需求变化提前可知，备货能兑现判断。",
+      "evidence_kinds": ["automated_case_report", "action_trace", "simulation_report"],
+      "pass_conditions": [
+        "第三日雨天需求最迟在第二日采购决策前可读，提示所需效果以及至少一条稳定材料或商品来源。",
+        "提前备货分支可用匹配商品完成雨天需求，成交记录说明匹配与加成原因。",
+        "对照未备货分支不能凭空取得相同商品或奖励；至少有两种符合必需效果的解法，不用唯一随机供货锁进度。"
+      ]
+    },
+    {
+      "id": "P13",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "升级改变选择，已知配方默认支持批量。",
+      "evidence_kinds": ["automated_case_report", "action_trace", "ledger_trace"],
+      "pass_conditions": [
+        "至少一次升级改变次日可用货源、加工配方或陈列选择，并在轨迹中实际使用。",
+        "未购买设备的分支也可一次批量制作已知且可用的基础配方；设备解锁新能力或额外配方。",
+        "批量输入输出与逐件规则一致，材料不足时原子拒绝，零或负数量不能获利。",
+        "升级或自动处理减少已掌握流程的重复输入；不以单纯百分比涨价作为唯一升级差异。"
+      ]
+    },
+    {
+      "id": "P14",
+      "stage": "prototype",
+      "mode": "runtime",
+      "required": true,
+      "claim": "实际界面支持暂停保存与三种输入的完整关键路径。",
+      "evidence_kinds": ["runtime_log", "input_trace", "screenshot", "artifact_manifest"],
+      "pass_conditions": [
+        "营业暂停或特殊需求对话期间，实际等待后现金、库存、顾客游标和营业时钟不前进；恢复后继续。",
+        "实际退出并重新启动候选，可从明确的有效存档继续，不重复结算。",
+        "鼠标键盘、合成触屏事件、合成手柄事件分别能完成采购、加工、陈列、营业、特殊需求、结算及保存；所有必需操作都有点选或焦点确认路径。",
+        "检查桌面与窄横屏截图：中文可读、焦点可见、触控目标可点击、无关键遮挡；记录实际测试尺寸。",
+        "合成事件必须标记为模拟输入，不能宣称已通过 iOS 真机或实体手柄验证。"
+      ]
+    },
+    {
+      "id": "W01",
+      "stage": "platform",
+      "mode": "runtime",
+      "required": false,
+      "claim": "后续 Windows 本地构建实际运行。",
+      "evidence_kinds": ["runtime_log", "artifact_manifest", "screenshot"],
+      "pass_conditions": [
+        "记录 Windows 版本、构建与实际硬件，在 Windows 运行完整三日及退出恢复。",
+        "Mac 测试或成功导出 .exe 不足以满足本项；本项未完成不妨碍 Mac 原型阶段，但阻止 Windows 已验收声明。"
+      ]
+    },
+    {
+      "id": "I01",
+      "stage": "platform",
+      "mode": "runtime",
+      "required": false,
+      "claim": "后续 iOS 原生构建在目标真机运行。",
+      "evidence_kinds": ["runtime_log", "artifact_manifest", "screenshot", "device_test_record"],
+      "pass_conditions": [
+        "记录 Xcode、iOS、设备、签名与构建版本，在真机触屏完成三日、切后台及退出恢复，检查安全区与横屏布局。",
+        "Mac 合成触屏、模拟器或导出 Xcode 工程不能代替真机验证；签名及发布需遵守当前授权边界。"
+      ]
+    },
+    {
+      "id": "C01",
+      "stage": "platform",
+      "mode": "runtime",
+      "required": false,
+      "claim": "后续实体手柄在目标平台可完成关键路径。",
+      "evidence_kinds": ["runtime_log", "input_trace", "device_test_record"],
+      "pass_conditions": [
+        "记录手柄型号、连接方式和目标平台，用实体手柄完成所有必需菜单、经营和保存操作，并检查断连与重连后的焦点恢复。",
+        "合成手柄事件只能证明输入路径，不能证明硬件兼容性；Windows 与 iOS 分别记录。"
+      ]
+    },
+    {
+      "id": "H01",
+      "stage": "human",
+      "mode": "human",
+      "required": false,
+      "claim": "真人试玩提供是否想再营业一天的定性反馈。",
+      "evidence_kinds": ["human_playtest_record"],
+      "pass_conditions": [
+        "第三日提供清楚的结束与保存选择，记录玩家是否主动继续及其具体理由、困惑或重复劳动反馈。",
+        "没有真人试玩时状态保持待验证；自动策略、截图、构建成功或礼貌称赞不能证明游戏好玩。",
+        "先根据反馈修正经营循环，再决定扩至七日及批量统一美术。"
+      ]
+    }
+  ]
+}
