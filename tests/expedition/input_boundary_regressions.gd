@@ -125,11 +125,14 @@ func run():
 	axis(JOY_AXIS_RIGHT_X,0.6); axis(JOY_AXIS_RIGHT_Y,-0.8)
 	pad(JOY_BUTTON_A,true)
 	await create_timer(0.25).timeout
+	var held: Dictionary = g.snapshot().expedition.input
+	expect(held.cast and held.move_x > 0.0 and held.move_y < 0.0 and held.aim_y < 0.0,"playing raw sticks and held A still reach actual movement/aim/cast")
 	axis(JOY_AXIS_LEFT_X,0.0); axis(JOY_AXIS_LEFT_Y,0.0)
 	axis(JOY_AXIS_RIGHT_X,0.0); axis(JOY_AXIS_RIGHT_Y,0.0)
 	pad(JOY_BUTTON_A,false)
 	await process_frame; await process_frame
 	expect(g.view().phase == "expedition" and not g.view().paused and tools == tool_before,"playing stick/A release never activates a toolbar or retreats")
+	expect(g.snapshot().expedition.input.move_x == 0 and not g.snapshot().expedition.input.cast,"playing stick/A release reaches actual combat state")
 	write_json("pad-after-release",g.snapshot())
 	# A stale toolbar focus must also be harmless while playing.
 	if g.view().phase == "expedition":
@@ -195,7 +198,7 @@ func cancelled_exit():
 	await process_frame; await process_frame
 	expect(g.snapshot().expedition.input.move_x > 0,"host cancellation restores actual combat input")
 	key(KEY_D,false)
-	await process_frame
+	await process_frame; await process_frame
 	expect(g.snapshot().expedition.input.move_x == 0,"release after cancelled exit still clears real input")
 
 func finish():
