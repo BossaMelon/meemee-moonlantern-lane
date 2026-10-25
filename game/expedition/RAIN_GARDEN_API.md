@@ -22,3 +22,5 @@
 检查入口：`Godot --headless --path . --script tests/expedition/run_geometry.gd`，覆盖薄圆/薄rect、高速/弹体/玩家/敌人、圆角反例、水叠加、出生点、两路与深处互通及每段footprint无穿透。
 
 模型检查入口：`Godot --headless --path . --script tests/expedition/run_rain_model.gd`。旧模型回归仍为 `tests/expedition/run_model.gd`。组件夹具与经公开输入自然到达的场景在测试中明确区分，不将组件改状态冒充真实玩家轨迹。
+
+`player.skill_range` 保存最近一次实际风咒的120/160逻辑半径，供残余skill_flash绘制；读档不从面板临时事件缓冲猜范围。`tests/expedition/rain_model_cases.gd` 可由核心runner调用 `Cases.new().run()`，返回真实 `{checks,failures}`；CLI wrapper仍为run_rain_model.gd。该组件结果本身不代替任何完整Session case。

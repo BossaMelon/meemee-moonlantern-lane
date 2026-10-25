@@ -40,7 +40,7 @@ static func create(day: int, run_id: String, seed_value: int, weapon_id: String,
 		"rng_state":str(rng.state),"weapon_id":weapon_id,"skills":skills.duplicate(),"input":_input(),"next_projectile":1,"next_cast":1,
 		"entrance_armed":false,"return_reason":"","player":{"x":80.0,"y":270.0,"hp":3,"shield":shield,"aim_x":1.0,"aim_y":0.0,
 		"cast_cooldown_ms":0,"dodge_cooldown_ms":0,"skill_cooldown_ms":0,"dodge_remaining_ms":0,"dodge_x":1.0,"dodge_y":0.0,
-		"hurt_ms":0,"skill_flash_ms":0,"last_contact":"","dodge_id":""},"enemies":[],"projectiles":[],"drops":[]}
+		"hurt_ms":0,"skill_flash_ms":0,"skill_range":120,"last_contact":"","dodge_id":""},"enemies":[],"projectiles":[],"drops":[]}
 	for spawn in Map.SPAWNS:
 		var enemy = _enemy(spawn.id,spawn.kind,Vector2(spawn.x,spawn.y),4 if spawn.kind == "moonheart" else 2,0 if spawn.id == "entry-rush" else 800)
 		enemy.encounter_id = spawn.encounter_id
@@ -242,6 +242,7 @@ static func _gust(s: Dictionary, result: Dictionary):
 	s.player.skill_cooldown_ms = 3000
 	s.player.skill_flash_ms = 250
 	var radius = 160.0 if _consume_meal(s,"clear_breath",result) else 120.0
+	s.player.skill_range = radius
 	var affected: Array = []
 	for enemy in s.enemies:
 		if enemy.hp <= 0 or _pos(enemy).distance_to(_pos(s.player)) > radius: continue
@@ -490,6 +491,7 @@ static func validate(value: Variant) -> String:
 	for key in ["cast_cooldown_ms","dodge_cooldown_ms","skill_cooldown_ms","hurt_ms","skill_flash_ms"]:
 		if not _integer(p[key],0,3000): return "玩家冷却非法"
 	if not _integer(p.dodge_remaining_ms,0,300): return "闪避计时非法"
+	if not (_integer(p.skill_range,120,120) or _integer(p.skill_range,160,160)): return "风咒范围非法"
 	if not s.input.has_all(_input().keys()): return "保持输入不完整"
 	var checked = s.duplicate(true)
 	if not set_input(checked,s.input).ok: return "保持输入非法"
