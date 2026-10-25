@@ -38,9 +38,14 @@ for kind in ("sprites","backgrounds"):
         require(all(p[:3] in asset_allowed for p in pixels if p[3]),f"Palette drift {name}")
         require(all(p==(0,0,0,0) for p in pixels if not p[3]),f"Hidden RGB fringe {name}")
         require(bool(im.getbbox()),f"Empty asset {name}")
+        if rec.get("asset_set")=="rain_scene" and kind=="backgrounds":
+            x,y,w,h=rec["logical_rect"]
+            require([w,h]==rec["size"] and x>=0 and y>=0 and x+w<=960 and y+h<=540,f"Invalid scene registration {name}")
+            require(im.resize((w//2,h//2),Image.Resampling.NEAREST).resize((w,h),Image.Resampling.NEAREST).tobytes()==im.tobytes(),f"Broken 2px grid {name}")
+            require(im.getchannel("A").getextrema()==((255,255) if name=="rain_canal_shallow" else (0,255)),f"Scene layer opacity {name}")
         if "export_palette_subset" in rec:
             subset={tuple(bytes.fromhex(c[1:])) for c in rec["export_palette_subset"]}
-            require(subset <= allowed,f"Palette subset outside shared palette {name}")
+            require(subset <= asset_allowed,f"Palette subset outside declared palette {name}")
             require(all(p[:3] in subset for p in pixels if p[3]),f"Palette subset drift {name}")
         if kind=="sprites":
             require(im.getchannel("A").getextrema()[0]==0,f"Opaque background {name}")
