@@ -9,6 +9,9 @@ const DARK = Color("252c47")
 const PANEL = Color("343953")
 const PHASES = {"shopping":"淘货", "preparation":"整备", "trading":"营业", "closing":"收工", "settled":"日结"}
 const EFFECTS = {"writing":"书写", "home":"家居", "light":"照明", "waterproof":"防水", "material":"材料", "device":"装配奇物"}
+@export_file("*.png") var interior_art_path = ""
+@export_file("*.png") var lane_art_path = ""
+
 const TIER_NAMES = {"friendly":"亲民 90%", "standard":"标准 100%", "premium":"精品 115%"}
 var game = Session.new(20261025)
 var view: Dictionary = {}
@@ -27,6 +30,7 @@ var toolbar: HFlowContainer
 var margin: MarginContainer
 var status: Label
 var phase_hint: Label
+var order_caption: Label
 var content: BoxContainer
 var shop_column: VBoxContainer
 var illustration: Control
@@ -44,6 +48,7 @@ var built = false
 var refresh_serial = 0
 var save_path = "user://moonlantern.json"
 var clock_accumulator = 0.0
+var body_context = ""
 
 func _ready():
 	get_tree().auto_accept_quit = false
@@ -179,6 +184,8 @@ func _build_shell():
 	art_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shop_column.add_child(art_panel)
 	illustration = ShopCanvas.new()
+	illustration.shop_texture_path = interior_art_path
+	illustration.lane_texture_path = lane_art_path
 	art_panel.add_child(illustration)
 	shop_caption = _label("",18,MUTED)
 	shop_column.add_child(shop_caption)
@@ -196,6 +203,9 @@ func _build_shell():
 		var button = _button("tab_"+tab_id,entry[1],_select_tab.bind(tab_id))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tabs.add_child(button)
+	order_caption = _label("",20,GOLD)
+	order_caption.visible = false
+	notebook.add_child(order_caption)
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -244,11 +254,10 @@ func _button(key: String, value: String, callback: Callable, enabled: bool = tru
 	button.name = key.replace(":","_")
 	button.set_meta("action_id",key)
 	button.text = value
-	button.mouse_filter = Control.MOUSE_FILTER_PASS
 	button.custom_minimum_size = Vector2(48,48)
 	button.focus_mode = Control.FOCUS_ALL
 	button.disabled = not enabled
-	button.pressed.connect(callback)
+	button.pressed.connect(callback,CONNECT_DEFERRED)
 	button.focus_entered.connect(_focus_visible.bind(button))
 	action_controls[key] = button
 	return button
@@ -276,6 +285,12 @@ func _refresh():
 	for key in action_controls.keys():
 		if not is_instance_valid(action_controls[key]) or not action_controls[key].is_inside_tree(): action_controls.erase(key)
 	view = game.view()
+	var context = str(view.phase)+":"+tab+":"+str(view.pending.get("id",""))
+	if context != body_context: old_scroll = 0
+	body_context = context
+	order_caption.visible = not view.pending.is_empty()
+	if order_caption.visible:
+		order_caption.text = "%s · 预算 %d 金\n需要「%s」；普通营业已停时，可慢慢选择。" % [view.pending.text,view.pending.budget,_effects(view.pending.required)]
 	status.text = "第 %d / 3 日  ·  %s  ·  金币 %d  ·  剩余顾客 %d%s" % [view.day,PHASES[view.phase],view.cash,view.customers_remaining,"  ·  已暂停" if view.paused else ""]
 	pause_button.text = "继续" if view.paused else "歇一歇"
 	illustration.set_state(view)
@@ -300,6 +315,7 @@ func _refresh():
 	phase_hint.text = "已暂停，可保存后继续。" if view.paused else hints[view.phase]
 	primary.text = {"shopping":"淘货完成，回店整备 →", "preparation":"开门营业 →", "trading":"等待特殊咨询" if not view.pending.is_empty() else "营业中 · 普通客自动结账", "closing":"收好招牌，查看日结 →", "settled":"保存三日回忆" if view.finished else "休息，迎接第 %d 日 →" % (int(view.day)+1)}[view.phase]
 	primary.disabled = view.phase == "trading"
+	primary.visible = view.pending.is_empty()
 	feedback.text = messages.back() if not messages.is_empty() else ""
 	# Pausing freezes all economic input, including buttons shown by a pending order.
 	if view.paused:
@@ -316,7 +332,13 @@ func _restore_focus(focus_id: String, old_scroll: int, serial: int):
 	if action_controls.has(focus_id) and not action_controls[focus_id].disabled:
 		action_controls[focus_id].grab_focus()
 	else:
-		var fallback = "pause" if view.paused else ("special_decline" if not view.pending.is_empty() else "primary")
+		var fallback = "pause" if view.paused else "primary"
+		if not view.paused and not view.pending.is_empty():
+			fallback = "special_decline"
+			for option in view.pending.options:
+				if option.available:
+					fallback = "fulfill_"+str(option.item_id)
+					break
 		if action_controls.has(fallback) and not action_controls[fallback].disabled:
 			action_controls[fallback].grab_focus()
 		elif not ordered_controls.is_empty(): ordered_controls[0].grab_focus()
@@ -472,8 +494,6 @@ func _select_item(id: String):
 func _build_special():
 	var pending = view.pending
 	body.add_child(_label("特别咨询 · 这里可以慢慢想",25,GOLD))
-	body.add_child(_label(pending.text,23))
-	body.add_child(_label("需要「%s」 · 预算 %d 金\n选择期间普通营业与经营时钟暂停。" % [_effects(pending.required),pending.budget],19,MUTED))
 	for option in pending.options:
 		if option.available or _inventory(option.item_id).shelf>0:
 			var card = _card()

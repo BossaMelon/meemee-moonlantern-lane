@@ -23,6 +23,8 @@ func expect(value: bool, message: String):
 	if not value:
 		failures.append(message)
 		push_error(message)
+		write_report()
+		quit(1)
 
 func frames(n: int = 3):
 	for _i in range(n): await process_frame
@@ -69,19 +71,16 @@ func activate(id: String):
 			event.position = pos
 			event.pressed = down
 			Input.parse_input_event(event)
-			await frames(1)
 	else:
 		var motion = InputEventMouseMotion.new()
 		motion.position = pos
 		Input.parse_input_event(motion)
-		await frames(1)
 		for down in [true,false]:
 			var event = InputEventMouseButton.new()
 			event.position = pos
 			event.button_index = MOUSE_BUTTON_LEFT
 			event.pressed = down
 			Input.parse_input_event(event)
-			await frames(1)
 	await frames()
 	var v: Dictionary = ui.game.view()
 	print("INPUT ",mode," ",id," => ",v.day,"/",v.phase," cash=",v.cash)
@@ -98,6 +97,8 @@ func fresh(size: Vector2i):
 		ui.free()
 	root.size = size
 	ui = Main.instantiate()
+	expect(ui.has_method("get_action_control"),"main UI script must load")
+	if not ui.has_method("get_action_control"): return
 	# A separate temporary save for every input route; never touches player saves.
 	ui.save_path = folder+"/"+mode+"-save.json"
 	root.add_child(ui)
@@ -191,12 +192,66 @@ func run_route(route: String, size: Vector2i):
 func run():
 	var routes = OS.get_cmdline_user_args()
 	selected_routes = routes
+	if "consult" in routes:
+		await check_consult_layout()
+		return
+	if "resume" in routes:
+		await resume_saved_route()
+		return
 	if routes.is_empty() or "mouse" in routes: await run_route("mouse",Vector2i(1280,720))
 	if failures.is_empty() and (routes.is_empty() or "touch" in routes): await run_route("touch",Vector2i(960,640))
 	if failures.is_empty() and (routes.is_empty() or "pad" in routes): await run_route("pad",Vector2i(960,640))
+	write_report()
+	print("P02 UI checks: ",checks,"; failures: ",failures.size())
+	quit(0 if failures.is_empty() else 1)
+
+func write_report():
 	var report = {"suite":"P02 UI synthetic input regression","checks":checks,"failures":failures,"trace":trace,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string}
 	var file = FileAccess.open(folder+"/interaction-"+("all" if selected_routes.is_empty() else "-".join(selected_routes))+"-report.json",FileAccess.WRITE)
 	file.store_string(JSON.stringify(report,"  "))
 	file.close()
-	print("P02 UI checks: ",checks,"; failures: ",failures.size())
+
+func resume_saved_route():
+	mode = "mouse"
+	var path = folder+"/mouse-save.json"
+	expect(FileAccess.file_exists(path),"previous engine process left a real save")
+	var expected = JSON.parse_string(FileAccess.get_file_as_string(path))
+	await fresh(Vector2i(1280,720))
+	await activate("load")
+	expect(JSON.parse_string(JSON.stringify(ui.game.snapshot())) == expected,"new engine process restores full persisted state")
+	expect(ui.view.finished,"new engine process restores day-three completion")
+	await screenshot("mouse-restarted")
+	var before: Dictionary = ui.game.snapshot()
+	await activate("primary")
+	expect(ui.game.snapshot() == before,"completed journey save cannot repeat settlement")
+	write_report()
+	await activate("quit")
+	expect(false,"save-and-quit must exit the engine")
+
+func check_consult_layout():
+	mode = "pad"
+	await fresh(Vector2i(960,640))
+	ui.save_path = folder+"/pad-save.json.bak"
+	await activate("load")
+	expect(ui.view.phase == "trading","consult fixture is a real earlier trading save")
+	if ui.view.paused: await activate("pause")
+	var guard = 0
+	while ui.view.pending.is_empty() and guard < 100:
+		await create_timer(0.1).timeout
+		guard += 1
+	expect(not ui.view.pending.is_empty(),"real customer reaches consultation")
+	expect(ui.order_caption.visible and not ui.order_caption.text.is_empty(),"request and budget remain outside scrolling actions")
+	expect(Rect2(Vector2.ZERO,root.size).encloses(ui.order_caption.get_global_rect()),"request caption stays on screen")
+	var frozen: Dictionary = ui.game.snapshot()
+	await create_timer(1.15).timeout
+	expect(ui.game.snapshot() == frozen,"consultation remains frozen")
+	await screenshot("pad-consult-fixed")
+	var served = false
+	for option in ui.view.pending.options:
+		if option.available:
+			await activate("fulfill_"+option.item_id)
+			served = true
+			break
+	expect(served,"matching recommendation remains reachable with D-pad/A")
+	write_report()
 	quit(0 if failures.is_empty() else 1)
