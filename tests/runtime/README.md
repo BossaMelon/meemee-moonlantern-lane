@@ -30,3 +30,5 @@ python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --out
 驱动监督经仓库源码启动器启动 Godot，`GODOT` 只指向已有引擎。`--stage exit-smoke` 与同目录 `--stage restore-smoke` 可定向检查产品退出观察和新进程恢复机制；它们不会代表三日、动作或完整 P14 通过。
 
 动作保存退出控件使用 E01 提交 `9fec5d4` 已发布的 `save_quit_button` / `save_quit_requested`，只读定位后通过当前设备的 InputEvent 激活；P02 信号接线必须已组合到候选，缺入口或保存后未退出均失败。恢复失败时另存完整实际快照及顶层差异字段，保留诊断证据。
+
+Mac 合成触屏路线在实例化场景前临时设置 `Input.emulate_touch_from_mouse=true`，以启用 [Godot 桌面 ScrollContainer 的触摸滚动路径](https://docs.godotengine.org/en/4.7/classes/class_scrollcontainer.html#class-scrollcontainer-signal-scroll-started)。报告记录此配置；不写 project.godot，不模拟实体设备认证，滚动仍由真实 ScreenTouch/ScreenDrag 事件执行。

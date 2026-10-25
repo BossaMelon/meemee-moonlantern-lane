@@ -48,6 +48,9 @@ func emit_input(event: InputEvent, local: bool = false):
 	else: Input.parse_input_event(event)
 
 func fresh(size: Vector2i):
+	# Godot desktop ScrollContainer enables the touchscreen drag path only
+	# with this runtime emulation flag; no project setting is saved.
+	Input.emulate_touch_from_mouse=(mode=="touch")
 	root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
 	root.content_scale_size=Vector2i.ZERO
 	root.size=size
@@ -82,23 +85,29 @@ func scroll_to(button: Button):
 		var clip=ui.scroll.get_global_rect()
 		var rect=button.get_global_rect()
 		if clip.encloses(rect): return
+		if _i in [0,1,49]: trace.append({"scroll_target":str(button.get_meta("action_id",button.name)),"iteration":_i,"clip":str(clip),"target_rect":str(rect),"scroll_vertical":ui.scroll.scroll_vertical})
 		var direction=1 if rect.get_center().y>clip.get_center().y else -1
 		if mode=="touch":
 			var at=clip.get_center()
 			var touch=InputEventScreenTouch.new()
-			touch.index=9; touch.position=at; touch.pressed=true; emit_input(touch,true)
+			touch.index=0; touch.position=at; touch.pressed=true; emit_input(touch)
 			for j in range(1,7):
 				var drag=InputEventScreenDrag.new()
-				drag.index=9; drag.position=at-Vector2(0,direction*j*20); drag.relative=Vector2(0,-direction*20)
-				emit_input(drag,true); await frames(1)
+				drag.index=0; drag.position=at-Vector2(0,direction*j*20); drag.relative=Vector2(0,-direction*20)
+				emit_input(drag); await frames(1)
+			# Hold before lifting to end the gesture without a kinetic fling.
+			# Otherwise the button can move between its measured rect and tap.
+			await create_timer(0.25,true,false,true).timeout
 			touch=InputEventScreenTouch.new()
-			touch.index=9; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_input(touch,true)
+			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_input(touch)
 		else:
+			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_input(motion,true)
 			var wheel=InputEventMouseButton.new()
 			wheel.position=clip.get_center(); wheel.global_position=wheel.position
 			wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN if direction>0 else MOUSE_BUTTON_WHEEL_UP
 			wheel.pressed=true; emit_input(wheel,true)
 		await frames(2)
+	await screenshot(mode+"-scroll-failure-"+str(button.get_meta("action_id",button.name)))
 	expect(false,"real scrolling reaches "+str(button.get_meta("action_id",button.name)))
 
 func activate_control(button: Button, id: String):
@@ -127,8 +136,8 @@ func activate_control(button: Button, id: String):
 		for down in [true,false]:
 			if mode=="touch":
 				var event=InputEventScreenTouch.new()
-				event.index=8; event.position=rect.get_center(); event.pressed=down
-				emit_input(event,true)
+				event.index=0; event.position=rect.get_center(); event.pressed=down
+				emit_input(event)
 			else:
 				var event=InputEventMouseButton.new()
 				event.position=rect.get_center(); event.global_position=event.position
@@ -141,6 +150,7 @@ func activate_control(button: Button, id: String):
 	if economic: expect(action_count>count_before,"real control emits expected economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
+	if id.begins_with("tab_"): expect(ui.tab==id.trim_prefix("tab_"),"tab input actually selects "+id)
 	if id.begins_with("craft_"):
 		var output=id.trim_prefix("craft_")
 		expect(ui.illustration.effects.any(func(effect): return effect.item_id==output and effect.source=="craft"),"actual cooking triggers matching visual effect: "+output)
@@ -416,6 +426,7 @@ func run():
 			expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(control.get_global_rect()),"narrow viewport contains "+id)
 		expect(ui.scroll.size.y>=96,"narrow layout leaves usable scroll height")
 		await activate("tab_gear"); await activate("start_expedition")
+		if not failures.is_empty(): return
 		await screenshot(mode+"-narrow-combat")
 		for control in [ui.battle_panel.pause_button,ui.battle_panel.save_button,ui.battle_panel.return_button]:
 			expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(control.get_global_rect()),"narrow combat button on screen: "+control.text)
@@ -462,6 +473,6 @@ func run():
 
 func write_report():
 	if input_file!=null: input_file.flush()
-	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"restore_sources":restore_sources,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
+	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"restore_sources":restore_sources,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"desktop_touch_emulation":Input.emulate_touch_from_mouse,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
 	var file=FileAccess.open(folder+"/"+attempt+"-report.json",FileAccess.WRITE)
 	if file!=null: file.store_string(JSON.stringify(report,"  ")); file.close()
