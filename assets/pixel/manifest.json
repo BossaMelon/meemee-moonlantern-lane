@@ -2510,6 +2510,462 @@
         14,
         12
       ]
+    },
+    "world_recipe_book": {
+      "file": "sprites/world_recipe_book.png",
+      "size": [
+        64,
+        48
+      ],
+      "atlas": "atlases/world_ui_v2.png",
+      "region": [
+        0,
+        0,
+        64,
+        48
+      ],
+      "pivot": [
+        32,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        7,
+        62,
+        46
+      ],
+      "source": "source/world-ui-v2.png",
+      "source_crop": [
+        50,
+        130,
+        775,
+        615
+      ],
+      "source_opaque_bounds": [
+        77,
+        157,
+        751,
+        590
+      ],
+      "export": "fit",
+      "purpose": "world_ui_v2",
+      "sha256": "0249f1034918f1c4f3c054388c18a49f3619bf8d900b553e0d06826276310580",
+      "art_revision": 2,
+      "usage": "contextual world object"
+    },
+    "world_order_note": {
+      "file": "sprites/world_order_note.png",
+      "size": [
+        32,
+        48
+      ],
+      "atlas": "atlases/world_ui_v2.png",
+      "region": [
+        64,
+        0,
+        32,
+        48
+      ],
+      "pivot": [
+        16,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        13,
+        30,
+        46
+      ],
+      "source": "source/world-ui-v2.png",
+      "source_crop": [
+        785,
+        80,
+        1230,
+        620
+      ],
+      "source_opaque_bounds": [
+        809,
+        112,
+        1194,
+        572
+      ],
+      "export": "fit",
+      "purpose": "world_ui_v2",
+      "sha256": "a26a2176d33523cb792cb0e581e003c5146051e21e13e402f4a0797c8a624e9e",
+      "art_revision": 2,
+      "usage": "contextual world object"
+    },
+    "world_ledger": {
+      "file": "sprites/world_ledger.png",
+      "size": [
+        48,
+        48
+      ],
+      "atlas": "atlases/world_ui_v2.png",
+      "region": [
+        128,
+        0,
+        48,
+        48
+      ],
+      "pivot": [
+        24,
+        46
+      ],
+      "opaque_bounds": [
+        2,
+        6,
+        46,
+        46
+      ],
+      "source": "source/world-ui-v2.png",
+      "source_crop": [
+        45,
+        640,
+        670,
+        1200
+      ],
+      "source_opaque_bounds": [
+        83,
+        663,
+        647,
+        1170
+      ],
+      "export": "fit",
+      "purpose": "world_ui_v2",
+      "sha256": "fa59fa35e81f6e69bdda7bd8155016ee422f60d8205fb49f7957dc8b58271c12",
+      "art_revision": 2,
+      "usage": "contextual world object"
+    },
+    "world_menu_board": {
+      "file": "sprites/world_menu_board.png",
+      "size": [
+        48,
+        64
+      ],
+      "atlas": "atlases/world_ui_v2.png",
+      "region": [
+        192,
+        0,
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        62
+      ],
+      "opaque_bounds": [
+        2,
+        14,
+        46,
+        62
+      ],
+      "source": "source/world-ui-v2.png",
+      "source_crop": [
+        700,
+        630,
+        1240,
+        1210
+      ],
+      "source_opaque_bounds": [
+        721,
+        657,
+        1203,
+        1179
+      ],
+      "export": "fit",
+      "purpose": "world_ui_v2",
+      "sha256": "a96f029e21ab6f9a023b0de7bca57119a78ab63264c20ff87ba0f43f02461a50",
+      "art_revision": 2,
+      "usage": "contextual world object"
+    },
+    "ui_paper_panel": {
+      "file": "sprites/ui_paper_panel.png",
+      "size": [
+        128,
+        64
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        0,
+        0,
+        128,
+        64
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        128,
+        64
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        25,
+        155,
+        570,
+        455
+      ],
+      "source_opaque_bounds": [
+        46,
+        175,
+        556,
+        430
+      ],
+      "export": "stretch",
+      "purpose": "plain_ui_v2",
+      "sha256": "2fcfa17d3814dc80701116585b1c97362f6a42055090f50f3b8f08819fc5e87b",
+      "nine_slice_margins": [
+        6,
+        12,
+        16,
+        6
+      ],
+      "content_margins": [
+        10,
+        14,
+        18,
+        10
+      ],
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
+    },
+    "ui_button_plain": {
+      "file": "sprites/ui_button_plain.png",
+      "size": [
+        96,
+        32
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        128,
+        0,
+        96,
+        32
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        96,
+        32
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        575,
+        265,
+        1035,
+        450
+      ],
+      "source_opaque_bounds": [
+        587,
+        286,
+        1018,
+        430
+      ],
+      "export": "stretch",
+      "purpose": "plain_ui_v2",
+      "sha256": "a99243fc375b19c6b25f8fa9ad84ffe872c9e6054fe22dc8b484849672698eeb",
+      "nine_slice_margins": [
+        10,
+        6,
+        10,
+        6
+      ],
+      "content_margins": [
+        12,
+        8,
+        12,
+        8
+      ],
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
+    },
+    "ui_button_plain_focus": {
+      "file": "sprites/ui_button_plain_focus.png",
+      "size": [
+        96,
+        32
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        256,
+        0,
+        96,
+        32
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        0,
+        0,
+        96,
+        32
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        1045,
+        265,
+        1515,
+        450
+      ],
+      "source_opaque_bounds": [
+        1064,
+        286,
+        1496,
+        430
+      ],
+      "export": "stretch",
+      "purpose": "plain_ui_v2",
+      "sha256": "e64c0072144f5d98c7446a2f570244396dc5acd2178ade57f4f071943e11f342",
+      "nine_slice_margins": [
+        10,
+        6,
+        10,
+        6
+      ],
+      "content_margins": [
+        12,
+        8,
+        12,
+        8
+      ],
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
+    },
+    "ui_coin": {
+      "file": "sprites/ui_coin.png",
+      "size": [
+        20,
+        20
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        384,
+        0,
+        20,
+        20
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        18,
+        18
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        130,
+        550,
+        425,
+        855
+      ],
+      "source_opaque_bounds": [
+        151,
+        582,
+        399,
+        833
+      ],
+      "export": "fit",
+      "purpose": "plain_ui_v2",
+      "sha256": "dd3059a98274e0342ce499d6e480caf0c56ea6a7d03bba56f05e555ef86f2db5",
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
+    },
+    "ui_day": {
+      "file": "sprites/ui_day.png",
+      "size": [
+        20,
+        20
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        0,
+        72,
+        20,
+        20
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        17,
+        18
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        625,
+        550,
+        915,
+        855
+      ],
+      "source_opaque_bounds": [
+        650,
+        571,
+        894,
+        825
+      ],
+      "export": "fit",
+      "purpose": "plain_ui_v2",
+      "sha256": "66c46bcdf32093d0a602fc9ac954373c0fef35c0aec18c3d23dcdb47a61b655d",
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
+    },
+    "ui_pause": {
+      "file": "sprites/ui_pause.png",
+      "size": [
+        20,
+        20
+      ],
+      "atlas": "atlases/plain_ui_v2.png",
+      "region": [
+        128,
+        72,
+        20,
+        20
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "opaque_bounds": [
+        3,
+        2,
+        17,
+        18
+      ],
+      "source": "source/plain-ui-v2.png",
+      "source_crop": [
+        1165,
+        580,
+        1395,
+        850
+      ],
+      "source_opaque_bounds": [
+        1187,
+        605,
+        1368,
+        818
+      ],
+      "export": "fit",
+      "purpose": "plain_ui_v2",
+      "sha256": "8b8ee043fe3c7270befd7ec06798fdd0fd3df5f48dd056c3ccb34342b5e66fe1",
+      "art_revision": 2,
+      "usage": "short paper overlay; render text live"
     }
   },
   "backgrounds": {
@@ -2549,9 +3005,49 @@
         480,
         270
       ],
-      "source": "source/mushroom-garden.png",
-      "sha256": "7cf3286c4e5cd337f9caeefc242e241961368f8e8319394e3dd96a228a133391",
-      "purpose": "complete static environment; no collision implied"
+      "source": "source/mushroom-garden-v3.png",
+      "sha256": "4db645fe430ac54cf9e7c8479548c9285cc15a36ed151b83c2197de9b20c09a2",
+      "purpose": "complete static environment; no collision implied",
+      "art_revision": 3,
+      "logical_size": [
+        960,
+        540
+      ],
+      "palette": [
+        "#304646",
+        "#364d4b",
+        "#3a514f",
+        "#3d5654",
+        "#465b53",
+        "#4c6156",
+        "#566650",
+        "#636b50",
+        "#080f28",
+        "#142344",
+        "#233657",
+        "#374568",
+        "#4e5d78",
+        "#6b7885",
+        "#2d4744",
+        "#4e6759",
+        "#708462",
+        "#9b9855",
+        "#302a37",
+        "#4d3940",
+        "#70483c",
+        "#93684c",
+        "#b38757",
+        "#d2a06d",
+        "#edc46e",
+        "#f8e4b6",
+        "#7e794b",
+        "#a79458",
+        "#c4a456",
+        "#3d405c",
+        "#596a88",
+        "#a1baa0"
+      ],
+      "playfield": "continuous quiet moss-earth plane; edge-cast shadows and source-linked lamp pools"
     }
   },
   "sources": {
@@ -2627,6 +3123,15 @@
       "sha256": "5c01f08ee46544793fecf8bb9f75fc0f5bd3418a709d0f152dddaf1a2833d817",
       "runtime": false
     },
+    "mushroom-garden-v2.png": {
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "sha256": "1976e969beb8d5ebb98bc46b07d71f2d76ea3e791204bab670bebb8a7abafcf2",
+      "runtime": false
+    },
     "mushroom-garden.png": {
       "size": [
         1672,
@@ -2634,6 +3139,15 @@
       ],
       "mode": "RGB",
       "sha256": "29f5870444023ffb9e63ab456c4e45f4629ac09892916f9ed07b569cd8ebdef3",
+      "runtime": false
+    },
+    "plain-ui-v2.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "82fb1f96b2bc742ce66b86ed865c1407e08da792d341f7d6e7449e171c344e4a",
       "runtime": false
     },
     "restaurant-interior.png": {
@@ -2670,6 +3184,24 @@
       ],
       "mode": "RGBA",
       "sha256": "01af99fb7d194b55707841528f2e8254c0c96f1c63e157c21913ec2b01b0ccfa",
+      "runtime": false
+    },
+    "world-ui-v2.png": {
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "9fe08508c27bc50bc0bd69696e3d2cedb40fdd977628aafb7eab8ad58b1a93d0",
+      "runtime": false
+    },
+    "mushroom-garden-v3.png": {
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "sha256": "5b697bc9d30ab205d704650bf7bcc5d22c5b1c1200aa05eb70c0417b399eb7d1",
       "runtime": false
     }
   },

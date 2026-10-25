@@ -6,7 +6,7 @@
 
 固定三分之四斜俯视，人物可见正面，家具可见立面与台面；室内隐藏屋顶、全店总览。琥珀与旧木承载食物/经营区，靛蓝承载夜色和轮廓，黄铜承载有实际用途的魔法设备。月窗、羊角饰件、围裙与厨房材质维持咩咩身份。街巷与室内使用同一光向；魔法学校只作为远景，不扩大地图。
 
-原稿是高分辨率生成图，**不保证原稿符合严格像素网格**。运行时目录 `sprites/`、`atlases/`、`backgrounds/` 经确定性最近邻导出与统一 32 色映射，不使用抖动；每一像素为完整色块，透明度只有 0 或 255，透明像素 RGB 清零。`source/` 是未修改的生成来源，不供运行时加载。不要使用原稿缩放后冒充固定网格验收。
+原稿是高分辨率生成图，**不保证原稿符合严格像素网格**。运行时目录 `sprites/`、`atlases/`、`backgrounds/` 经确定性最近邻导出与固定色板映射，不使用抖动；默认共用32色，菇圃v3单独使用记录在背景条目 `palette` 中的32色以保留近似地面色阶。每一像素为完整色块，透明度只有0或255，透明RGB清零。`source/` 是未修改的生成来源，不供运行时加载。不要使用原稿缩放后冒充固定网格验收。
 
 ## 直接加载
 
@@ -30,9 +30,33 @@
 
 预警范围、冲刺方向、环形波半径必须读取真实 `telegraph`/模拟坐标绘制，不能以精灵大小推算命中。风效只表达 `gust` 已发生，不能决定推退范围。`moonheart_guard/exposed` 切换依据真实 shield/state。`floating_pie` 用实际出餐事件移动，汤杯的保温带随杯移动，`cauldron_stir_left/right` 切换表示自搅；星汤与彗星饼有独立形状，不能只改订单文字。玩法效果、暂停和存档仍由核心实现。
 
+## 第二轮：安静活动区与物件入口
+
+背景 ID/路径 `mushroom-garden` 不变，仍为 480×270，对应 960×540 逻辑边界。当前指向定向修正版 `source/mushroom-garden-v3.png`：中央连续苔土地面，阴影与墙/植物相连，门灯光有明确来源；去除v2蓝绿孤斑和橙色分区感，保持安静。v3单独固定32色记录于该背景 `palette`，不改变旧精灵色板或PNG。没有通过模糊或程序涂色替代绘图。旧原稿、v2原稿和原分支 `codex/a01-pixel-world` 的 `86b442d` 保留恢复点；没有把角色、怪物、预警、掉落或碰撞烘焙进背景。
+
+新增稳定 ID 共10件，旧60件精灵/图集/动画/aliases均保留：
+
+| ID | 原生尺寸 | 建议用途 |
+|---|---|---|
+| `world_recipe_book` | 64×48 | 菜谱/备餐入口物件 |
+| `world_order_note` | 32×48 | 柜台订单纸 |
+| `world_ledger` | 48×48 | 收工账本物件 |
+| `world_menu_board` | 48×64 | 墙边/桌边小菜单板 |
+| `ui_paper_panel` | 128×64 | 短纸面浮层，文字实时排版 |
+| `ui_button_plain` / `ui_button_plain_focus` | 96×32 | 朴素普通/焦点态；焦点有角部形状差异 |
+| `ui_coin` / `ui_day` / `ui_pause` | 20×20 | 小状态符号，点击命中区由UI扩展 |
+
+布局入口只是用途建议，不替P02实现交互。四个世界物件使用脚底pivot；纸面UI使用左上角pivot。新面板/按钮的九宫格和内容边距在 manifest，顺序均为 `[left,top,right,bottom]`；图标与透视世界物件不做九宫格拉伸。旧UI ID未自动重定向，新经营界面需明确选用这些简洁资产。
+
+当前概念合成为 `preview/garden-v3-concept.png`（同时更新 `garden-composite.png`），使用实际已有角色与敌人；`garden-v2-concept.png` 仅保留上次评审恢复点。`preview/world-ui-v2-contact.png` 检查已冻结的10件物件/符号。这些不证明运行时/UI已改好。真正全屏场景、灯下/暗处/边缘的预警与弹体对比度、前景遮挡、中文和输入焦点由P02/P03提供引擎证据。
+
 ## 重建与检查
 
 需要 Python 3 与 Pillow（本次实际 Python 3.12.14 / Pillow 12.3.0），运行 `python3 assets/pixel/build.py`，再运行 `python3 assets/pixel/verify.py`。本机可用 bundled Python；不需要在线生成或 API key。构建只做已有生成原稿的裁切、最近邻缩放、固定色板导出、硬透明处理与图集打包，不生成替代美术。`source/`、`preview/` 带 `.gdignore`，不参与游戏资源导入。
+
+仅检查变更资产时可向 `verify.py` 传入 ID（无参数仍检查完整包），例如 `python3 assets/pixel/verify.py mushroom-garden ui_paper_panel`。第二轮只重验新背景与10个新增ID，以及其源图、图集和九宫格边距；未改变部分复用既有证据，不重复核心测试。
+
+背景定向更新使用 `python3 assets/pixel/build.py --garden-only`，只写菇圃PNG、对应manifest/新源图记录和菇圃预览，不重新导出任何精灵、UI或其他背景。`verify.py mushroom-garden` 按背景自身的固定色板检查，不用默认精灵色板错误地合并近似地面色阶。
 
 Godot CLI 额外使用临时空项目和临时脚本检查了实际 PNG 解码、ImageTexture 与 AtlasTexture 尺寸；加载路径来自 manifest，脚本使用 `Image.load_from_file`、`ImageTexture.create_from_image` 和各 `region`。一次性加载脚本与日志保留在 `/private/tmp/moonlantern-a01-godot/verify_load.gd` 和 `/private/tmp/moonlantern-a01-png-load.log`，不作为游戏运行代码放入素材包。检查不等于真实游戏接入、窗口体验或目标设备验收；沙箱启动时用户目录/系统证书诊断不影响已返回成功的 PNG/图集检查，但不能据此宣称无诊断启动。
 

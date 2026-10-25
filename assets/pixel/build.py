@@ -7,6 +7,7 @@ export, one shared palette and binary alpha make the generated art game-ready.
 from pathlib import Path
 import hashlib
 import json
+import sys
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +19,13 @@ bf8a43 edc46e f8e4b6 fff3d0 3c514c 668578 a1baa0 c3d1ad
 RGB = [tuple(bytes.fromhex(c)) for c in COLORS]
 PALETTE = Image.new("P", (1, 1))
 PALETTE.putpalette([v for c in RGB for v in c] + list(RGB[0]) * (256-len(RGB)))
+GARDEN_COLORS = """304646 364d4b 3a514f 3d5654 465b53 4c6156 566650 636b50
+080f28 142344 233657 374568 4e5d78 6b7885 2d4744 4e6759
+708462 9b9855 302a37 4d3940 70483c 93684c b38757 d2a06d
+edc46e f8e4b6 7e794b a79458 c4a456 3d405c 596a88 a1baa0""".split()
+GARDEN_PALETTE = Image.new("P", (1,1))
+garden_values = [v for c in GARDEN_COLORS for v in bytes.fromhex(c)]
+GARDEN_PALETTE.putpalette(garden_values + garden_values[:3] * (256-len(GARDEN_COLORS)))
 
 # (id, original crop x0 y0 x1 y1, final canvas width height, fitting method)
 SHEETS = {
@@ -81,6 +89,20 @@ SHEETS = {
         ("button_focus", (100,770,700,1040), (96,40), "stretch"),
         ("inventory_slot", (825,690,1180,1055), (48,48), "stretch"),
     ]),
+    "world_ui_v2": ("world-ui-v2", (64,64), [
+        ("world_recipe_book", (50,130,775,615), (64,48), "fit"),
+        ("world_order_note", (785,80,1230,620), (32,48), "fit"),
+        ("world_ledger", (45,640,670,1200), (48,48), "fit"),
+        ("world_menu_board", (700,630,1240,1210), (48,64), "fit"),
+    ]),
+    "plain_ui_v2": ("plain-ui-v2", (128,72), [
+        ("ui_paper_panel", (25,155,570,455), (128,64), "stretch"),
+        ("ui_button_plain", (575,265,1035,450), (96,32), "stretch"),
+        ("ui_button_plain_focus", (1045,265,1515,450), (96,32), "stretch"),
+        ("ui_coin", (130,550,425,855), (20,20), "fit"),
+        ("ui_day", (625,550,915,855), (20,20), "fit"),
+        ("ui_pause", (1165,580,1395,850), (20,20), "fit"),
+    ]),
 }
 for group, names in {
     "characters": ["meemee_idle","meemee_blink","meemee_serve","meemee_stir",
@@ -99,9 +121,9 @@ def hard_alpha(im):
     return im
 
 
-def palette_export(im):
+def palette_export(im, palette=PALETTE):
     alpha = im.getchannel("A")
-    out = im.convert("RGB").quantize(palette=PALETTE, dither=Image.Dither.NONE).convert("RGBA")
+    out = im.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
     out.putalpha(alpha)
     # Transparent RGB must be zero as well: avoids colored fringes in consumers.
     empty = Image.new("RGBA", out.size)
@@ -129,6 +151,40 @@ def export_region(source, box, size, method):
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def export_background(name):
+    is_garden = name == "mushroom-garden"
+    source_name = "mushroom-garden-v3" if is_garden else name
+    source = Image.open(ROOT/"source"/(source_name+".png")).convert("RGBA")
+    dimensions = (480,270) if is_garden else (384,256)
+    out = palette_export(source.resize(dimensions,Image.Resampling.NEAREST), GARDEN_PALETTE if is_garden else PALETTE)
+    path=ROOT/"backgrounds"/(name+".png"); out.save(path)
+    record={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+source_name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
+    if is_garden:
+        record.update({"art_revision":3,"logical_size":[960,540],"palette":["#"+c for c in GARDEN_COLORS],"playfield":"continuous quiet moss-earth plane; edge-cast shadows and source-linked lamp pools"})
+    return record
+
+
+def garden_preview(manifest):
+    garden=Image.open(ROOT/"backgrounds/mushroom-garden.png").convert("RGBA")
+    for name,foot in [("meemee_cast_se",(160,165)),("sparkcap_windup",(260,160)),("moonheart_guard",(355,170))]:
+        record=manifest["sprites"][name]; im=Image.open(ROOT/record["file"]); p=record["pivot"]
+        garden.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
+    scaled=garden.resize((1440,810),Image.Resampling.NEAREST)
+    scaled.save(ROOT/"preview/garden-composite.png")
+    scaled.save(ROOT/"preview/garden-v3-concept.png")
+
+
+def update_garden_only():
+    manifest=json.loads((ROOT/"manifest.json").read_text())
+    manifest["backgrounds"]["mushroom-garden"]=export_background("mushroom-garden")
+    path=ROOT/"source/mushroom-garden-v3.png"
+    im=Image.open(path)
+    manifest["sources"][path.name]={"size":list(im.size),"mode":im.mode,"sha256":sha(path),"runtime":False}
+    (ROOT/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+    garden_preview(manifest)
+    print("Updated mushroom-garden only; existing sprite/UI exports untouched.")
 
 
 def build():
@@ -187,14 +243,21 @@ def build():
                 record["pivot"]=[0,0]
                 record["nine_slice_margins"]=[14,14,14,14] if name=="dialogue_panel" else [12,12,12,12]
                 record["content_margins"]=[18,16,18,16] if name=="dialogue_panel" else [14,12,14,12]
+            if group == "plain_ui_v2":
+                record["pivot"] = [0,0]
+                if name == "ui_paper_panel":
+                    record["nine_slice_margins"] = [6,12,16,6]
+                    record["content_margins"] = [10,14,18,10]
+                elif name.startswith("ui_button_plain"):
+                    record["nine_slice_margins"] = [10,6,10,6]
+                    record["content_margins"] = [12,8,12,8]
+            if group in ("world_ui_v2", "plain_ui_v2"):
+                record["art_revision"] = 2
+                record["usage"] = "contextual world object" if group == "world_ui_v2" else "short paper overlay; render text live"
             manifest["sprites"][name]=record
         sheet.save(ROOT/"atlases"/(group+".png"))
     for name in ["restaurant-interior","restaurant-lane","restaurant-shell","mushroom-garden"]:
-        source=Image.open(ROOT/"source"/(name+".png")).convert("RGBA")
-        dimensions=(480,270) if name=="mushroom-garden" else (384,256)
-        out=palette_export(source.resize(dimensions,Image.Resampling.NEAREST))
-        path=ROOT/"backgrounds"/(name+".png"); out.save(path)
-        manifest["backgrounds"][name]={"file":str(path.relative_to(ROOT)),"size":list(dimensions),"source":"source/"+name+".png","sha256":sha(path),"purpose":"complete static environment; no collision implied"}
+        manifest["backgrounds"][name]=export_background(name)
     for path in sorted((ROOT/"source").glob("*.png")):
         im=Image.open(path)
         manifest["sources"][path.name]={"size":list(im.size),"mode":im.mode,"sha256":sha(path),"runtime":False}
@@ -241,11 +304,7 @@ def preview(manifest):
         p=record["pivot"]; foot=entry["foot"]
         modular.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
     modular.resize((1152,768),Image.Resampling.NEAREST).save(ROOT/"preview/restaurant-layered.png")
-    garden=Image.open(ROOT/"backgrounds/mushroom-garden.png").convert("RGBA")
-    for name,foot in [("meemee_cast_se",(160,165)),("sparkcap_windup",(260,160)),("moonheart_guard",(355,170))]:
-        record=manifest["sprites"][name]; im=Image.open(ROOT/record["file"]); p=record["pivot"]
-        garden.alpha_composite(im,(foot[0]-p[0],foot[1]-p[1]))
-    garden.resize((1440,810),Image.Resampling.NEAREST).save(ROOT/"preview/garden-composite.png")
+    garden_preview(manifest)
     sprites=list(manifest["sprites"].items())
     cw,ch,cols=288,280,4
     board=Image.new("RGB",(cw*cols,ch*((len(sprites)+cols-1)//cols)),"#c5d0ca")
@@ -260,7 +319,23 @@ def preview(manifest):
         board.paste(im,(x+(cw-im.width)//2,y+10),im)
         d.text((x+8,y+ch-22),name,fill="#edc46e" if i%2 else "#25283f")
     board.save(ROOT/"preview/contact-sheet.png")
+    v2=[(name,record) for name,record in sprites if record.get("art_revision")==2]
+    board2=Image.new("RGB",(640,((len(v2)+1)//2)*210),"#3c514c")
+    d2=ImageDraw.Draw(board2)
+    for i,(name,record) in enumerate(v2):
+        x,y=(i%2)*320,(i//2)*210
+        im=Image.open(ROOT/record["file"])
+        scale=min(4,300//im.width,175//im.height)
+        im=im.resize((im.width*scale,im.height*scale),Image.Resampling.NEAREST)
+        board2.paste(im,(x+(320-im.width)//2,y+8),im)
+        d2.text((x+12,y+190),name,fill="#f8e4b6")
+    board2.save(ROOT/"preview/world-ui-v2-contact.png")
 
 
 if __name__=="__main__":
-    build()
+    if sys.argv[1:] == ["--garden-only"]:
+        update_garden_only()
+    elif not sys.argv[1:]:
+        build()
+    else:
+        raise SystemExit("Usage: build.py [--garden-only]")
