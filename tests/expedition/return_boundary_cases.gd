@@ -107,7 +107,9 @@ func real_sessions(factory: Callable):
 	expect(a.validate_snapshot(sa) == "" and b.validate_snapshot(sb) == "","real Session return snapshots validate")
 	evidence.append({"kind":"real-public-Session","reason":"entrance","single":sa,"split":sb,"equal":sa == sb})
 	var returned_path = output+"/returned-session.json"
-	expect(a.save_to(returned_path).ok,"real Session saves returned state")
+	var returned_save = a.save_to(returned_path)
+	expect(returned_save.ok,"real Session saves returned state")
+	if not returned_save.ok: return
 	var loaded = factory.call(23)
 	expect(loaded.load_from(returned_path).ok and loaded.snapshot() == sa,"real Session disk load keeps full returned snapshot")
 	expect(loaded.advance(1000).ok and loaded.snapshot() == sa,"real Session advance cannot resume returned expedition")
@@ -120,7 +122,9 @@ func real_sessions(factory: Callable):
 	var paused: Dictionary = live.snapshot()
 	expect(live.advance(1000).ok and live.snapshot() == paused,"real Session pause freezes full snapshot")
 	var active_path = output+"/paused-session.json"
-	expect(live.save_to(active_path).ok,"real Session saves paused fractional state")
+	var active_save = live.save_to(active_path)
+	expect(active_save.ok,"real Session saves paused fractional state")
+	if not active_save.ok: return
 	var resumed = factory.call(23)
 	expect(resumed.load_from(active_path).ok and resumed.snapshot() == paused,"real Session disk restore equals all paused snapshot fields")
 	expect(live.set_paused(false).ok and resumed.set_paused(false).ok,"both real Session branches resume")
@@ -136,16 +140,84 @@ func real_sessions(factory: Callable):
 	var retreat_state: Dictionary = retreat.snapshot()
 	expect(retreat_state.phase == "shopping" and retreat_state.expedition.return_reason == "retreat" and retreat_state.expedition.remainder_ms == 0,"real Session retreat clears active fractional remainder")
 	var retreat_path = output+"/retreat-session.json"
-	expect(retreat.save_to(retreat_path).ok,"real Session saves retreat")
+	var retreat_save = retreat.save_to(retreat_path)
+	expect(retreat_save.ok,"real Session saves retreat")
+	if not retreat_save.ok: return
 	var retreat_load = factory.call(23)
 	expect(retreat_load.load_from(retreat_path).ok and retreat_load.snapshot() == retreat_state,"real Session restores complete manual-retreat state")
 	expect(retreat_load.advance(1000).ok and retreat_load.snapshot() == retreat_state,"manual-retreat Session remains stopped")
 	evidence.append({"kind":"real-public-Session","reason":"retreat","remainder_ms":retreat_state.expedition.remainder_ms})
-func run(factory: Callable = Callable(), output_dir: String = "/tmp/e02-return-boundaries") -> Dictionary:
-	output = output_dir; DirAccess.make_dir_recursive_absolute(output)
+func prepare_output(output_dir: String) -> bool:
+	output = output_dir
+	if output.is_empty():
+		# Use the runner's existing temporary root, then create an exclusive child.
+		# A fixed /tmp path is neither portable to Windows nor safe to reuse.
+		for key in ["RUNNER_TEMP","TEMP","TMP","TMPDIR"]:
+			var root = OS.get_environment(key)
+			if root.is_absolute_path() and DirAccess.dir_exists_absolute(root):
+				output = root.path_join("moonlantern-e04-returns-%s-%s" % [OS.get_process_id(),OS.get_entropy(8).hex_encode()])
+				break
+	if output.is_empty() or not output.is_absolute_path() or output.begins_with("res://") or output.begins_with("user://"):
+		expect(false,"output requires an absolute filesystem path or an existing runner temporary root")
+		return false
+	if FileAccess.file_exists(output) or DirAccess.dir_exists_absolute(output):
+		expect(false,"refusing to overwrite existing output: "+output)
+		return false
+	if not DirAccess.dir_exists_absolute(output.get_base_dir()):
+		expect(false,"output parent must already be a directory: "+output.get_base_dir())
+		return false
+	var error = DirAccess.make_dir_absolute(output)
+	if error != OK:
+		expect(false,"cannot create exclusive output directory (%s): %s" % [error,output])
+		return false
+	return true
+func result(factory: Callable) -> Dictionary:
+	return {"checks":checks,"failures":failures.duplicate(),"output":output,"real_session_requested":factory.is_valid(),"evidence":evidence.duplicate(true),"model_sha256":FileAccess.get_sha256("res://game/expedition/rain_garden_model.gd")}
+func write_report(report: Dictionary):
+	var path = output.path_join("report.json")
+	if FileAccess.file_exists(path):
+		expect(false,"refusing to overwrite existing report: "+path)
+		return
+	var file = FileAccess.open(path,FileAccess.WRITE)
+	if file == null:
+		expect(false,"cannot open report (%s): %s" % [FileAccess.get_open_error(),path])
+		return
+	var serialized = JSON.stringify(report,"  ")
+	var expected_bytes = serialized.to_utf8_buffer()
+	var stored = file.store_string(serialized)
+	file.flush()
+	var error = file.get_error()
+	file.close()
+	if not stored or error != OK:
+		expect(false,"cannot write report (%s): %s" % [error,path])
+		return
+	# Buffered writes/flush can leave get_error() == OK after a short disk write.
+	# Reopen after close and verify the complete serialized UTF-8 bytes.
+	var reader = FileAccess.open(path,FileAccess.READ)
+	if reader == null:
+		expect(false,"cannot reopen report for readback (%s): %s" % [FileAccess.get_open_error(),path])
+		return
+	var actual_size = reader.get_length()
+	if actual_size != expected_bytes.size():
+		reader.close()
+		expect(false,"report readback length mismatch (expected %s bytes, got %s): %s" % [expected_bytes.size(),actual_size,path])
+		return
+	var actual_bytes = reader.get_buffer(expected_bytes.size())
+	var read_error = reader.get_error()
+	reader.close()
+	if read_error != OK or actual_bytes != expected_bytes:
+		expect(false,"report readback failed or bytes differ (%s): %s" % [read_error,path])
+func run(factory: Callable = Callable(), output_dir: String = "") -> Dictionary:
+	checks = 0; failures.clear(); evidence.clear()
+	if not prepare_output(output_dir):
+		var failed = result(factory)
+		print("E04_RETURN_RESULT ",JSON.stringify(failed))
+		return failed
 	components()
 	if factory.is_valid(): real_sessions(factory)
-	var report = {"checks":checks,"failures":failures.duplicate(),"real_session_requested":factory.is_valid(),"evidence":evidence,"model_sha256":FileAccess.get_sha256("res://game/expedition/rain_garden_model.gd")}
-	var file = FileAccess.open(output+"/report.json",FileAccess.WRITE); file.store_string(JSON.stringify(report,"  "))
-	print("E02 return boundaries: ",checks," checks, ",failures.size()," failures; real Session=",factory.is_valid())
+	write_report(result(factory))
+	var report = result(factory)
+	print("E02 return boundaries: ",checks," checks, ",failures.size()," failures; real Session=",factory.is_valid(),"; output=",output)
+	# The return value remains authoritative even when report creation failed.
+	print("E04_RETURN_RESULT ",JSON.stringify({"checks":checks,"failures":report.failures,"output":output}))
 	return report
