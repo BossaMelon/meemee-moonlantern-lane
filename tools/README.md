@@ -17,15 +17,15 @@ python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
 
 **harness 通过只表示开发底座有效，不表示游戏已实现。** 它验证：
 
-- [验收契约](../contracts/prototype-v1.json) 的 schema、非空必需自动验收集合；
-- [场景描述](../tests/fixtures/prototype-scenarios.json) 对必需自动验收 ID 的覆盖；
+- 旧 [prototype 契约](../contracts/prototype-v1.json) 与新 [quality-slice 契约](../contracts/quality-slice-v1.json) 的 schema、独立身份及必需自动集合；
+- 两套 [旧场景](../tests/fixtures/prototype-scenarios.json)/[新场景](../tests/fixtures/quality-slice-scenarios.json) 对各自必需自动 ID 的覆盖；新场景的 suite、冻结五种子和 seed_policy；
 - [任务归属](../harness/tasks.json) 的路径安全、跨 owner 互斥和依赖无环；
 - PR 正文 `Task-IDs: H01` 对应的实际 base/head diff 必须落在认领路径；
 - 项目上下文文件存在、Markdown 本地链接有效；
 - harness 自身的反假绿回归测试实际执行且没有失败、错误或跳过；
 - 一旦存在 `project.godot`、`.gd` 或 `.tscn`，CI 必须增加无条件 prototype job。
 
-`--stage prototype` 实际运行核心测试；它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+`--stage prototype` 在同一候选上分别执行 prototype 与 quality-slice 的真实 runner；两份契约/fixture 在 harness 与 prototype 阶段都强制存在，不提供缺新文件就回退旧绿灯的分支。它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
 当前完成程度与运行证据只维护在 [项目状态](../docs/project-status.md)。
 
 ## 渲染验收串行入口
@@ -77,12 +77,13 @@ Godot 4.7.2 实际 `--help` 与 [官方 CLI 文档](https://docs.godotengine.org
 
 ## 游戏执行器合同
 
-prototype gate 读取 `contracts/prototype-v1.json` 中 `mode=automated` 且
-`required=true` 的条目；人工试玩与实际平台、输入设备验证不由此报告替代。
-gate 先核验引擎 `--version` 为 4.7.2，再调用：
+gate 只支持两个固定 suite：`prototype` 对应旧契约/fixture，`quality-slice` 对应新契约/fixture。两者读取各自 `mode=automated` 且 `required=true` 的条目，不允许用一个 suite 的报告代替另一个。quality-slice 的 Q01–Q05 必须为 required automated；Q06 为 required runtime，QH 为 required human，不能降低类型或纳入自动 passed。新 JSON 的 profiles/api/field_types/rules 由游戏与真实测试消费，gate 不实现类型 DSL 或代替游戏断言。
+
+现有 `--stage prototype` 命令和 CI job 名称保持，内部先核验引擎 `--version` 为 4.7.2，再串行调用：
 
 ```sh
-Godot --headless --path REPOSITORY --script tests/run.gd -- --report ABSOLUTE_FRESH_REPORT
+Godot --headless --path REPOSITORY --script tests/run.gd -- --suite prototype --report ABSOLUTE_FRESH_PROTOTYPE_REPORT
+Godot --headless --path REPOSITORY --script tests/run.gd -- --suite quality-slice --report ABSOLUTE_FRESH_QUALITY_REPORT
 ```
 
 执行器必须以非零状态退出表示失败，并写 UTF-8 JSON：
@@ -97,14 +98,14 @@ Godot --headless --path REPOSITORY --script tests/run.gd -- --report ABSOLUTE_FR
 }
 ```
 
-示例只说明一条记录的结构，不是完整原型报告。
+示例只说明一条记录的结构，不是完整原型报告。quality-slice 使用同一报告结构，但 `suite` 必须精确为 `quality-slice`、自动 cases 为 Q01–Q05。执行器兼容旧的未指定 suite 的调用由 P04 维护；gate 始终显式请求这两套，忽略 `--suite` 而重复返回旧报告必须失败。
 所有必需自动 ID 必须各出现一次、状态 `passed`、整数 `checks >= 1`。
 未知、重复、人工或 runtime ID，`failed`、`skipped`、零检查、报告缺失、
-命令错误或超时都会失败。报告写入每次新建的临时目录，旧报告不能冒用。
+命令错误、超时或引擎/脚本 `ERROR` 日志都会失败；即使 exit 0、错误在日志保留尾部之前也不能获得绿灯。两套报告分别写入新建的绝对临时路径，旧报告不能冒用。
 测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
 
 gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
-命令、退出码、耗时、引擎版本、错误和执行器原始报告。
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。quality-slice 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
 
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，

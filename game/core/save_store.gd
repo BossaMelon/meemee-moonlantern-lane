@@ -6,7 +6,8 @@ static func _read(path: String, validator: Callable) -> Dictionary:
 	if file == null: return {"ok":false,"code":"read_failed","message":"无法读取存档"}
 	var parser = JSON.new()
 	if parser.parse(file.get_as_text()) != OK: return {"ok":false,"code":"invalid_json","message":"存档JSON损坏"}
-	var error: String = validator.call(parser.data)
+	var error: Variant = validator.call(parser.data)
+	if not error is String: return {"ok":false,"code":"invalid_state","message":"存档校验未正常完成"}
 	if not error.is_empty(): return {"ok":false,"code":"invalid_state","message":error}
 	return {"ok":true,"code":"loaded","message":"存档已恢复","state":parser.data}
 
@@ -18,7 +19,8 @@ static func _write(path: String, text: String) -> bool:
 	return file.get_error() == OK
 
 static func save_state(path: String, state: Dictionary, validator: Callable) -> Dictionary:
-	var error: String = validator.call(state)
+	var error: Variant = validator.call(state)
+	if not error is String: return {"ok":false,"code":"invalid_state","message":"存档校验未正常完成"}
 	if not error.is_empty(): return {"ok":false,"code":"invalid_state","message":error}
 	var temp = path+".tmp"
 	if not _write(temp,JSON.stringify(state,"\t",true,true)): return {"ok":false,"code":"write_failed","message":"无法写入临时存档"}
@@ -41,7 +43,7 @@ static func load_state(path: String, validator: Callable) -> Dictionary:
 	var main = _read(path,validator)
 	if main.ok: return main
 	# Unsupported versions do not silently roll back across a potentially newer game.
-	if main.code == "invalid_state" and main.message == "不支持的存档版本": return main
+	if main.code == "invalid_state" and main.message in ["不支持的存档版本","不支持的存档规则"]: return main
 	var backup = _read(path+".bak",validator)
 	if backup.ok:
 		backup.code = "recovered_backup"

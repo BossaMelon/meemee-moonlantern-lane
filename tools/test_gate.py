@@ -29,6 +29,26 @@ def case_report() -> dict:
     return {"schema_version": 1, "suite": "prototype", "cases": [{"id": "P02", "status": "passed", "checks": 1}]}
 
 
+def quality_contract() -> dict:
+    """Small unit fixture of the published H04 acceptance/report shape."""
+    data = contract()
+    template = data["acceptance"][0]
+    data.update(milestone="quality-slice", suite="quality-slice", report_protocol={
+        "schema_version": 1, "suite": "quality-slice", "runner": "tests/run.gd",
+        "runner_args": ["--", "--suite", "quality-slice", "--report", "ABS_REPORT"],
+        "required_automated_ids": [f"Q{i:02d}" for i in range(1, 6)],
+        "external_evidence_ids": ["Q06", "QH"]})
+    data["acceptance"] = [dict(copy.deepcopy(template), id=f"Q{i:02d}") for i in range(1, 6)]
+    data["acceptance"].extend([dict(copy.deepcopy(template), id="Q06", mode="runtime"),
+                               dict(copy.deepcopy(template), id="QH", mode="human", stage="human")])
+    return data
+
+
+def quality_report() -> dict:
+    return {"schema_version": 1, "suite": "quality-slice", "cases": [
+        {"id": f"Q{i:02d}", "status": "passed", "checks": 1} for i in range(1, 6)]}
+
+
 def tasks() -> dict:
     return {"schema_version": 1, "tasks": [
         {"id": "H01", "owner": "tooling", "allowed_paths": ["tools/**"], "depends_on": []},
@@ -52,8 +72,13 @@ jobs:
 def write_context(root: Path, runtime=False) -> None:
     fixture = {"schema_version": 1, "scenarios": [{"id": "S01", "seed": 1, "route": "trade",
                "acceptance_ids": ["P02"], "steps": ["Run"], "outcomes": ["Pass"]}]}
+    quality_fixture = copy.deepcopy(fixture)
+    quality_fixture.update(suite="quality-slice", seeds=[1, 7, 23, 99, 20261025])
+    quality_fixture["scenarios"][0].update(id="quality-protocol-fixture", acceptance_ids=[f"Q{i:02d}" for i in range(1, 6)])
     for path, data in (("contracts/prototype-v1.json", contract()),
                        ("tests/fixtures/prototype-scenarios.json", fixture),
+                       ("contracts/quality-slice-v1.json", quality_contract()),
+                       ("tests/fixtures/quality-slice-scenarios.json", quality_fixture),
                        ("harness/tasks.json", tasks())):
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -70,13 +95,17 @@ def write_context(root: Path, runtime=False) -> None:
         workflow.write_text(WORKFLOW)
 
 
-def fake_engine(root: Path, *, version="4.7.2.stable.test", exit_code=0, report=None) -> str:
+def fake_engine(root: Path, *, version="4.7.2.stable.test", exit_code=0, report=None,
+                reports=None, exit_codes=None, stderr="") -> str:
+    """Executable protocol fake exclusively for gate tests, never game evidence."""
     engine = root / "fake-engine"
     source = "#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n"
     source += f"if '--version' in sys.argv:\n print({version!r})\n sys.exit(0)\n"
-    if report is not None:
-        source += f"Path(sys.argv[sys.argv.index('--report')+1]).write_text({json.dumps(report)!r})\n"
-    source += f"sys.exit({exit_code})\n"
+    source += "suite = sys.argv[sys.argv.index('--suite')+1] if '--suite' in sys.argv else 'prototype'\n"
+    source += f"reports = {reports!r}\nreport = reports.get(suite) if reports is not None else {report!r}\n"
+    source += "if report is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps(report))\n"
+    source += f"print({stderr!r}, file=sys.stderr) if {bool(stderr)!r} else None\n"
+    source += f"sys.exit(({exit_codes!r} or {{}}).get(suite, {exit_code!r}))\n"
     engine.write_text(source)
     engine.chmod(0o755)
     return str(engine)
@@ -118,6 +147,58 @@ class ContractTests(unittest.TestCase):
         data["schema_version"] = True
         with self.assertRaises(gate.GateError):
             gate.validate_contract(data)
+
+
+class QualityContractTests(unittest.TestCase):
+    def test_published_quality_contract_uses_separate_identity(self):
+        self.assertEqual(len(gate.validate_contract(quality_contract(), "quality-slice")), 7)
+        for key, value in (("milestone", "three-day-prototype"), ("suite", "prototype")):
+            data = quality_contract()
+            data[key] = value
+            with self.subTest(key=key), self.assertRaises(gate.GateError):
+                gate.validate_contract(data, "quality-slice")
+        with self.assertRaises(gate.GateError):
+            gate.validate_contract(quality_contract())
+
+    def test_quality_required_roles_cannot_be_weakened(self):
+        for case_id, key, value in (("Q01", "required", False), ("Q05", "mode", "runtime"),
+                                    ("Q06", "mode", "automated"), ("QH", "required", False)):
+            data = quality_contract()
+            next(c for c in data["acceptance"] if c["id"] == case_id)[key] = value
+            with self.subTest(case_id=case_id, key=key), self.assertRaises(gate.GateError):
+                gate.validate_contract(data, "quality-slice")
+        for mutate in (lambda rows: rows.pop(), lambda rows: rows.append(dict(rows[0], id="Q99"))):
+            data = quality_contract()
+            mutate(data["acceptance"])
+            with self.assertRaises(gate.GateError):
+                gate.validate_contract(data, "quality-slice")
+
+    def test_quality_protocol_identity_cannot_silently_drift(self):
+        changes = (("suite", "prototype"), ("runner", "tests/other.gd"),
+                   ("runner_args", ["--", "--report", "ABS_REPORT"]),
+                   ("required_automated_ids", ["Q01"]), ("external_evidence_ids", ["QH"]))
+        for key, value in changes:
+            data = quality_contract()
+            data["report_protocol"][key] = value
+            with self.subTest(key=key), self.assertRaises(gate.GateError):
+                gate.validate_contract(data, "quality-slice")
+
+    def test_quality_fixtures_require_matching_suite_seeds_and_coverage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            write_context(root)
+            fixture = gate.read_json(root / "tests/fixtures/quality-slice-scenarios.json")
+        self.assertEqual(gate.validate_fixtures(fixture, quality_contract()["acceptance"], "quality-slice"), 1)
+        for key, value in (("suite", "prototype"), ("seeds", [1]), ("seeds", [True, 7, 23, 99, 20261025])):
+            data = copy.deepcopy(fixture)
+            data[key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(gate.GateError):
+                gate.validate_fixtures(data, quality_contract()["acceptance"], "quality-slice")
+        for key, value in (("acceptance_ids", ["Q06"]), ("seed", 2), ("seed_policy", "lucky_seed")):
+            data = copy.deepcopy(fixture)
+            data["scenarios"][0][key] = value
+            with self.subTest(key=key), self.assertRaises(gate.GateError):
+                gate.validate_fixtures(data, quality_contract()["acceptance"], "quality-slice")
 
 
 class ReportTests(unittest.TestCase):
@@ -182,6 +263,64 @@ class ReportTests(unittest.TestCase):
             path.write_text("not json")
             with self.assertRaises(gate.GateError):
                 gate.read_json(path)
+
+
+class SuiteReportTests(unittest.TestCase):
+    """Protocol unit fixtures only; no quality contract schema or game pass claim."""
+
+    def quality_cases(self):
+        return quality_contract()["acceptance"]
+
+    def quality_report(self):
+        return quality_report()
+
+    def test_quality_report_requires_requested_suite(self):
+        self.assertEqual(gate.validate_case_report(
+            self.quality_report(), self.quality_cases(), suite="quality-slice"), 5)
+        for declared in ("prototype", "harness", "quality_slice", "", None):
+            report = self.quality_report()
+            report["suite"] = declared
+            with self.subTest(declared=declared), self.assertRaisesRegex(gate.GateError, "suite"):
+                gate.validate_case_report(report, self.quality_cases(), suite="quality-slice")
+
+    def test_unknown_requested_suite_rejected(self):
+        with self.assertRaisesRegex(gate.GateError, "suite"):
+            gate.validate_case_report(self.quality_report(), self.quality_cases(), suite="custom")
+
+    def test_quality_cannot_report_runtime_or_human_as_automated(self):
+        for case_id in ("Q06", "QH"):
+            report = self.quality_report()
+            report["cases"].append({"id": case_id, "status": "passed", "checks": 1})
+            with self.subTest(case_id=case_id), self.assertRaisesRegex(gate.GateError, "nonautomated"):
+                gate.validate_case_report(report, self.quality_cases(), suite="quality-slice")
+
+    def test_quality_required_cases_cannot_be_missing_skipped_or_empty(self):
+        mutations = (lambda rows: rows.pop(), lambda rows: rows.clear(),
+                     lambda rows: rows[0].update(status="skipped"),
+                     lambda rows: rows[0].update(checks=0))
+        for mutation in mutations:
+            report = self.quality_report()
+            mutation(report["cases"])
+            with self.subTest(report=report), self.assertRaises(gate.GateError):
+                gate.validate_case_report(report, self.quality_cases(), suite="quality-slice")
+
+    def test_old_report_default_remains_strict_prototype(self):
+        self.assertEqual(gate.validate_case_report(case_report(), contract()["acceptance"]), 1)
+        report = case_report()
+        report["suite"] = "quality-slice"
+        with self.assertRaisesRegex(gate.GateError, "suite"):
+            gate.validate_case_report(report, contract()["acceptance"])
+
+    def test_missing_quality_contract_cannot_fall_back_to_prototype_green(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            write_context(root, runtime=True)
+            (root / "contracts/quality-slice-v1.json").unlink()
+            engine = fake_engine(root, report=case_report())
+            with patch.object(gate, "git_candidate", return_value={"sha": "unit-test", "dirty": False}):
+                result = gate.run_gate("prototype", root, engine, 5, root / "output")
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("quality-slice-v1.json", result["errors"][0])
 
 
 class OwnershipTests(unittest.TestCase):
@@ -304,6 +443,8 @@ class CommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             write_context(root, runtime=True)
+            if "report" in engine_args:
+                engine_args["reports"] = {"prototype": engine_args.pop("report"), "quality-slice": quality_report()}
             engine = fake_engine(root, **engine_args)
             with patch.object(gate, "git_candidate", return_value={"sha": "test", "dirty": False}):
                 return gate.run_gate("prototype", root, engine, 5, root / "output")
@@ -349,6 +490,75 @@ class CommandTests(unittest.TestCase):
                     result = gate.run_gate("prototype", root, None, 5, root / "output")
                 self.assertEqual(result["status"], "failed")
                 self.assertIn("requires Godot", result["errors"][0])
+
+
+class DualSuiteCommandTests(unittest.TestCase):
+    run_fake_prototype = CommandTests.run_fake_prototype
+    def test_complete_protocol_requires_two_explicit_fresh_runner_reports(self):
+        result = self.run_fake_prototype(report=case_report())
+        self.assertEqual(result["status"], "passed")
+        commands = result["commands"][1:]
+        self.assertEqual([c["command"][c["command"].index("--suite") + 1] for c in commands],
+                         ["prototype", "quality-slice"])
+        paths = [c["command"][c["command"].index("--report") + 1] for c in commands]
+        self.assertEqual(len(set(paths)), 2)
+        self.assertTrue(all(Path(p).is_absolute() for p in paths))
+        self.assertEqual(set(result["case_reports"]), {"prototype", "quality-slice"})
+        self.assertEqual(result["case_report"], result["case_reports"]["prototype"])
+
+    def test_missing_quality_inputs_fail_both_stages_before_runner(self):
+        for missing in ("contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json"):
+            for stage in ("harness", "prototype"):
+                with self.subTest(missing=missing, stage=stage), tempfile.TemporaryDirectory() as folder:
+                    root = Path(folder)
+                    write_context(root, runtime=True)
+                    (root / missing).unlink()
+                    with patch.object(gate, "git_candidate", return_value={"sha": "unit-test", "dirty": False}):
+                        result = gate.run_gate(stage, root, None, 5, root / "output")
+                    self.assertEqual(result["status"], "failed")
+                    self.assertIn(missing, result["errors"][0])
+                    self.assertEqual(result["commands"], [])
+
+    def test_legacy_runner_ignoring_suite_cannot_claim_quality_green(self):
+        # An old runner emits prototype even when quality-slice was requested.
+        result = self.run_fake_prototype(reports={"prototype": case_report(), "quality-slice": case_report()})
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("quality-slice report suite", result["errors"][0])
+
+    def test_quality_nonzero_or_missing_report_cannot_reuse_old_green(self):
+        for options in ({"exit_codes": {"quality-slice": 7},
+                         "reports": {"prototype": case_report(), "quality-slice": quality_report()}},
+                        {"reports": {"prototype": case_report()}}):
+            with self.subTest(options=options):
+                result = self.run_fake_prototype(**options)
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(set(result["case_reports"]), {"prototype"})
+                self.assertEqual(len(result["commands"]), 3)
+
+    def test_quality_invalid_protocol_fails_after_prototype_passes(self):
+        mutations = (lambda report: report.update(cases=[]), lambda report: report["cases"].pop(),
+                     lambda report: report["cases"][0].update(checks=0),
+                     lambda report: report["cases"][0].update(status="skipped"),
+                     lambda report: report["cases"].append(dict(report["cases"][0])),
+                     lambda report: report["cases"][0].update(id="Q06"))
+        for mutation in mutations:
+            report = quality_report()
+            mutation(report)
+            with self.subTest(report=report):
+                result = self.run_fake_prototype(reports={"prototype": case_report(), "quality-slice": report})
+                self.assertEqual(result["status"], "failed")
+                self.assertIn("prototype", result["case_reports"])
+
+    def test_script_error_even_with_zero_exit_and_valid_reports_is_failure(self):
+        result = self.run_fake_prototype(report=case_report(), stderr="SCRIPT ERROR: Parse Error: unit fake")
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("engine/script error", result["errors"][0])
+
+    def test_script_error_before_truncated_log_tail_is_not_hidden(self):
+        result = self.run_fake_prototype(report=case_report(),
+                                        stderr="SCRIPT ERROR: unit fake\n" + "trailing diagnostic\n" * 2000)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("engine/script error", result["errors"][0])
 
 
 def main() -> int:
