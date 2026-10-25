@@ -27,6 +27,8 @@ var startup_files: Dictionary = {}
 var automatic_restore_verified = false
 var input_count = 0
 var visual_evidence: Dictionary = {}
+var display_samples: Array = []
+var focus_events: Array = []
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -39,6 +41,8 @@ func _initialize():
 	DirAccess.make_dir_recursive_absolute(folder)
 	input_file=FileAccess.open(folder+"/"+attempt+"-inputs.jsonl",FileAccess.WRITE)
 	started_ms=Time.get_ticks_msec()
+	root.focus_entered.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":true}))
+	root.focus_exited.connect(func(): focus_events.append({"elapsed_ms":Time.get_ticks_msec()-started_ms,"focused":false}))
 	call_deferred("run")
 
 func expect(value: bool, message: String):
@@ -64,10 +68,21 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 	# Godot desktop ScrollContainer enables the touchscreen drag path only
 	# with this runtime emulation flag; no project setting is saved.
 	Input.emulate_touch_from_mouse=(mode=="touch")
-	root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
-	root.content_scale_size=Vector2i.ZERO
-	root.size=size
-	DisplayServer.window_set_size(size)
+	if config.get("fullscreen",false):
+		# The CLI requests actual fullscreen. Never replace its screen-sized
+		# viewport with the old 1280/960 test dimensions or enlarge a PNG.
+		var deadline=Time.get_ticks_msec()+10000
+		while Time.get_ticks_msec()<deadline:
+			if root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN and DisplayServer.window_get_size()==DisplayServer.screen_get_size(DisplayServer.window_get_current_screen()): break
+			await process_frame
+		expect(root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"CLI enters actual fullscreen mode")
+	else:
+		expect(root.mode==Window.MODE_WINDOWED and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_WINDOWED,"CLI enters explicit windowed mode")
+		root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
+		root.content_scale_size=Vector2i.ZERO
+		root.size=size
+		DisplayServer.window_set_size(size)
+	if not failures.is_empty(): return
 	ui=Main.instantiate()
 	# Configuration only: no seed/economy/phase/state replacement.
 	ui.save_path=folder+"/restaurant-save.json"
@@ -87,7 +102,10 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 	await frames(6)
 	await screenshot(mode+"-initial-viewport")
 	expect(ui.game.view().has("progression"),"restaurant core v2 exposes progression")
-	expect(ui.size==Vector2(size),"viewport uses requested dimensions")
+	if config.get("fullscreen",false):
+		expect(ui.size==root.get_visible_rect().size,"main scene fills actual fullscreen viewport")
+	else:
+		expect(ui.size==Vector2(size),"viewport uses requested dimensions")
 
 func pad_button(index: int):
 	for down in [true,false]:
@@ -206,8 +224,23 @@ func screenshot(name: String):
 	if DisplayServer.get_name()=="headless": return
 	await RenderingServer.frame_post_draw
 	var path=folder+"/"+attempt+"-"+name+".png"
-	expect(root.get_texture().get_image().save_png(path)==OK,"engine viewport PNG: "+name)
+	var texture=root.get_texture()
+	var picture=texture.get_image()
+	var screen=DisplayServer.window_get_current_screen()
+	var screen_size=DisplayServer.screen_get_size(screen)
+	var window_size=DisplayServer.window_get_size()
+	var viewport_size=root.get_visible_rect().size
+	var sample={"path":path,"elapsed_ms":Time.get_ticks_msec()-started_ms,"requested_mode":"fullscreen" if config.get("fullscreen",false) else "windowed","window_mode":DisplayServer.window_get_mode(),"root_mode":root.mode,"screen":screen,"screen_scale":DisplayServer.screen_get_scale(screen),"screen_size":[screen_size.x,screen_size.y],"window_size":[window_size.x,window_size.y],"root_size":[root.size.x,root.size.y],"viewport_size":[int(viewport_size.x),int(viewport_size.y)],"texture_size":[texture.get_width(),texture.get_height()],"png_size":[picture.get_width(),picture.get_height()],"window_focused":root.has_focus()}
+	sample.content_scale_mode=root.content_scale_mode
+	sample.content_scale_size=[root.content_scale_size.x,root.content_scale_size.y]
+	display_samples.append(sample)
+	expect(picture.save_png(path)==OK,"engine viewport PNG: "+name)
 	screenshots.append(path)
+	var required_mode=DisplayServer.WINDOW_MODE_FULLSCREEN if config.get("fullscreen",false) else DisplayServer.WINDOW_MODE_WINDOWED
+	expect(sample.window_mode==required_mode and int(root.mode)==int(required_mode),"screenshot uses requested native window mode")
+	expect(sample.png_size==sample.texture_size and sample.png_size==sample.root_size and sample.png_size==sample.window_size,"PNG preserves actual rendered texture and window dimensions")
+	if config.get("fullscreen",false): expect(sample.window_size==sample.screen_size,"fullscreen viewport occupies actual screen dimensions")
+	else: expect(sample.png_size==sample.viewport_size,"windowed layout PNG matches requested logical viewport")
 	visual_evidence=inspect_visible_assets()
 	visual_evidence.viewport_png=path
 	visual_evidence.observed_after_render=true
@@ -523,7 +556,9 @@ func run():
 	await fresh(size,stage=="restore-smoke" or stage.begins_with("after-"))
 	if not failures.is_empty(): return
 	var hot=mode!="touch"
-	if stage=="exit-smoke":
+	if stage=="display":
+		checkpoint="display-checked"; write_report(); quit(0 if failures.is_empty() else 1)
+	elif stage=="exit-smoke":
 		await save_and_exit("smoke")
 	elif stage=="restore-smoke":
 		await restore("smoke",true)
@@ -611,6 +646,8 @@ func write_report():
 	report["startup_feedback"]=startup_feedback
 	report["active_scene"]=active_scene_name()
 	report["active_asset_evidence"]=visual_evidence
+	report["display_samples"]=display_samples
+	report["focus_events"]=focus_events
 	report["active_assets_loaded"]=visual_evidence.get("active_scene")==report.active_scene and visual_evidence.get("active_assets_loaded",false)
 	# The last live rendered frame is authoritative; children may already be
 	# exiting when the product's tree_exiting observer writes the final report.

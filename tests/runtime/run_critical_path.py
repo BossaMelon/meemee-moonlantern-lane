@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -18,7 +19,7 @@ from pathlib import Path
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
           ("after-collected", "finished"), ("after-finished", "complete")]
-AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
+AUXILIARY_STAGES = {"display": "display-checked", "layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
 RESTORE_STAGES = {stage for stage, _ in STAGES if stage != "start"} | {"restore-smoke"}
 
 
@@ -33,8 +34,13 @@ def main() -> int:
     parser.add_argument("--modes", nargs="+", choices=["mouse", "touch", "pad"], default=["mouse", "touch", "pad"])
     parser.add_argument("--stage", choices=[x[0] for x in STAGES] + list(AUXILIARY_STAGES), help="Targeted continuation using existing real save/checkpoint files")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
+    window_mode = parser.add_mutually_exclusive_group()
+    window_mode.add_argument("--fullscreen", action="store_true", help="Use the actual fullscreen viewport without assigning a test resolution")
+    window_mode.add_argument("--windowed", action="store_true", help="Explicit windowed mode (the default), including narrow layout checks")
     parser.add_argument("--timeout", type=int, default=300)
     args = parser.parse_args()
+    if args.fullscreen and args.size:
+        parser.error("--fullscreen cannot be combined with --size; fullscreen uses the actual screen viewport")
     root = Path(__file__).resolve().parents[2]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -52,7 +58,7 @@ def main() -> int:
         "git_status": command_output("git", "status", "--porcelain", cwd=root),
         "source_sha256": sources, "os": platform.platform(),
         "engine": command_output(godot, "--version", cwd=root),
-        "runs": [], "passed": False,
+        "runs": [], "passed": False, "requested_window_mode": "fullscreen" if args.fullscreen else "windowed",
         "scope": "P01/P14 runtime evidence only; automated prototype gate remains separate.",
         "limits": ["Synthetic input, not physical devices or human playtest.",
                    "Every restart checkpoint requires the real product save-and-quit control and observed process exit.",
@@ -74,11 +80,11 @@ def main() -> int:
                 continue
             attempt = stage + "-" + uuid.uuid4().hex[:8]
             config = folder / f"{attempt}-config.json"
-            settings = {"output": str(folder), "mode": mode, "stage": stage, "attempt": attempt}
+            settings = {"output": str(folder), "mode": mode, "stage": stage, "attempt": attempt, "fullscreen": args.fullscreen}
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
-            command = [str(root / "tools/启动月灯巷.command"), "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
+            command = [str(root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
                        "--script", "tests/runtime/critical_path.gd", "--", "--config", str(config)]
             run = {"mode": mode, "stage": stage, "command": command, "environment": {"GODOT": godot}, "expected_checkpoint": expected}
             evidence["runs"].append(run)
@@ -118,17 +124,36 @@ def main() -> int:
             run["automatic_restore_verified"] = result.get("automatic_restore_verified", False)
             run["active_scene"] = result.get("active_scene")
             run["active_assets_loaded"] = result.get("active_assets_loaded", False)
+            run["display_samples"] = result.get("display_samples", [])
+            # Read the actual PNG header independently of the driver's dimensions.
+            # Never resize a screenshot to satisfy fullscreen evidence.
+            display_valid = bool(run["display_samples"])
+            for sample in run["display_samples"]:
+                png = Path(sample.get("path", ""))
+                header = png.read_bytes()[:24] if png.is_file() else b""
+                dimensions = list(struct.unpack(">II", header[16:24])) if len(header) == 24 and header[:8] == b"\x89PNG\r\n\x1a\n" and header[12:16] == b"IHDR" else []
+                sample["actual_png_size"] = dimensions
+                display_valid = display_valid and (
+                    sample.get("requested_mode") == evidence["requested_window_mode"]
+                    and sample.get("window_mode") == (3 if args.fullscreen else 0)
+                    and sample.get("root_mode") == (3 if args.fullscreen else 0)
+                    and len(dimensions) == 2 and all(x > 0 for x in dimensions)
+                    and dimensions == sample.get("png_size") == sample.get("texture_size")
+                    and sample.get("window_size") == sample.get("root_size") == dimensions
+                    and len(sample.get("viewport_size", [])) == 2 and all(x > 0 for x in sample["viewport_size"])
+                    and (sample.get("screen_size") == dimensions if args.fullscreen else sample.get("viewport_size") == dimensions))
+            run["display_verified"] = display_valid
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
                              and (stage not in RESTORE_STAGES or run["automatic_restore_verified"] is True)
-                             and (expected in ("complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
+                             and (expected in ("complete", "display-checked", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
                              and run["active_scene"] in ("restaurant", "expedition")
                              and run["active_assets_loaded"] is True
                              and result.get("active_asset_evidence", {}).get("visible") is True
                              and result.get("active_asset_evidence", {}).get("observed_after_render") is True
-                             and result.get("display") not in (None, "headless"))
+                             and result.get("display") not in (None, "headless") and display_valid)
             write_report()
             print(f"{mode}/{stage}: {'PASS' if run['passed'] else 'FAIL'}; {run['checks']} checks; {log_path}", flush=True)
             if not run["passed"]:
