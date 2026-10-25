@@ -92,3 +92,5 @@ python3 tests/runtime/run_critical_path.py --suite quality-slice --godot /absolu
 `runtime-isolation.json` 记录 probe、固定候选及路径；`*-product-save.json(.bak)` 保存每阶段实际字节；每次 `--stage` 续跑要求同一完整候选/tree/文件哈希和独立用户目录。代码改变后必须新建输出重新运行，不能把旧过程与新源码拼成一次成功。缺正式依赖、错误目录、旧档/源码变化、自动恢复不一致、无真实退出、缺渲染或未知阶段均失败。Q01–Q05 仍来自核心 runner，Q06 不加入自动 cases，QH 永不自动判过。
 
 E02 `345a904` / A02 新地图的原生素材门槛由 `rain_night_path.gd` 强制执行：实际绘制缓存必须已有 `rain_ground_routes`、`rain_canal_shallow`、`garden_root_log_50`、`garden_root_log_45`，不能用旧背景/树桩替代。观察器从实际面板读取当帧地形、碰撞记录、树桩绘制位置/比例/pivot与存活孢子怪姿态，和 viewport PNG 一起保留。水波不再是常驻网格，普通干地帧标不适用；实际玩家涉水且附近已产生水波时另截图并要求 `water_ripple` 正向加载，活跃孢子时要求 `spore_cloud`。每场真实原生探险结束还必须已有涉水、活跃孢子和碰撞三个图像记录，否则失败。测试不主动加载任何纹理；headless 诊断完全跳过这些图像断言，不能提供新地图视觉结论。此门槛须待正式 E02/A02 合入最终 P05 组合后在授权原生时段执行。
+
+P05 `571b7d4` 的正式可读文案协议已接入：订单、预留份号及料理制作批次核对 Label 的 `order_id` / `item_uid` / `prepared_wave_id` metadata，不要求把机器订单号写在玩家文案里。活动订单仍须可定位；已送达/离开订单可先折叠，但必须有真实 `service_history_toggle`。每个波次边界经对应输入展开历史，核对全部订单与完整 Session 不变；波间唯一 `start_wave` 必须仍为固定页脚同一按钮、同一位置，且不位于滚动容器内。观察器只读 metadata，展开通过实际 InputEvent，不调用组件回调。

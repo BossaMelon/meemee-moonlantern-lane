@@ -60,7 +60,7 @@ func is_economic_control(id: String) -> bool:
 	return super.is_economic_control(id) or id in ["start_wave","next_morning","menu_priority_apply","consume_star_soup","special_decline"] or id.begins_with("recycle_") or id.begins_with("price_")
 
 func is_presentation_control(id: String) -> bool:
-	return super.is_presentation_control(id) or id.begins_with("priority_up_") or id.begins_with("priority_down_") or id.begins_with("select_") or id in ["inventory_details_toggle","rare_keep"] or id.begins_with("rare_cook_")
+	return super.is_presentation_control(id) or id.begins_with("priority_up_") or id.begins_with("priority_down_") or id.begins_with("select_") or id in ["inventory_details_toggle","service_history_toggle","rare_keep"] or id.begins_with("rare_cook_")
 
 func activate(id: String):
 	if id in ["start_wave"]: await open_sheet("counter")
@@ -76,6 +76,20 @@ func observe_component(section: String):
 	var observed=Controls.observe(ui,section,ui.game.view(),ui.selected_item if section=="menu" else "")
 	component_observations.append(observed)
 	expect(observed.errors.is_empty(),"published "+section+" controls reflect actual view: "+str(observed.errors))
+	return observed
+
+func observe_service_history():
+	var observed: Dictionary=observe_component("service")
+	if observed.collapsed_orders.is_empty(): return
+	var snapshot: Dictionary=ui.game.snapshot()
+	var start=ui.get_action_control("start_wave")
+	var rect: Rect2=start.get_global_rect() if is_instance_valid(start) else Rect2()
+	await activate_visible("service_history_toggle")
+	expect(json_equal(snapshot,ui.game.snapshot()),"expanding completed service history leaves the full Session unchanged")
+	observed=observe_component("service")
+	expect(observed.collapsed_orders.is_empty(),"real history input exposes every completed order with its original metadata")
+	if is_instance_valid(start):
+		expect(ui.get_action_control("start_wave")==start and start.get_global_rect()==rect and not ui.scroll.is_ancestor_of(start),"actual unique next-wave footer keeps its instance and position when history expands")
 
 func inspect_visible_assets() -> Dictionary:
 	var evidence=super.inspect_visible_assets()
@@ -200,7 +214,7 @@ func wait_wave(expected_phase: String):
 	expect(not rows.is_empty(),"completed wave has actual customer outcomes")
 	await create_timer(0.35,true,false,true).timeout
 	expect(json_equal(snapshot,ui.game.snapshot()),"true wave boundary freezes the complete state without forced waiting")
-	await open_sheet("counter"); observe_component("service")
+	await open_sheet("counter"); await observe_service_history()
 	await screenshot(mode+"-rain-wave-%d"%wave)
 	await close_sheet()
 
