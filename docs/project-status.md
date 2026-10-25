@@ -33,7 +33,7 @@ H01 最终候选为 `e12c76c82afad87ddbec37fd8408b4793f8281bb`，本地报告记
 | P01 核心 | `01a172c8-545f-7391-9d0e-d8820e85fc07` | GPT-6 Astra / xhigh | [PR #5](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/5)，核心 `8b407192df979bad43273e78c4ab837e3e754d82`；等待工程 workflow 集成和负责人验收 |
 | P02 UI | `01a172c8-4c24-7dc1-bb64-307423676621` | GPT-6.1 Sol / high | [PR #6](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/6) 旧候选 `ade2bd9` 待按像素方向接续；场景与实际三日运行仍待验 |
 | A01 像素美术 | `01a172c8-6555-7a91-938b-e0f6d239133b` | GPT-6 Astra / high | 已派发；独占 `assets/pixel/**`；像素资源完成及视觉检查待证据 |
-| H01 工程、CI、启动器与 H03 文档维护 | `01a172c8-6d55-7282-84dc-4926245636c6` | GPT-6.1 Sol / high | [PR #7](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/7) 已 ready；H03 另开独立 PR，作者不自行合并 |
+| H01 工程、CI、启动器与 H03 文档维护 | `01a172c8-6d55-7282-84dc-4926245636c6` | GPT-6.1 Sol / high | [PR #7](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/7) 已 ready；H03 [PR #8](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/8) 已建立，作者不自行合并 |
 
 以上均要求 Standard，禁止 Fast/Ultrafast。本机只读配置 `service_tier=default`，工程 chat turn_context 实测模型/推理为 `gpt-6.1-sol` / `high`；工具未暴露逐请求服务端 tier，未推定或修改全局设置。其余 chat 的指定配置由总协调提供，不冒充本工程 chat 的逐请求实测。
 
@@ -51,7 +51,7 @@ P03 运行验证尚待总协调派发；不为此自行创建 chat。H01/H02/H03
 ## 未完成、风险与下一步
 
 - **三日原型：未完成。** 核心与工程候选尚待合并，P02/UI 与 A01 像素素材尚待实际验收；未在本轮工程候选中打开真实游戏窗口。自动核心用例通过不能代替实际连续三日、暂停、保存退出和重启恢复。
-- **集成顺序**：总负责人先验收并合并 PR #7 到 P01，随后验收核心 PR #5，使 main 拥有无条件 prototype workflow。H03 文档独立 PR 以最新 main 为 base；在 main workflow 到位前，它的 required prototype 检查尚不会出现，不应绕过保护。随后更新 H03 分支并只刷新失效证据。UI/美术只推进各自已授权路径，不猜未完成接口。
+- **集成顺序**：总负责人先验收并合并 PR #7 到 P01，随后验收核心 PR #5，使 main 拥有无条件 prototype workflow。H03 文档 [PR #8](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/8) 以最新 main 为 base；在 main workflow 到位前，它的 required prototype 检查尚不会出现，不应绕过保护。随后更新 H03 分支并只刷新失效证据。UI/美术只推进各自已授权路径，不猜未完成接口。
 - **趣味：待人类试玩。** 两路线、自用/出售和需求预告先通过功能与经济验证，再收集真实选择、困惑与续玩意愿；未反馈前不自动扩七日切片。
 - **平台与输入：待验证。** Mac 可运行原型优先；Windows、iOS、触屏和实体手柄分别验收。本机缺完整 Xcode 和 `simctl`，iOS 构建/设备测试存在明确工具链缺口。
 - **发布：未进行。** 当前仅公开托管源码，未购买资源或服务，未对外部署/发布游戏。源码公开不等于游戏发布，发布不是三日原型的完成条件。
