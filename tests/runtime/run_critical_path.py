@@ -76,7 +76,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=["prototype", "quality-slice"], default="prototype")
     parser.add_argument("--legacy-evidence", action="append", default=[], metavar="MODE=PATH", help="Completed P03 evidence containing the selected mode's real archived save pair")
     parser.add_argument("--headless-diagnostic", action="store_true", help="Quality suite only: real input/restore diagnostic with no runtime, screenshot or Q06 pass")
-    parser.add_argument("--stage", choices=sorted({x[0] for x in STAGES + quality_runtime.STAGES} | set(AUXILIARY_STAGES)), help="Targeted continuation using existing real save/checkpoint files")
+    parser.add_argument("--stage", choices=sorted({x[0] for x in STAGES + quality_runtime.STAGES} | set(AUXILIARY_STAGES) | set(quality_runtime.AUXILIARY_STAGES)), help="Targeted continuation or fresh quality focus experiment")
     parser.add_argument("--size", type=int, nargs=2, help="Explicit Mac simulated viewport dimensions; use --stage layout for a focused check")
     window_mode = parser.add_mutually_exclusive_group()
     window_mode.add_argument("--fullscreen", action="store_true", help="Use the actual fullscreen viewport without assigning a test resolution")
@@ -85,18 +85,21 @@ def main() -> int:
     args = parser.parse_args()
     quality = args.suite == "quality-slice"
     stages = quality_runtime.STAGES if quality else STAGES
+    auxiliary = quality_runtime.AUXILIARY_STAGES if quality else AUXILIARY_STAGES
     restore_stages = {stage for stage, _ in stages if stage != "start"} | ({"restore-smoke"} if not quality else set())
-    if args.stage and args.stage not in ({stage for stage, _ in stages} | (set() if quality else set(AUXILIARY_STAGES))):
+    if args.stage and args.stage not in ({stage for stage, _ in stages} | set(auxiliary)):
         parser.error("--stage does not belong to the selected suite")
     if args.headless_diagnostic and (not quality or args.fullscreen):
         parser.error("headless diagnostic requires quality-slice and cannot claim fullscreen")
+    if quality and args.stage == "focus" and (args.headless_diagnostic or args.fullscreen):
+        parser.error("focus experiment requires a real windowed display")
     legacy = {}
     for item in args.legacy_evidence:
         mode, separator, path = item.partition("=")
         if not separator or mode not in args.modes or mode in legacy or not Path(path).is_absolute():
             parser.error("--legacy-evidence must be a unique selected MODE=ABS_PATH")
         legacy[mode] = Path(path)
-    if quality and args.stage is None and set(legacy) != set(args.modes):
+    if quality and (args.stage is None or args.stage in auxiliary) and set(legacy) != set(args.modes):
         parser.error("each quality mode needs its own --legacy-evidence MODE=ABS_PATH")
     if args.fullscreen and args.size:
         parser.error("--fullscreen cannot be combined with --size; fullscreen uses the actual screen viewport")
@@ -144,7 +147,7 @@ def main() -> int:
         save_path = folder / "restaurant-save.json"
         if quality:
             try:
-                if args.stage is None:
+                if args.stage is None or args.stage in auxiliary:
                     manifest = quality_runtime.prepare(root, godot, folder, legacy[mode], mode,
                                                        evidence["candidate_commit"], evidence["candidate_tree"])
                 else:
@@ -161,7 +164,7 @@ def main() -> int:
                 return 2
         if args.stage is None and (folder / "restaurant-save.json").exists():
             raise SystemExit(f"Refusing to overwrite existing evidence/save: {folder}. Use a new output directory or --stage.")
-        for stage, expected in ([(args.stage, AUXILIARY_STAGES[args.stage])] if not quality and args.stage in AUXILIARY_STAGES else stages):
+        for stage, expected in ([(args.stage, auxiliary[args.stage])] if args.stage in auxiliary else stages):
             if args.stage is not None and stage != args.stage:
                 continue
             attempt = stage + "-" + uuid.uuid4().hex[:8]
@@ -174,8 +177,9 @@ def main() -> int:
             if args.size:
                 settings["size"] = args.size
             config.write_text(json.dumps(settings))
+            script = "tests/runtime/focus_boundary.gd" if quality and stage == "focus" else "tests/runtime/rain_night_path.gd" if quality else "tests/runtime/critical_path.gd"
             command = [str(run_root / "tools/启动月灯巷.command"), "--fullscreen" if args.fullscreen else "--windowed", "--max-fps", "60", "--log-file", str(folder / f"{attempt}-engine.log"),
-                       "--script", "tests/runtime/rain_night_path.gd" if quality else "tests/runtime/critical_path.gd", "--", "--config", str(config)]
+                       "--script", script, "--", "--config", str(config)]
             if args.headless_diagnostic:
                 command.insert(1, "--headless")
             run = {"mode": mode, "stage": stage, "command": command, "environment": {"GODOT": godot}, "expected_checkpoint": expected}

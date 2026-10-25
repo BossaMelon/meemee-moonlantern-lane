@@ -20,6 +20,7 @@ from quality_support import file_states, isolation_changes, prepare_isolation
 STAGES = [("start", "spore-warning"), ("after-spore", "intermission"),
           ("after-intermission", "delivery-in-flight"), ("after-delivery", "upgrade-pending"),
           ("after-upgrade", "next-morning-equipped"), ("after-equipped", "complete")]
+AUXILIARY_STAGES = {"focus": "focus-complete"}
 DEFAULT_SAVE = "user://profiles/rain-night-v1/moonlantern.json"
 REQUIRED = ("game/ui/rain_night/panels.gd", "game/core/rain_night_session.gd",
             "tests/expedition/rain_driver.gd", "tests/runtime/rain_night_path.gd",
