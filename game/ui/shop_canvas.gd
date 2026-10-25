@@ -30,6 +30,11 @@ func _ready():
 	queue_redraw()
 
 func set_state(value: Dictionary):
+	var old_order = str(state.get("pending",{}).get("id",""))
+	var new_order = str(value.get("pending",{}).get("id",""))
+	# Do not visually deliver a previous ordinary sale to a newly arrived guest.
+	if not new_order.is_empty() and new_order!=old_order:
+		effects = effects.filter(func(effect): return effect.source!="sale")
 	state = value
 	queue_redraw()
 

@@ -22,8 +22,14 @@ E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bi
 Godot --headless --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- mouse
 Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- mouse
 Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- touch pad
+Godot --path . --max-fps 60 --script game/ui/checks/advanced.gd
+Godot --path . --max-fps 60 --script game/ui/checks/restart.gd -- --advanced --portrait
 ```
 
 脚本注入真实 `InputEvent`，每条路线使用 `output/restaurant-ui/` 内独立临时存档，不写玩家默认文件。缺料理核心、控件、匹配菜或完整路径均退出非零；报告保留源码 SHA256、显示驱动、输入轨迹和断言。有显示的运行使用 viewport PNG。鼠标路线含主界面/E01 真实移动、施法、闪避、新技能、暂停/保存/返回冒烟；E01 的完整三输入动作与确定性报告另由其任务交付，不能用该冒烟替代。
+
+`advanced.gd` 从第一日实际 UI 开始，借用 E01 只读位置决策策略并转换为真实键盘事件，击败普通怪取得星火菇；经营收入取得新装备，第三日再经实战取月心菇、制作并卖出高级料理。只在采集时将仿真加速至 3 倍，报告明确记录，不代表人类游玩时长。`restart.gd` 在新的引擎进程中经恢复、保存和保存退出按钮核对已有文件；`--portrait` 使用 640×960。
+
+PNG 通过 Godot ResourceLoader 加载，源码入口须先完成正式引擎导入前置；启动器归 H01 维护。已有缓存的渲染证据不证明冷启动。
 
 这些报告不替代仓库 prototype gate、系统窗口观察、iOS 真机、实体手柄或人类趣味验收。不调用 CUA/getApp，不生成 Computer Use 权限请求。旧通用 UI 恢复点仍在 PR 6，不在料理候选保留旧商品验收入口。

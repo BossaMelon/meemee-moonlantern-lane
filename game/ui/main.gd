@@ -34,6 +34,9 @@ var content: BoxContainer
 var shop_column: VBoxContainer
 var illustration: Control
 var status: Label
+var title: Label
+var status_row: HBoxContainer
+var compact = false
 var order_caption: Label
 var phase_hint: Label
 var feedback: Label
@@ -153,7 +156,7 @@ func _build_shell():
 	margin.add_child(root_box)
 	header = BoxContainer.new()
 	root_box.add_child(header)
-	var title = _label("咩咩与月灯巷",24,GOLD)
+	title = _label("咩咩与月灯巷",24,GOLD)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	toolbar = HFlowContainer.new()
@@ -165,7 +168,7 @@ func _build_shell():
 	toolbar.add_child(_button("save","保存",func(): _save(false)))
 	toolbar.add_child(_button("load","恢复",_load_game))
 	toolbar.add_child(_button("quit","保存退出",func(): _save(true)))
-	var status_row = HBoxContainer.new()
+	status_row = HBoxContainer.new()
 	root_box.add_child(status_row)
 	status = _label("",19)
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -220,8 +223,17 @@ func _build_shell():
 
 func _resize_layout():
 	if not built: return
-	narrow = size.x < 880
-	header.vertical = size.x < 680
+	compact = size.y<560 and size.x>=720
+	narrow = size.x<880 and not compact
+	header.vertical = size.x<680 and not compact
+	status_row.visible = not compact
+	root_box.add_theme_constant_override("separation",6 if compact else 8)
+	for edge in ["left","top","right","bottom"]: margin.add_theme_constant_override("margin_"+edge,8 if compact else 12)
+	feedback.custom_minimum_size.y = 24 if compact else 42
+	feedback.max_lines_visible = 1 if compact else -1
+	feedback.add_theme_font_size_override("font_size",16 if compact else 17)
+	phase_hint.max_lines_visible = 2 if compact else -1
+	phase_hint.add_theme_font_size_override("font_size",16 if compact else 17)
 	content.vertical = narrow
 	var zoom = maxi(1,floori(minf((size.x-490)/384.0,(size.y-190)/256.0)))
 	shop_column.custom_minimum_size.x = 0 if narrow else 384*zoom+4
@@ -229,6 +241,15 @@ func _resize_layout():
 	shop_column.size_flags_vertical = Control.SIZE_FILL if narrow else Control.SIZE_EXPAND_FILL
 	illustration.custom_minimum_size = Vector2(384,256)
 	shop_column.custom_minimum_size.y = 260 if narrow else 0
+	_update_status()
+	_wire_focus()
+
+func _update_status():
+	if view.is_empty(): return
+	var format = "%d / 3 日 · %s · %d 金\n待服务 %d%s" if size.x<720 else "第 %d / 3 日 · %s · 金币 %d · 待服务 %d%s"
+	status.text = format % [view.day,PHASES.get(view.phase,str(view.phase)),view.cash,view.customers_remaining," · 已暂停" if view.paused else ""]
+	title.text = "%d/3 %s · %d金 · 余%d客%s" % [view.day,PHASES.get(view.phase,str(view.phase)),view.cash,view.customers_remaining," · 暂停" if view.paused else ""] if compact else "咩咩与月灯巷"
+	title.add_theme_font_size_override("font_size",18 if compact else 24)
 
 func _label(value: String, font_size: int = 18, color: Color = CREAM) -> Label:
 	var label = Label.new()
@@ -292,7 +313,7 @@ func _refresh():
 	var context = str(view.phase)+":"+tab+":"+pending_id
 	if context != body_context: old_scroll = 0
 	body_context = context
-	status.text = "第 %d / 3 日  ·  %s  ·  金币 %d  ·  待服务 %d%s" % [view.day,PHASES.get(view.phase,str(view.phase)),view.cash,view.customers_remaining,"  ·  已暂停" if view.paused else ""]
+	_update_status()
 	pause_button.text = "继续" if view.paused else "歇一歇"
 	illustration.set_state(view)
 	order_caption.visible = not view.pending.is_empty()
@@ -325,6 +346,7 @@ func _refresh():
 		for id in action_controls:
 			if id not in ["pause","save","load","quit","view_room","view_lane","to_gear"] and not id.begins_with("tab_"): action_controls[id].disabled = true
 	feedback.text = messages.back() if not messages.is_empty() else ""
+	feedback.tooltip_text = feedback.text
 	_sync_battle_route()
 	_wire_focus()
 	refresh_serial += 1
@@ -392,9 +414,18 @@ func _row_title(card: VBoxContainer, id: String, title: String, subtitle: String
 func _batch_selector():
 	var row = HFlowContainer.new()
 	body.add_child(row)
-	row.add_child(_label("本次份数",18,MUTED))
+	var caption = _label("本次份数",18,MUTED)
+	caption.autowrap_mode = TextServer.AUTOWRAP_OFF
+	caption.custom_minimum_size = Vector2(80,48)
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(caption)
 	row.add_child(_button("batch_less","−",_change_batch.bind(-1),batch>1))
-	row.add_child(_label(str(batch),23,GOLD))
+	var count = _label(str(batch),23,GOLD)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	count.custom_minimum_size = Vector2(52,48)
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(count)
 	row.add_child(_button("batch_more","＋",_change_batch.bind(1),batch<80))
 	for n in [1,3,5]: row.add_child(_button("batch_%d"%n,str(n),_set_batch.bind(n)))
 
@@ -408,13 +439,18 @@ func _set_batch(value: int):
 
 func _build_shopping():
 	body.add_child(_label("月灯巷食材摊",24,GOLD))
-	body.add_child(_label(view.forecast.text,17,MUTED))
+	body.add_child(_label("第三日有雨：暖焰汤（供货契约）或保温炖锅（留用坩埚）。食材与来源见手账。",17,MUTED))
 	_batch_selector()
 	for supply in view.supply:
 		var card = _card()
-		_row_title(card,supply.item_id,"%s · %d 金 / 份" % [supply.name,supply.buy],"今日余 %d · 储藏 %d" % [supply.quantity,_inventory(supply.item_id).bag])
+		var row=HBoxContainer.new()
+		card.add_child(row)
+		row.add_child(_icon(supply.item_id))
+		var description=_label("%s · %d 金/份\n今日余 %d · 储藏 %d" % [supply.name,supply.buy,supply.quantity,_inventory(supply.item_id).bag],18)
+		description.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		row.add_child(description)
 		var possible = view.phase=="shopping" and supply.available and batch<=supply.quantity and batch*int(supply.buy)<=view.cash
-		card.add_child(_button("buy_"+str(supply.item_id),"采购 %d 份 · %d 金" % [batch,batch*int(supply.buy)],_act.bind("buy",{"item_id":str(supply.item_id),"quantity":batch}),possible))
+		row.add_child(_button("buy_"+str(supply.item_id),"买%d份 · %d金" % [batch,batch*int(supply.buy)],_act.bind("buy",{"item_id":str(supply.item_id),"quantity":batch}),possible))
 		if not possible:
 			var reason = str(supply.reason)
 			if view.phase=="shopping" and reason.is_empty(): reason = "本次份数超过供货或可用金币，请调低份数。"
@@ -521,18 +557,25 @@ func _build_special():
 		_row_title(card,"hagrid","海格 · 巡护带餐","暖身、保温、可外带的料理。完成回赠暖焰草；也可以跳过。")
 	else: card.add_child(_label(pending.text,21,GOLD))
 	card.add_child(_label("切到菜单可查看实际份数，再回到「委托」交付。",17,MUTED))
-	for option in pending.options:
+	var choices: Array = pending.options.duplicate(true)
+	choices.sort_custom(func(a,b): return a.available and not b.available)
+	for option in choices:
 		if not option.available and _inventory(option.item_id).shelf<=0: continue
 		var choice = _card()
 		_row_title(choice,option.item_id,option.name,"%d 金 · 菜单剩 %d" % [option.price,_inventory(option.item_id).shelf])
 		choice.add_child(_button("fulfill_"+option.item_id,"交付这份料理",_act.bind("fulfill",{"order_id":pending.id,"item_id":option.item_id}),option.available))
-		choice.add_child(_label("效果与预算匹配，可以交付。" if option.available else option.reason,17,MUTED))
+		choice.add_child(_label("效果与预算匹配，可以交付。" if option.available else _human_text(str(option.reason)),17,MUTED))
 	body.add_child(_button("special_menu","查看菜单与份数",_select_tab.bind("shelf")))
 	body.add_child(_button("special_decline","跳过这次委托，继续营业",_act.bind("decline",{"order_id":pending.id})))
 
 func _build_journal():
 	body.add_child(_label("咩咩的饭店手账",24,GOLD))
+	var world=HFlowContainer.new()
+	body.add_child(world)
+	world.add_child(_button("journal_room","查看饭店全景",_show_world.bind(false)))
+	world.add_child(_button("journal_lane","看看月灯巷",_show_world.bind(true)))
 	body.add_child(_label(view.forecast.text,18,GOLD))
+	body.add_child(_label("海格巡护带餐："+_quest_status(),18,GOLD))
 	for order in view.demand_board:
 		var who = "海格 · 巡护带餐" if order.get("character_id","")=="hagrid" else ("特别点单" if order.special else "普通客人")
 		body.add_child(_label("%s %s · %s · 预算%d" % ["✓" if order.processed else "○",who,_effects(order.required),order.budget],17))
@@ -544,6 +587,7 @@ func _build_summary():
 	var summary = view.summary
 	body.add_child(_label("第 %d 日账单\n料理收入 %d − 已售成本 %d = 毛利 %d\n店铺费用 %d · 结末金币 %d" % [summary.day,summary.revenue,summary.sold_cost,summary.gross_profit,summary.fee,summary.cash],20))
 	body.add_child(_label("库存、厨具售回、奖励与升级另有来源，不把回收收入当料理毛利。",17,MUTED))
+	body.add_child(_label("海格巡护带餐："+_quest_status(),18,GOLD))
 	if not view.finished:
 		for upgrade in view.upgrades:
 			var card = _card()
@@ -561,6 +605,9 @@ func _build_stock(kind: String, title: String):
 		if item.kind != kind: continue
 		body.add_child(_label("%s：%s" % [item.name,"储藏%d"%item.bag if kind=="ingredient" else "备好%d / 菜单%d" % [item.bag,item.shelf]],17,MUTED))
 
+func _quest_status() -> String:
+	return {"not_offered":"尚未到访","pending":"正在等候","completed":"已完成，奖励已进入储藏","declined":"已跳过，不影响后续经营"}.get(view.quests.hagrid_patrol,str(view.quests.hagrid_patrol))
+
 func _inventory(id: String) -> Dictionary:
 	for item in view.inventory:
 		if item.item_id==id: return item
@@ -568,6 +615,10 @@ func _inventory(id: String) -> Dictionary:
 
 func _enabled(kind: String) -> bool:
 	return bool(view.available_commands.get(kind,{}).get("enabled",false))
+
+func _human_text(value: String) -> String:
+	for tag in EFFECTS: value = value.replace(tag,EFFECTS[tag])
+	return value
 
 func _effects(tags: Array) -> String:
 	var values: Array[String] = []
@@ -593,10 +644,11 @@ func _primary_action():
 			else: tab = "shopping"; _act("next_day",{})
 
 func _act(kind: String, args: Dictionary):
-	if game.view().paused:
+	if game.view().paused and kind!="leave_expedition":
 		_notice("小店已暂停，请先继续。")
 		_refresh()
 		return
+	if kind=="leave_expedition": _release_battle_inputs()
 	var guest = str(game.view().pending.get("character_id","")) if kind=="fulfill" else ""
 	request_serial += 1
 	var result = game.command(kind,args,request_prefix+":"+str(request_serial))
@@ -627,6 +679,18 @@ func _save(exit_when_saved: bool):
 	_notice(("保存成功：" if result.ok else "保存失败：")+str(result.message))
 	_refresh()
 	if result.ok and exit_when_saved: get_tree().quit()
+	elif not result.ok:
+		game.set_paused(true)
+		_refresh()
+		var error_dialog=AcceptDialog.new()
+		error_dialog.name="SaveFailure"
+		error_dialog.title="保存失败，当前进度仍保留"
+		error_dialog.dialog_text=str(result.message)
+		error_dialog.theme=theme
+		error_dialog.get_ok_button().custom_minimum_size=Vector2(96,48)
+		error_dialog.confirmed.connect(error_dialog.queue_free)
+		add_child(error_dialog)
+		error_dialog.popup_centered(Vector2i(mini(480,int(size.x)-24),180))
 
 func _load_game():
 	_release_battle_inputs()
@@ -654,6 +718,7 @@ func _sync_battle_route():
 		battle_panel.returned.connect(_on_returned,CONNECT_DEFERRED)
 		battle_panel.pause_requested.connect(_toggle_pause,CONNECT_DEFERRED)
 		battle_panel.save_requested.connect(_save.bind(false),CONNECT_DEFERRED)
+		battle_panel.connect("save_quit_requested",_save.bind(true),CONNECT_DEFERRED)
 	elif is_instance_valid(battle_panel): battle_panel.refresh()
 	elif not is_instance_valid(battle_missing):
 		battle_missing = VBoxContainer.new()
@@ -662,7 +727,6 @@ func _sync_battle_route():
 		battle_missing.add_child(_label("动作场景尚未接入当前候选",24,GOLD))
 		battle_missing.add_child(_label("需要 E01 发布的固定模块与场景，不能用菜单代替真实战斗。"))
 		battle_missing.add_child(_button("missing_expedition_return","撤退回饭店",_act.bind("leave_expedition",{})))
-
 func _on_returned():
 	var counts = {}
 	for drop in game.view().expedition.drops:
@@ -685,7 +749,10 @@ func _event_text(event: Dictionary) -> String:
 		var text = str(value)
 		for tag in EFFECTS: text = text.replace(tag,EFFECTS[tag])
 		reasons.append(text)
-	return "%s · +%d 金 · %s" % [name_text,event.get("revenue",0),"；".join(reasons)]
+	var reward_text = ""
+	if event.get("quest_id","")=="hagrid_patrol" and int(event.get("revenue",0))>0:
+		reward_text = " · 巡护委托完成，奖励 "+_rewards(event.get("rewards",[]))
+	return "%s%s · +%d 金 · %s%s" % ["海格 · " if event.get("character_id","")=="hagrid" else "",name_text,event.get("revenue",0),"；".join(reasons),reward_text]
 
 func _record_events(events: Array):
 	for event in events:

@@ -142,7 +142,7 @@ func shop_and_prepare(targets: Dictionary, hot: bool):
 		if missing>0:
 			await quantity(missing)
 			await activate("craft_"+output)
-			if ui.view.day==1 or output=="ember_soup": await screenshot(mode+"-"+output+"-cooking")
+			if ui.view.day==1 or output in ["ember_soup","star_soup","comet_pie"]: await screenshot(mode+"-"+output+"-cooking")
 	await activate("to_shelf")
 	for output in targets:
 		var count = int(inventory(output).bag)
@@ -229,6 +229,7 @@ func battle_route_smoke():
 	expect(not ui.game.view().paused,"action pause button resumes once")
 	await activate_control(ui.battle_panel.return_button,"battle_return")
 	expect(ui.view.phase=="shopping" and not is_instance_valid(ui.battle_panel),"return unmounts action scene and restores shop")
+	if ui.view.paused: await activate("pause")
 	await activate("tab_shopping")
 
 func route(value: String, size: Vector2i):
