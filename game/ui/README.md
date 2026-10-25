@@ -1,26 +1,29 @@
-# UI 接口与输入检查
+# 饭店主 UI 接口
 
-`scenes/main.tscn` 的 Control 使用 `main.gd`。所有经济命令、经营阶段和持久状态由 `GameSession` 负责；UI 只读取 `view()`，每次玩家意图使用新的 request ID。按钮数量与可用条件随 view 重建。
+主场景 `scenes/main.tscn` 使用 `main.gd`。经营与持久状态由 P01 `GameSession` 负责，动作模拟及动作控件由 E01 负责；UI 不写回 `view()`，每次提交意图使用新 request ID。料理/成长规则来源是冻结契约 `4d06f59` 的 docs05。
 
-- `get_action_control(action_id)` 只用于定位真实控件、读取点击坐标和观察焦点。验收应注入 `InputEvent`，不能直接发 `pressed` 信号或直接调用核心命令代替 UI 路径。
-- 按钮至少 48×48 逻辑像素，使用 Control 焦点链。D-pad/方向键导航、手柄南侧面键确认、Escape/Start 暂停。触屏使用 Godot 公开的触控鼠标模拟。
-- 暂停时禁用经营按钮；保存、恢复及查看页签仍可操作。特殊需求保持在当前订单，普通营业不推进。重建不立即释放正在发信号的对象；回调延迟到事件分发完成后执行。
-- 营业时间以 UI 累积的 100ms 批次交给 `advance()`；不在逐帧整数舍入中丢时间。暂停、特殊需求或非营业阶段清除尚未提交的 UI 计时余量。
-- 根 Control 按实际窗口尺寸重排，避免把整个 1280×720 界面缩小到窄屏。业务列表可滚动，焦点移动会确保目标可见。
+## 页面与素材
 
-## 图像挂接
+采购、备餐、菜单、装备、手账可用鼠标、触屏或焦点确认。特殊需求自动打开委托页；需求、预算和奖励固定在滚动区外，可切到菜单查份数，再回委托交付或跳过。储藏原料、备好料理、菜单剩余和装配厨具分开显示。暂停禁用经营输入，仍可查看、保存和恢复；坏档有明确反馈。
 
-`main.gd` 导出 `interior_art_path` 与 `lane_art_path` 两个 PNG 路径，由场景绑定 A01 实际交付的资源。`shop_canvas.gd` 使用 TextureRect 与 nearest 采样、等比完整显示；`show_lane(bool)` 切换内外景。A01 的像素文件与 manifest 归美术任务所有，P02 不覆盖。缺图时显示明确提示，不以旧代码矢量画代替资产。
+`pixel_assets.gd` 只读 A01 的 manifest、实际 PNG 和九宫格信息。`shop_canvas.gd` 读取餐厅空房壳、布局清单、独立人物/家具及脚底 pivot，原生 384×256 整数倍显示；街巷同样使用真实背景。制作成功与实际成交触发 `effect_id` 对应的浮空送餐、暖焰/蒸汽、自搅、星火轨迹和彗尾。海格感谢只在实际交付成功后触发；这些动画不决定经济结果。
 
-## 可执行输入回归
+## 主界面与动作边界
+
+E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`，发出 `returned`、`pause_requested`、`save_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
+
+动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。
+
+## 输入回归
+
+`get_action_control(action_id)` 供运行验证读取真实按钮和位置；不能直接发 `pressed` 信号或调用核心命令冒充 UI 输入。
 
 ```sh
-Godot --headless --path . --max-fps 60 --script game/ui/checks/interaction.gd
-Godot --path . --max-fps 60 --script game/ui/checks/interaction.gd -- mouse
-Godot --path . --max-fps 60 --script game/ui/checks/interaction.gd -- touch pad
-Godot --path . --max-fps 60 --script game/ui/checks/interaction.gd -- resume
+Godot --headless --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- mouse
+Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- mouse
+Godot --path . --max-fps 60 --script game/ui/checks/restaurant.gd -- touch pad
 ```
 
-脚本通过鼠标事件、模拟触屏事件或模拟 D-pad/A 输入驱动真实 Control；每种路径使用工作树 `output/p02/` 内独立临时存档，不修改玩家默认存档。`resume` 需要先完成鼠标路径；它在新引擎进程中经恢复按钮读取上一个进程保存的文件、检查日结防重，再经保存退出按钮关闭。
+脚本注入真实 `InputEvent`，每条路线使用 `output/restaurant-ui/` 内独立临时存档，不写玩家默认文件。缺料理核心、控件、匹配菜或完整路径均退出非零；报告保留源码 SHA256、显示驱动、输入轨迹和断言。有显示的运行使用 viewport PNG。鼠标路线含主界面/E01 真实移动、施法、闪避、新技能、暂停/保存/返回冒烟；E01 的完整三输入动作与确定性报告另由其任务交付，不能用该冒烟替代。
 
-有显示的运行以 viewport 图像保存 PNG，报告注明实际显示驱动、引擎版本、断言和输入轨迹。断言失败退出非零；Computer Use 不参与这些检查。模拟输入不证明 iOS 真机或实体手柄可用。该脚本中的旧 catalog 路径仅供通用控件回归；产品验收始终以冻结后的料理/动作契约及实际候选为准。
+这些报告不替代仓库 prototype gate、系统窗口观察、iOS 真机、实体手柄或人类趣味验收。不调用 CUA/getApp，不生成 Computer Use 权限请求。旧通用 UI 恢复点仍在 PR 6，不在料理候选保留旧商品验收入口。
