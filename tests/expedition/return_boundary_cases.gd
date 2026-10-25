@@ -182,12 +182,31 @@ func write_report(report: Dictionary):
 	if file == null:
 		expect(false,"cannot open report (%s): %s" % [FileAccess.get_open_error(),path])
 		return
-	var stored = file.store_string(JSON.stringify(report,"  "))
+	var serialized = JSON.stringify(report,"  ")
+	var expected_bytes = serialized.to_utf8_buffer()
+	var stored = file.store_string(serialized)
 	file.flush()
 	var error = file.get_error()
 	file.close()
 	if not stored or error != OK:
 		expect(false,"cannot write report (%s): %s" % [error,path])
+		return
+	# Buffered writes/flush can leave get_error() == OK after a short disk write.
+	# Reopen after close and verify the complete serialized UTF-8 bytes.
+	var reader = FileAccess.open(path,FileAccess.READ)
+	if reader == null:
+		expect(false,"cannot reopen report for readback (%s): %s" % [FileAccess.get_open_error(),path])
+		return
+	var actual_size = reader.get_length()
+	if actual_size != expected_bytes.size():
+		reader.close()
+		expect(false,"report readback length mismatch (expected %s bytes, got %s): %s" % [expected_bytes.size(),actual_size,path])
+		return
+	var actual_bytes = reader.get_buffer(expected_bytes.size())
+	var read_error = reader.get_error()
+	reader.close()
+	if read_error != OK or actual_bytes != expected_bytes:
+		expect(false,"report readback failed or bytes differ (%s): %s" % [read_error,path])
 func run(factory: Callable = Callable(), output_dir: String = "") -> Dictionary:
 	checks = 0; failures.clear(); evidence.clear()
 	if not prepare_output(output_dir):
