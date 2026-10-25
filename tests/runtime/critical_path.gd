@@ -83,6 +83,16 @@ func key(index: int, down: bool):
 	emit_input(e)
 	await frames(1)
 
+func scroll_gesture_origin(clip: Rect2) -> Vector2:
+	# Begin on visible text/gap, not a Button that consumes the pointer gesture.
+	for y in range(int(clip.position.y)+10,int(clip.end.y)-10,12):
+		var point=Vector2(clip.get_center().x,y)
+		var over_button=false
+		for control in ui.action_controls.values():
+			if is_instance_valid(control) and control.is_visible_in_tree() and control.get_global_rect().has_point(point): over_button=true; break
+		if not over_button: return point
+	return clip.get_center()
+
 func scroll_to(button: Button):
 	if not ui.scroll.is_ancestor_of(button): return
 	for _i in range(50):
@@ -92,7 +102,7 @@ func scroll_to(button: Button):
 		if _i in [0,1,49]: trace.append({"scroll_target":str(button.get_meta("action_id",button.name)),"iteration":_i,"clip":str(clip),"target_rect":str(rect),"scroll_vertical":ui.scroll.scroll_vertical})
 		var direction=1 if rect.get_center().y>clip.get_center().y else -1
 		if mode=="touch":
-			var at=clip.get_center()
+			var at=scroll_gesture_origin(clip)
 			var touch=InputEventScreenTouch.new()
 			touch.index=0; touch.position=at; touch.pressed=true; emit_input(touch)
 			for j in range(1,7):
