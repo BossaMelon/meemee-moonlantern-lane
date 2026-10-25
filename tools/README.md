@@ -241,6 +241,10 @@ Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub
 `731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953`，再解压并核有效 4.7.2。
 不安装全局引擎或导出模板。首次缓存必须缺席，实际 headless import 后要求纹理资源存在；
 stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` 也拒收。
+冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，输出 leaf 为尚不存在的
+`RUNNER_TEMP/w01-font`，由探针自行创建。缺探针/字体、非零退出、缺字、空绑定、OS fallback、
+字体数据或探针五项源码哈希与本次 Git blob 不符均失败；检查 Main 实际 Label/Button 绑定的字体实例。
+仅白名单上传 `font-report.json` 和日志，不上传该目录内可能产生的存档文件。
 随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
 不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
 若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次同 suite、同 120 秒上限的诊断，

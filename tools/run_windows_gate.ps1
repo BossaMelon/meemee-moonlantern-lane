@@ -312,6 +312,27 @@ exit 0
         $null = Invoke-Owned $engine @('--headless','--path',$source,'--import','--log-file',$importLog) $source 120 'import' $importLog
         $summary.imported_texture_count=@(Get-ChildItem -LiteralPath (Join-Path $source '.godot/imported') -File -Filter '*.ctex').Count
         if ($summary.imported_texture_count -lt 1) { throw 'Cold import did not produce actual texture resources.' }
+        # P07 owns the probe/provider. Missing dependency is a real failure; never skip.
+        $fontOutput=Join-Path $tempBase 'w01-font'
+        if (Test-Path -LiteralPath $fontOutput) { throw 'Font probe output must be fresh.' }
+        $fontLog=Join-Path $ReportDirectory 'font-engine.log'
+        $null = Invoke-Owned $engine @('--headless','--path',$source,'--log-file',$fontLog,'--script','game/ui/checks/portable_font.gd','--',$fontOutput) $source 120 'portable-font' $fontLog
+        $font=Read-Log (Join-Path $fontOutput 'font-report.json') | ConvertFrom-Json -AsHashtable
+        if ($font.protocol -ne 1 -or $font.checks -lt 1 -or @($font.failures).Count -or @($font.missing).Count -or -not @($font.fonts).Count -or -not @($font.bindings).Count -or $font.required_han -lt 1 -or $font.layouts.Count -ne 4) { throw 'Font probe has missing glyphs/bindings or incomplete evidence.' }
+        $manifest=Read-Log (Join-Path $source 'assets/fonts/font-manifest.json') | ConvertFrom-Json -AsHashtable
+        $expectedFonts=@{}
+        foreach ($row in @($manifest.primary)+@($manifest.fallbacks)) { $expectedFonts[$row.path]=$row.sha256 }
+        foreach ($row in $font.fonts) {
+            if ($row.class -ne 'FontFile' -or $row.allow_system_fallback -ne $false -or -not $expectedFonts.Contains($row.path) -or $row.sha256 -ne $expectedFonts[$row.path]) { throw 'Font probe data differs from pinned packaged font.' }
+        }
+        foreach ($row in $font.bindings) {
+            if (-not @($font.fonts | Where-Object { $_.path -eq $row.font_path -and $_.instance -eq $row.font_instance }).Count) { throw 'Main text binding does not use the actual packaged font instance.' }
+        }
+        $before=Read-Log (Join-Path $ReportDirectory 'source-before.json') | ConvertFrom-Json -AsHashtable
+        foreach ($name in @('game/ui/portable_font.gd','game/ui/main.gd','game/ui/checks/portable_font.gd','assets/fonts/font-manifest.json','assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import')) {
+            if ($font.source_sha256[$name] -ne $before.files[$name].sha256) { throw "Font probe source differs from verified Git blob: $name" }
+        }
+        $summary.portable_font=@{checks=$font.checks; required_characters=$font.required_characters; required_han=$font.required_han; bindings=$font.bindings.Count; fonts=$font.fonts; missing=$font.missing; source_sha256=$font.source_sha256; native_pixels_verified=$false}
         $gateReport=Join-Path $ReportDirectory 'gate-report.json'
         try {
             $null = Invoke-Owned $python @((Join-Path $source 'tools/gate.py'),'--stage','prototype','--godot',$engine,'--report',$gateReport) $source $GateTimeoutSeconds 'gate'
