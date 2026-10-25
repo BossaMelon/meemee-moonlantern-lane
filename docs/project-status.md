@@ -19,7 +19,7 @@
 | P05 | ui_implementation（原 P02） | [PR #31](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/31) 视觉候选 `749f440` 产品同 `571b7d4`/主审 `4cc5c2f`；root 核 13 源码、8 PNG、两报告哈希匹配：全屏 231 项/5 图，小屏 225 项/3 图，8 focus、两进程 exit 0、锁释放。独立审美确认原三项 UI/阅读问题全部关闭；营业重建小结点击 P2 及窄屏触屏 F05 已定向闭合；PR #31 已接收 PR #27（`8c15ef4`），并合入 PR #28（`c293a9f`），不将旧视觉报告改标到新候选。 |
 | P06 | runtime_verification（原 P03） | [PR #27](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/27) 已合入 PR #31（`8c15ef4`）；正式验收候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 的窄屏 touch 553/0、完整全屏 touch 1450/0 已由 root 实读接受，结合原 SHA mouse/pad、F04/history 与三 P2 定向证据接受 Q06 组合覆盖。原始证据与边界见下文；QH/实体硬件/Windows/iOS 未验。 |
 | A02 | pixel_art（原 A01） | 六件必要 sprite 已由 PR #21 交付。后续四件地面/浅渠/连续长桩资产 [PR #30](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/30) 内容 `9d2a3fa`，root 读代码、看 native/scale/layout，核旧 131 tracked 素材路径 blob、全部旧 manifest 记录与 SOURCES 不变；独立审美接受组件。native 更新 `fc08c8b` 资产无差、当前双 CI 绿后原生合 main `06252e00899c77359239fe0beb9cee5aa1688385`。四资产已交付，尚非 runtime/趣味验收。 |
-| D01 | engineering_delivery（沿用 H05 同 owner/chat/model/tier） | [PR #34](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/34) 工具候选 `4cbcc2e` 经 root 验收、当前双 CI 绿后原生合 main `5b9d252`。显式 SHA/现有引擎/新输出、隔离配置与自有进程组守卫已交付，24 项夹具回归及两 P2 原复现定向闭合；实际新 Mac 包尚未构建，等待 root 指定最终打包 SHA。 |
+| D01 | engineering_delivery（沿用 H05 同 owner/chat/model/tier） | [PR #34](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/34) 工具候选 `4cbcc2e` 经 root 验收、当前双 CI 绿后原生合 main `5b9d252`。显式 SHA/现有引擎/新输出、隔离配置与自有进程组守卫已交付，24 项夹具回归及两 P2 原复现定向闭合；固定 `13e5c50` 的首轮实际 headless 构建在 save 阶段失败，暂无可交付新包；失败与保存报告保留，走普通 D01 修复。 |
 
 110 取舍机制已实际闭合：root 复算 20 个热锅双买分支，现金账差额均为 0；标准档双买余 16 后可合法购买 3 份缩小篮，高价档余 52 后可购买正式 10 份篮并继续次晚。40 个正常模拟覆盖两价、两路、五种子和探索/不探索，均未依赖应急恢复。该证据来自真实命令与正式 `512bd72` 报告，替代旧 60/100 数值的缺口声明；不据此宣称全局平衡、人类趣味或 Steam 品质合格。
 
@@ -36,7 +36,7 @@ root 已实读最终报告并接受上述组合覆盖；各原始报告中的局
 
 评审已闭合：唯一组合主审绑定 `4cc5c2fa8765e4806f37098895f7a440122f5df4` 对 base `ad8bd9b90f8b001bec74602defc514e361d6a2e3`，三项 P2（坏档 `customers/night.waves`、返程余帧分帧 250 vs 0、营业重建吞 250ms 小结点击）均已确定性定向闭合；原失败保留 `/private/tmp/moonlantern-review-4cc5c2f-ya1m9hvo/`。原生 F04 焦点保持及 F05 窄屏触屏亦已闭合，原 F04 失败 `/private/tmp/p06-native-focus-704eb01/evidence-focus.json` 保留。主审与一次 D01 信任边界增量复审预算均已使用，普通修复不追加全量重审。
 
-本地交付：D01 两项 P2（终态隔离配置误收、自有同组子进程超时残留）已由 root 核对实际 diff、原 18＋新 6 回归、原复现和全部证据哈希后关闭，证据 `/private/tmp/d01-p2-closure-4cgl8_d5/fixed-evidence-index.json`。本机 Godot `4.7.2.stable.official.ed1daf0bf` 可复用；工具已交付，实际新 Mac 源码运行包尚未构建。待完整集成后由 root 明确最终 SHA，再构建并验证包入口/保存恢复/旧档保护；原生导出模板目录为空、无 `export_presets.cfg`，尚无同 repo Windows 保存项目，不假称原生 Windows 验收环境。旧临时构建器不再用于新交付，旧包与旧存档事实保持下文边界。
+本地交付：D01 两项 P2（终态隔离配置误收、自有同组子进程超时残留）已由 root 核对实际 diff、原 18＋新 6 回归、原复现和全部证据哈希后关闭，证据 `/private/tmp/d01-p2-closure-4cgl8_d5/fixed-evidence-index.json`。本机 Godot `4.7.2.stable.official.ed1daf0bf` 可复用；工具已交付；root 随后授权固定 `13e5c50` 的首次实际 headless 构建，save 阶段因构建器拒绝 Godot 解析的 `version: 3.0` 而 exit 1，尚未执行 restore/player-directory。原输出不覆盖重用，记录 `/private/tmp/d01-real-13e5c50-e4l8ol_2/failed-audit-summary.json`；共享源码、旧包及指定旧玩家主备档前后哈希一致，两个记录 PID 均退出。新包尚不可交付；先走普通 D01 修复，再明确全新输出重试及包入口/保存恢复/旧档保护验收；原生导出模板目录为空、无 `export_presets.cfg`，尚无同 repo Windows 保存项目，不假称原生 Windows 验收环境。旧临时构建器不再用于新交付，旧包与旧存档事实保持下文边界。
 
 ## 已交付与当前候选
 
