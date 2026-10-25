@@ -399,6 +399,8 @@ def build():
     preview(manifest)
     print(f"Exported {len(manifest['sprites'])} sprites and {len(manifest['backgrounds'])} backgrounds; 32-color palette.")
     update_rain_assets()
+    from build_rain_scene import build_scene
+    build_scene()
 
 
 def preview(manifest):
@@ -450,7 +452,10 @@ if __name__=="__main__":
         update_garden_only()
     elif sys.argv[1:] == ["--rain-only"]:
         update_rain_assets()
+    elif sys.argv[1:] == ["--rain-scene-only"]:
+        from build_rain_scene import build_scene
+        build_scene()
     elif not sys.argv[1:]:
         build()
     else:
-        raise SystemExit("Usage: build.py [--garden-only|--rain-only]")
+        raise SystemExit("Usage: build.py [--garden-only|--rain-only|--rain-scene-only]")
