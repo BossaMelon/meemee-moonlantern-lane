@@ -297,6 +297,20 @@ func test_saved_field_types():
 	var interrupted = func(_state): return null
 	expect(not store.load_state(path,interrupted).ok and not store.save_state(path,source,interrupted).ok,"missing validator result cannot be converted to an empty success string")
 	expect(FileAccess.get_file_as_bytes(path) == bytes,"failed validator leaves existing save bytes unchanged")
+	for field in ["version","profile_id"]:
+		var wrong = source.duplicate(true); wrong[field] = "wrong-version" if field == "version" else false
+		var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(wrong)); file.close()
+		var damaged = FileAccess.get_file_as_bytes(path)
+		expect(not g.save_to(path).ok and FileAccess.get_file_as_bytes(path) == damaged,"save refuses malformed existing identity without rewriting: "+field)
+	for field in ["intrinsic_tags","effect_id"]:
+		var corrupt = source.duplicate(true)
+		var dish = corrupt.items.filter(func(item): return item.item_id == "floating_pie")[0]
+		dish[field] = "wrong-array" if field == "intrinsic_tags" else false
+		expect(g.validate_snapshot(corrupt) != "","malformed dish effect type rejected: "+field)
+	for field in ["quantity","item_id"]:
+		var corrupt = source.duplicate(true); var purchase = corrupt.ledger.filter(func(row): return row.kind == "buy")[0]
+		purchase.args[field] = "wrong-number" if field == "quantity" else false
+		expect(g.validate_snapshot(corrupt) != "","malformed economic argument rejected: "+field)
 
 func run(folder: String) -> Dictionary:
 	output_dir = folder+"/fixtures-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)

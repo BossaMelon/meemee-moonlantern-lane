@@ -417,7 +417,7 @@ func save_to(path: String = SAVE_PATH) -> Dictionary:
 	for target in [path,path+".bak"]:
 		if FileAccess.file_exists(target):
 			var existing = JSON.parse_string(FileAccess.get_file_as_string(target))
-			if existing is Dictionary and (existing.get("version") != 3 or existing.get("profile_id") != PROFILE_ID):
+			if existing is Dictionary and (not _whole(existing.get("version"),3,3) or not existing.get("profile_id") is String or existing.profile_id != PROFILE_ID):
 				return _fail("incompatible_save","原路径含其他版本或规则存档，已保留")
 	if path == SAVE_PATH: DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_PATH.get_base_dir()))
 	return Store.save_state(path,_s,validate_snapshot)
@@ -476,7 +476,7 @@ func validate_snapshot(data: Variant) -> String:
 			equipped += 1
 		if Catalog.ITEMS[item.item_id].kind == "dish":
 			if not item.has_all(["prepared_wave_id","intrinsic_tags","effect_id"]) or not item.prepared_wave_id is String or item.prepared_wave_id.is_empty(): return "菜品缺少制作身份"
-			if item.intrinsic_tags != Catalog.ITEMS[item.item_id].tags or item.effect_id != Catalog.ITEMS[item.item_id].effect_id: return "固有料理效果被改写"
+			if not item.intrinsic_tags is Array or not item.effect_id is String or item.intrinsic_tags != Catalog.ITEMS[item.item_id].tags or item.effect_id != Catalog.ITEMS[item.item_id].effect_id: return "固有料理效果被改写"
 			if item.item_id == "moon_stew":
 				if item.get("temperature") not in ["hot","held","cooled"]: return "非法炖锅温度"
 				var hot_wave = service.wave_id if s.phase == "trading" else service.next_wave_id
@@ -647,6 +647,9 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 		for id in row.moves:
 			if not Catalog.ITEMS.has(id) or not _whole(row.moves[id],-80,80) or row.moves[id] != moves.get(id,0): return "非法库存流水"
 		var expected_cash = 0
+		if row.kind in ["buy","craft","recycle","consume"] and not _whole(row.args.get("quantity"),1,CAPACITY): return "经济流水数量类型错误"
+		if row.kind in ["buy","recycle","consume"] and not row.args.get("item_id") is String: return "经济流水物品类型错误"
+		if row.kind == "craft" and not row.args.get("recipe_id") is String: return "经济流水配方类型错误"
 		match row.kind:
 			"inheritance":
 				if i != 0 or row.created.size() != 1 or row.created[0].item_id != "stirring_cauldron" or output_cost != 0 or not row.removed.is_empty(): return "遗留厨具来源错误"
