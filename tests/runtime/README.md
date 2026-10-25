@@ -1,5 +1,22 @@
 # P03 主场景运行验收
 
+## P06 雨夜切片的独立证据准备
+
+旧三日脚本/报告只验证旧技术基线，不满足 [雨夜品质切片](../../docs/06-quality-slice.md) 的 Q06。`quality_support.py` 仅准备新的隔离证据目录和完整快照比较，不启动新产品、不调用核心命令，也不输出 Q06/QH 通过。完整新路线必须消费产品 owner 已发布的真实 UI/input 协议；Q01–Q05 自动套件由核心 runner 负责，人类 QH 不能自动通过。
+
+```sh
+python3 tests/runtime/quality_support.py --legacy-evidence /absolute/path/to/old-runtime/evidence.json --legacy-mode mouse --output /private/tmp/NEW_QUALITY_FIXTURE
+python3 -m unittest discover -s tests/runtime -p 'test_quality_support.py' -v
+```
+
+准备工具只接受旧完整运行中成功保存退出的真实主备档，核对归档 SHA256 和 v2 后逐字节复制到全新目录；不覆写旧产物或玩家数据，不造缺失备份。`preparation.json` 绑定原报告、候选、进程、来源/副本哈希以及新目录中旧默认路径的缺席状态。`isolation_changes()` 检查这些完整文件状态；新目录存在本身不能证明产品默认路径正确，后续须实跑新旧入口并记录实际 user-data/save 路径、profile/version/map 身份。准备报告固定 `runtime_verified=false`、`passed=false`、`human_status=not_assessed`，退出码0仅指准备成功。
+
+`snapshot_differences()` 比较所有对象字段与数组顺序/长度，不删除 requests、时钟、温度、UID、危险区或成长；只容许 JSON 整数的等值数值表示，拒绝 bool/number 混同与非有限数。单元夹具明确仅用于工具正反例，不是游戏存档或运行通过证明。旧三日运行说明如下。
+
+`quality_controls.gd` 消费 P05 `d2adf16` 已发布的公开控件定位协议，记录六类组件的实际 Label/Button、禁用状态和对应世界入口；按真实 view 枚举订单、在途 UID 与菜单动作，预留标签须指向同一 UID/订单。它只观察，不发命令、不选择内部页面、不安装输入绑定。最终主场景仍须通过真实世界入口和 InputEvent 打开页面，再用观察器核对。
+
+`quality_components_probe.gd` 是单独的 headless 准备诊断：`Godot --headless --path SNAPSHOT --script tests/runtime/quality_components_probe.gd -- ABS_OUTPUT mouse`（也接受 touch/pad）。SNAPSHOT 必须已组合正式 P04 新 Session 与 P05 组件；缺依赖明确失败，不回退旧 UI。它只用实际默认 Session 的初始 view，无经济推进/探险/存档；以真实设备事件切换料理身份明细、保留稀有料，验证零经济意图并保存完整初末快照。独立组件没有主场景的初始焦点链和绑定，报告保留这些信息，不能用测试 `grab_focus` 或补绑定令手柄通过。无论组件检查结果如何，报告固定 `runtime_verified=false`、`passed=false`；不能作为 Q06。下面继续说明旧三日驱动。
+
 使用已有 Godot 4.7.2，通过引擎真实渲染主场景并注入 `InputEvent`。不使用 Computer Use，不直接提交核心命令、发按钮信号、修改经济状态或调用测试专用战斗模拟。沿用 UI owner 的场景预加载、帧等待、库存和数量辅助；P03 自己编排新世界入口与采购/备餐，覆盖旧 helper 的导航。战斗决策复用 E01 `tests/expedition/action_driver.gd`，只读取实际 session 的位置并转成设备事件。
 
 ```sh
@@ -59,3 +76,33 @@ H01 共享锁已合入主仓库，获得原生渲染时段后用 `python3 /Users
 动作保存退出控件使用 E01 提交 `9fec5d4` 已发布的 `save_quit_button` / `save_quit_requested`，只读定位后通过当前设备的 InputEvent 激活；P02 信号接线必须已组合到候选，缺入口或保存后未退出均失败。恢复失败时另存完整实际快照及顶层差异字段，保留诊断证据。
 
 Mac 合成触屏路线在实例化场景前临时设置 `Input.emulate_touch_from_mouse=true`，以启用 [Godot 桌面 ScrollContainer 的触摸滚动路径](https://docs.godotengine.org/en/4.7/classes/class_scrollcontainer.html#class-scrollcontainer-signal-scroll-started)。报告记录此配置；不写 project.godot，不模拟实体设备认证，滚动仍由真实 ScreenTouch/ScreenDrag 事件执行。
+
+P06 新雨夜入口复用同一监督器与 InputEvent/viewport/保存退出实现，显式选择 `--suite quality-slice`。默认 `prototype` 参数及原三日脚本保留用于旧候选/旧包回归；新 Main 已固定雨夜 profile，不能拿旧路线在新 Main 的失败或旧包通过替代雨夜结果。
+
+```sh
+python3 tests/runtime/run_critical_path.py --suite quality-slice --godot /absolute/path/to/Godot --output /private/tmp/p06-unique --modes mouse --legacy-evidence mouse=/absolute/path/to/completed-p03/evidence.json --fullscreen
+```
+
+原生调用仍须先获得总协调时段并套共享渲染锁。三输入完整运行各提供 `--legacy-evidence MODE=ABS_PATH`，来源可以不同，但必须是对应模式已完成的真实 P03 原始主备档。`--headless-diagnostic --windowed` 使用同一真实 Main、InputEvent、正常墙钟和独立进程检查输入/经营/恢复，报告 `passed=false`、`runtime_verified=false`，只单列 `diagnostic_passed`；没有 viewport PNG，不能计入 Q06。不得加速游戏时间来获得真实时长证据。
+
+新路线按 `start → after-spore → after-intermission → after-delivery → after-upgrade → after-equipped` 执行：正式地形输入策略采集实际食材；一份稀有食材售回、一份高级食材加工上菜单、其余保留；采用正式热锅采购篮与高级料理实际配方；三波分别补餐，实际改菜单优先级，核对保温和在途 UID；日结读取真实价格购买探索装备，再合法 `next_day`、装备、制作并自食星火汤、普通新探险试用。五个中间保存点均由产品保存退出按钮结束 OS 进程。恢复在任何新输入前完整比较快照（含 requests、保持输入、敌人、孢子、冷却、预留和成长），再恢复正常操作。所有行为仍须由实际运行报告证明；脚本存在、check-only 和 headless 都不能宣布 Q06 通过。布局/失焦补充证据及人类 QH 保持独立待验。
+
+默认存档隔离使用 [Godot 4.7 ProjectSettings](https://docs.godotengine.org/en/4.7/classes/class_projectsettings.html) 的 `override.cfg` 和 `application/config/custom_user_dir_name`。监督器只接受干净候选，导出 `git archive` 并核对 Git tree，再向导出目录加入声明过哈希的 override，选择全新的 `MeeMeeMoonlanternLane-P06/<UUID>/<mode>` 用户目录。`user_dir_probe.gd` 不加载 Main/Session，先 headless 读取 `OS.get_user_data_dir()` 与默认路径解析；核对后才把旧档原样复制到该独立目录的旧位置。游戏启动后必须读到自身原有 `user://profiles/rain-night-v1/moonlantern.json`，测试从不设置新 Main 的 `save_path`。目录、来源旧档/副本、完整源码和 override 在各进程后复查；产物留存，不自动删历史证据。它不使用不存在的 `--user-data-dir` 参数，也不覆盖玩家默认目录。
+
+`runtime-isolation.json` 记录 probe、固定候选及路径；`*-product-save.json(.bak)` 保存每阶段实际字节；每次 `--stage` 续跑要求同一完整候选/tree/文件哈希和独立用户目录。代码改变后必须新建输出重新运行，不能把旧过程与新源码拼成一次成功。缺正式依赖、错误目录、旧档/源码变化、自动恢复不一致、无真实退出、缺渲染或未知阶段均失败。Q01–Q05 仍来自核心 runner，Q06 不加入自动 cases，QH 永不自动判过。
+
+E02 `345a904` / A02 新地图的原生素材门槛由 `rain_night_path.gd` 强制执行：实际绘制缓存必须已有 `rain_ground_routes`、`rain_canal_shallow`、`garden_root_log_50`、`garden_root_log_45`，不能用旧背景/树桩替代。观察器从实际面板读取当帧地形、碰撞记录、树桩绘制位置/比例/pivot与存活孢子怪姿态，和 viewport PNG 一起保留。水波不再是常驻网格，普通干地帧标不适用；实际玩家涉水且附近已产生水波时另截图并要求 `water_ripple` 正向加载，活跃孢子时要求 `spore_cloud`。每场真实原生探险结束还必须已有涉水、活跃孢子和碰撞三个图像记录，否则失败。测试不主动加载任何纹理；headless 诊断完全跳过这些图像断言，不能提供新地图视觉结论。此门槛须待正式 E02/A02 合入最终 P05 组合后在授权原生时段执行。
+
+P05 `571b7d4` 的正式可读文案协议已接入：订单、预留份号及料理制作批次核对 Label 的 `order_id` / `item_uid` / `prepared_wave_id` metadata，不要求把机器订单号写在玩家文案里。活动订单仍须可定位；已送达/离开订单可先折叠，但必须有真实 `service_history_toggle`。每个波次边界经对应输入展开历史，核对全部订单与完整 Session 不变；波间唯一 `start_wave` 必须仍为固定页脚同一按钮、同一位置，且不位于滚动容器内。观察器只读 metadata，展开通过实际 InputEvent，不调用组件回调。
+
+## 原生保持输入焦点边界
+
+`--suite quality-slice --stage focus --windowed` 使用全新隔离 profile，仍需每种输入的 `--legacy-evidence MODE=ABS_PATH`。通过真实世界入口进入战斗并持有移动/施法/闪避/技能，再用 Godot 4.7 的 `Window.mode` 最小化自己的窗口，恢复后调用一次 `DisplayServer.window_move_to_foreground()`。这是原生窗口生命周期实验，不是人类 Alt-Tab、实体设备或应用级通知的推定。报告分别保存真实 Window 焦点信号、实际收到的应用焦点通知、产品设备输入、核心保持输入与驱动缓存。
+
+失焦和恢复期间不发送输入，不清测试缓存、不补按键、不调用 `Control.grab_focus` 或发通知。只有证实产品自动清输入后，才释放物理输入并发送新按下，随后通过真实暂停/保存/保存退出结束。无真实焦点转换、残留保持输入或无原生绘制均失败；headless/fullscreen 不接受此专项。此新增脚本不改写旧完整路线报告的候选 SHA。
+
+API 合约：[Window.mode](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-property-mode)、[DisplayServer.window_move_to_foreground](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html#class-displayserver-method-window-move-to-foreground)。
+
+修复候选的定向阶段：`--stage history` 从实际默认新游戏购买5份飞饼原料，经真实料理/菜单/开门输入建立营业；三种输入分别在普通tick和真实配送边界按住小结300ms，记录控件实例、焦点、位置、pressed状态、toggle次数、营业计时/销售变化及零经济意图。`--stage narrow --size 844 390 --seed-evidence ABS_NATIVE_EVIDENCE` 仅从所选模式成功的真实孢子预警主备档复制到新隔离目录，再按原窄屏战斗/备餐路径继续。源报告、主备档hash、完整expected快照和producer PID均先验证并加入guards；不构造或改写游戏状态。
+
+窄屏脚本在原滚动算法的只读观测钩子中记录触摸起止/drag、scrollbar value/max/page、目标与clip、节点实例、焦点和指针下阻挡控件；没有赋值scroll_vertical、替换鼠标滚轮或放宽可见/等待条件。F04专项同时要求整个失焦边界仍存活、phase=expedition、status=active、未自动暂停，防止死亡/返程清输入被误判修复。
