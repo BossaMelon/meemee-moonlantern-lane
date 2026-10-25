@@ -3264,6 +3264,152 @@
       "export_alignment": "centered after fit",
       "motion_hint": "brief expanding ring at foot contact; stop when step ends; no collision",
       "terrain_note": "water and light shoreline come from map implementation, not this effect"
+    },
+    "garden_root_log_50": {
+      "file": "sprites/garden_root_log_50.png",
+      "size": [
+        70,
+        125
+      ],
+      "source": "source/garden-root-log-v2.png",
+      "source_crop": [
+        299,
+        76,
+        836,
+        1278
+      ],
+      "export_method": "nearest resize of shared source crop; 1px horizontal padding",
+      "atlas": "atlases/rain_scene_logs.png",
+      "region": [
+        0,
+        0,
+        70,
+        125
+      ],
+      "pivot": [
+        35.0,
+        77.5
+      ],
+      "opaque_bounds": [
+        1,
+        0,
+        69,
+        125
+      ],
+      "sha256": "462ab1c6c8e5a304b74e1b40465c04e21a3034ff4eb69b073ebd5c9ed1cff3ac",
+      "asset_set": "rain_scene",
+      "usage": "one continuous north-south root log; draw at model center, scale 1; no repeated stump stack",
+      "footprint": {
+        "space": "native sprite pixels; origin top-left",
+        "kind": "visible_coverage_of_existing_model_rectangle",
+        "rect": [
+          10,
+          30,
+          50,
+          95
+        ],
+        "polygon": [
+          [
+            10,
+            30
+          ],
+          [
+            59,
+            30
+          ],
+          [
+            59,
+            124
+          ],
+          [
+            10,
+            124
+          ]
+        ],
+        "authority": "E02 map revision 1; rect uses half-open bounds; polygon covers its pixel centers; never create collision from art"
+      },
+      "placement_hint": {
+        "map_revision": 1,
+        "model_center": [
+          395,
+          187.5
+        ],
+        "model_id": "north-west-stump",
+        "sorting": "model center; sprite extends 30px above footprint for raised body"
+      }
+    },
+    "garden_root_log_45": {
+      "file": "sprites/garden_root_log_45.png",
+      "size": [
+        65,
+        125
+      ],
+      "source": "source/garden-root-log-v2.png",
+      "source_crop": [
+        299,
+        76,
+        836,
+        1278
+      ],
+      "export_method": "nearest resize of shared source crop; 1px horizontal padding",
+      "atlas": "atlases/rain_scene_logs.png",
+      "region": [
+        70,
+        0,
+        65,
+        125
+      ],
+      "pivot": [
+        32.5,
+        77.5
+      ],
+      "opaque_bounds": [
+        1,
+        0,
+        64,
+        125
+      ],
+      "sha256": "5f31c134769ba655c84fd83edf17a02e00c1a2bf3367e48ac6a5a5818850e1c6",
+      "asset_set": "rain_scene",
+      "usage": "one continuous north-south root log; draw at model center, scale 1; no repeated stump stack",
+      "footprint": {
+        "space": "native sprite pixels; origin top-left",
+        "kind": "visible_coverage_of_existing_model_rectangle",
+        "rect": [
+          10,
+          30,
+          45,
+          95
+        ],
+        "polygon": [
+          [
+            10,
+            30
+          ],
+          [
+            54,
+            30
+          ],
+          [
+            54,
+            124
+          ],
+          [
+            10,
+            124
+          ]
+        ],
+        "authority": "E02 map revision 1; rect uses half-open bounds; polygon covers its pixel centers; never create collision from art"
+      },
+      "placement_hint": {
+        "map_revision": 1,
+        "model_center": [
+          727.5,
+          262.5
+        ],
+        "model_id": "deep-stump",
+        "sorting": "model center; sprite extends 30px above footprint for raised body"
+      }
     }
   },
   "backgrounds": {
@@ -3346,6 +3492,148 @@
         "#a1baa0"
       ],
       "playfield": "continuous quiet moss-earth plane; edge-cast shadows and source-linked lamp pools"
+    },
+    "rain_ground_routes": {
+      "file": "backgrounds/rain_ground_routes.png",
+      "size": [
+        960,
+        540
+      ],
+      "logical_size": [
+        960,
+        540
+      ],
+      "source": "source/rain-ground-routes.png",
+      "source_crop": [
+        0,
+        0,
+        1672,
+        941
+      ],
+      "sha256": "694ba9e8b3fd9ff5ddb789c2480d3cf0c4262376b1e696863178e835cb858fb7",
+      "palette": [
+        "#304646",
+        "#364d4b",
+        "#3a514f",
+        "#3d5654",
+        "#465b53",
+        "#4c6156",
+        "#566650",
+        "#636b50",
+        "#080f28",
+        "#142344",
+        "#233657",
+        "#374568",
+        "#4e5d78",
+        "#6b7885",
+        "#2d4744",
+        "#4e6759",
+        "#708462",
+        "#9b9855",
+        "#302a37",
+        "#4d3940",
+        "#70483c",
+        "#93684c",
+        "#b38757",
+        "#d2a06d",
+        "#edc46e",
+        "#f8e4b6",
+        "#7e794b",
+        "#a79458",
+        "#c4a456",
+        "#3d405c",
+        "#596a88",
+        "#a1baa0"
+      ],
+      "asset_set": "rain_scene",
+      "logical_rect": [
+        0,
+        0,
+        960,
+        540
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "pixel_grid": 2,
+      "purpose": "flat visual layer; E02 map revision 1 owns movement and collisions",
+      "draw_order": "after existing background, before dynamic obstacles/actors/hazards",
+      "usage": "transparent low-contrast worn routes; replaces debug route polylines"
+    },
+    "rain_canal_shallow": {
+      "file": "backgrounds/rain_canal_shallow.png",
+      "size": [
+        340,
+        120
+      ],
+      "logical_size": [
+        340,
+        120
+      ],
+      "source": "source/rain-canal-shallow-v2.png",
+      "source_crop": [
+        155,
+        149,
+        1957,
+        597
+      ],
+      "sha256": "1c947490a8f0d2f2fca23f390de0da6efa72ae46e5dcad5c20b522fa9f4be4c8",
+      "palette": [
+        "#304646",
+        "#364d4b",
+        "#3a514f",
+        "#3d5654",
+        "#465b53",
+        "#4c6156",
+        "#566650",
+        "#636b50",
+        "#080f28",
+        "#142344",
+        "#233657",
+        "#374568",
+        "#4e5d78",
+        "#6b7885",
+        "#2d4744",
+        "#4e6759",
+        "#708462",
+        "#9b9855",
+        "#302a37",
+        "#4d3940",
+        "#70483c",
+        "#93684c",
+        "#b38757",
+        "#d2a06d",
+        "#edc46e",
+        "#f8e4b6",
+        "#7e794b",
+        "#a79458",
+        "#c4a456",
+        "#3d405c",
+        "#596a88",
+        "#a1baa0"
+      ],
+      "asset_set": "rain_scene",
+      "logical_rect": [
+        340,
+        335,
+        340,
+        120
+      ],
+      "pivot": [
+        0,
+        0
+      ],
+      "pixel_grid": 2,
+      "purpose": "flat visual layer; E02 map revision 1 owns movement and collisions",
+      "draw_order": "after existing background, before dynamic obstacles/actors/hazards",
+      "usage": "opaque shallow canal bottom; exact wet rectangle, flush bank inside boundary; replaces water debug fill/outline and tiled ripple grid",
+      "export_palette_subset": [
+        "#3d5654",
+        "#364d4b",
+        "#4c6156",
+        "#4e5d78"
+      ]
     }
   },
   "sources": {
@@ -3563,6 +3851,60 @@
       ],
       "mode": "RGBA",
       "sha256": "6aba15c7a82e878915eb968f9d636ef72a485e042e20ea9f2f1bb1a57e64fccd",
+      "runtime": false
+    },
+    "rain-routes-layout-guide.png": {
+      "size": [
+        960,
+        540
+      ],
+      "mode": "RGB",
+      "sha256": "948c07c93761ebc73694c26a5e3b6e830068a7f1b866bc044549ea183d178ec9",
+      "runtime": false
+    },
+    "rain-ground-routes.png": {
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGBA",
+      "sha256": "ff161c13a0535efef0df3e1d88a8a9ae0d90544f120184015f426846bf3a24d6",
+      "runtime": false
+    },
+    "rain-canal-shallow.png": {
+      "size": [
+        2109,
+        745
+      ],
+      "mode": "RGBA",
+      "sha256": "25a4c0ef9c96c459765e7455f710fa5cd636665df53ebde926d6051de5f1d40d",
+      "runtime": false
+    },
+    "garden-root-log-v1.png": {
+      "size": [
+        1135,
+        1386
+      ],
+      "mode": "RGBA",
+      "sha256": "4790bd74397367e6aafb9d1dbfa50afae793f6beac7d488ad246824e218da4d4",
+      "runtime": false
+    },
+    "garden-root-log-v2.png": {
+      "size": [
+        1135,
+        1386
+      ],
+      "mode": "RGBA",
+      "sha256": "81b280428bd55e4e3d0e26a21443c3545814ca86f65240d15e02d6048ba4b755",
+      "runtime": false
+    },
+    "rain-canal-shallow-v2.png": {
+      "size": [
+        2111,
+        745
+      ],
+      "mode": "RGBA",
+      "sha256": "39a3c01254a9b420c60c9cf3d39083358248234c560e0c89efa9988ea67c8bdd",
       "runtime": false
     }
   },
