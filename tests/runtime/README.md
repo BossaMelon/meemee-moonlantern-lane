@@ -76,3 +76,17 @@ H01 共享锁已合入主仓库，获得原生渲染时段后用 `python3 /Users
 动作保存退出控件使用 E01 提交 `9fec5d4` 已发布的 `save_quit_button` / `save_quit_requested`，只读定位后通过当前设备的 InputEvent 激活；P02 信号接线必须已组合到候选，缺入口或保存后未退出均失败。恢复失败时另存完整实际快照及顶层差异字段，保留诊断证据。
 
 Mac 合成触屏路线在实例化场景前临时设置 `Input.emulate_touch_from_mouse=true`，以启用 [Godot 桌面 ScrollContainer 的触摸滚动路径](https://docs.godotengine.org/en/4.7/classes/class_scrollcontainer.html#class-scrollcontainer-signal-scroll-started)。报告记录此配置；不写 project.godot，不模拟实体设备认证，滚动仍由真实 ScreenTouch/ScreenDrag 事件执行。
+
+P06 新雨夜入口复用同一监督器与 InputEvent/viewport/保存退出实现，显式选择 `--suite quality-slice`。默认 `prototype` 参数及原三日脚本保留用于旧候选/旧包回归；新 Main 已固定雨夜 profile，不能拿旧路线在新 Main 的失败或旧包通过替代雨夜结果。
+
+```sh
+python3 tests/runtime/run_critical_path.py --suite quality-slice --godot /absolute/path/to/Godot --output /private/tmp/p06-unique --modes mouse --legacy-evidence mouse=/absolute/path/to/completed-p03/evidence.json --fullscreen
+```
+
+原生调用仍须先获得总协调时段并套共享渲染锁。三输入完整运行各提供 `--legacy-evidence MODE=ABS_PATH`，来源可以不同，但必须是对应模式已完成的真实 P03 原始主备档。`--headless-diagnostic --windowed` 使用同一真实 Main、InputEvent、正常墙钟和独立进程检查输入/经营/恢复，报告 `passed=false`、`runtime_verified=false`，只单列 `diagnostic_passed`；没有 viewport PNG，不能计入 Q06。不得加速游戏时间来获得真实时长证据。
+
+新路线按 `start → after-spore → after-intermission → after-delivery → after-upgrade → after-equipped` 执行：正式地形输入策略采集实际食材；一份稀有食材售回、一份高级食材加工上菜单、其余保留；采用正式热锅采购篮与高级料理实际配方；三波分别补餐，实际改菜单优先级，核对保温和在途 UID；日结读取真实价格购买探索装备，再合法 `next_day`、装备、制作并自食星火汤、普通新探险试用。五个中间保存点均由产品保存退出按钮结束 OS 进程。恢复在任何新输入前完整比较快照（含 requests、保持输入、敌人、孢子、冷却、预留和成长），再恢复正常操作。所有行为仍须由实际运行报告证明；脚本存在、check-only 和 headless 都不能宣布 Q06 通过。布局/失焦补充证据及人类 QH 保持独立待验。
+
+默认存档隔离使用 [Godot 4.7 ProjectSettings](https://docs.godotengine.org/en/4.7/classes/class_projectsettings.html) 的 `override.cfg` 和 `application/config/custom_user_dir_name`。监督器只接受干净候选，导出 `git archive` 并核对 Git tree，再向导出目录加入声明过哈希的 override，选择全新的 `MeeMeeMoonlanternLane-P06/<UUID>/<mode>` 用户目录。`user_dir_probe.gd` 不加载 Main/Session，先 headless 读取 `OS.get_user_data_dir()` 与默认路径解析；核对后才把旧档原样复制到该独立目录的旧位置。游戏启动后必须读到自身原有 `user://profiles/rain-night-v1/moonlantern.json`，测试从不设置新 Main 的 `save_path`。目录、来源旧档/副本、完整源码和 override 在各进程后复查；产物留存，不自动删历史证据。它不使用不存在的 `--user-data-dir` 参数，也不覆盖玩家默认目录。
+
+`runtime-isolation.json` 记录 probe、固定候选及路径；`*-product-save.json(.bak)` 保存每阶段实际字节；每次 `--stage` 续跑要求同一完整候选/tree/文件哈希和独立用户目录。代码改变后必须新建输出重新运行，不能把旧过程与新源码拼成一次成功。缺正式依赖、错误目录、旧档/源码变化、自动恢复不一致、无真实退出、缺渲染或未知阶段均失败。Q01–Q05 仍来自核心 runner，Q06 不加入自动 cases，QH 永不自动判过。

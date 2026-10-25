@@ -117,8 +117,8 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		DisplayServer.window_set_size(size)
 	if not failures.is_empty(): return
 	ui=Main.instantiate()
-	# Configuration only: no seed/economy/phase/state replacement.
-	ui.save_path=folder+"/restaurant-save.json"
+	configure_save_path()
+	if not failures.is_empty(): return
 	startup_files=save_file_hashes()
 	root.add_child(ui)
 	# _ready() performs the product's automatic load. Observe it before any
@@ -144,6 +144,17 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		expect(ui.size==root.get_visible_rect().size,"main scene fills actual fullscreen viewport")
 	else:
 		expect(ui.size==Vector2(size),"viewport uses requested dimensions")
+
+func configure_save_path():
+	# P03 keeps its existing isolated path. P06 overrides this hook to inspect
+	# the product default without assigning a path or changing the Session.
+	ui.save_path=folder+"/restaurant-save.json"
+
+func is_economic_control(id: String) -> bool:
+	return id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
+
+func is_presentation_control(id: String) -> bool:
+	return id.begins_with("world_") or id.begins_with("recipe_") or id=="sheet_close"
 
 func activate_visible(id: String):
 	var control=ui.get_action_control(id)
@@ -316,10 +327,10 @@ func activate_control(button: Button, id: String):
 				emit_gui_pointer(event)
 			await frames(1)
 	await frames(3)
-	var economic=id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
+	var economic=is_economic_control(id)
 	if economic and action_count==count_before: await screenshot(mode+"-intent-failure-"+id)
 	if economic: expect(action_count==count_before+1,"one real control input emits exactly one economic intent: "+id)
-	if id.begins_with("world_") or id.begins_with("recipe_") or id=="sheet_close": expect(action_count==count_before,"presentation control emits no economic intent: "+id)
+	if is_presentation_control(id): expect(action_count==count_before,"presentation control emits no economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
 	if id.begins_with("craft_"):
