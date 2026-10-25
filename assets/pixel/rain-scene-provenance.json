@@ -1,0 +1,28 @@
+{
+  "task_id": "A02",
+  "date": "2026-10-26",
+  "base_revision": "b3129df9164b67b798f5680ad7aba44556fa00e4",
+  "generation": "OpenAI built-in image_gen; retained original outputs; no CLI API or external paid service",
+  "geometry_reference": {
+    "map_id": "rain-garden-two-routes",
+    "map_revision": 1,
+    "source": "/private/tmp/e02-rain-runtime-native/source/rain_garden_map.gd",
+    "sha256": "787b210523694ec0926e98ee169b8f8661944f0305af92cd7a0837eb10080b09",
+    "role": "read-only alignment reference for previews; runtime geometry remains E02-owned"
+  },
+  "review_inputs": [
+    "/private/tmp/e02-rain-runtime-native/keyboard-active.png",
+    "/private/tmp/e02-rain-runtime-native/narrow-touch.png"
+  ],
+  "sources": [
+    {"file": "source/rain-routes-layout-guide.png", "origin": "Pillow technical diagram of existing route coordinates", "role": "layout reference only, not generated or runtime artwork"},
+    {"file": "source/rain-ground-routes.png", "generation_id": "fa3686d3-911c-4fbc-8bb3-2f12ad607f81", "references": ["rain-routes-layout-guide.png", "../backgrounds/mushroom-garden.png"], "direction": "transparent low-contrast worn earth along existing routes; no map objects"},
+    {"file": "source/rain-canal-shallow.png", "generation_id": "e73b9022-6bef-463b-8f30-48eb523b4f04", "references": ["../backgrounds/mushroom-garden.png"], "direction": "flat crossable shallow canal; retained first draft"},
+    {"file": "source/rain-canal-shallow-v2.png", "generation_id": "8d49d0c0-7287-4e16-9445-10bdb4595b80", "references": ["rain-canal-shallow.png"], "direction": "remove mottling and dotted bank; broad four-color masses, sparse reflections"},
+    {"file": "source/garden-root-log-v1.png", "generation_id": "48e87f4f-fd8e-49f9-858d-8579c0a9caf5", "references": ["garden-stump.png"], "direction": "one continuous root log; diagonal draft retained, not shipped"},
+    {"file": "source/garden-root-log-v2.png", "generation_id": "e1b773ca-d2f8-4756-9a83-7d12bcfc7ea2", "references": ["garden-root-log-v1.png"], "direction": "correct to vertical axis, continuous base, reduced top brightness"}
+  ],
+  "processing": "hard alpha threshold 128; nearest scaling; existing fixed palettes; zero transparent RGB; crop only, no procedural painting of replacement artwork",
+  "scope": "two scene layers plus two same-source long-log variants. No old art replaced, no circle/short-log expansion, no E02 code, no SOURCES.md change.",
+  "limits": "QA layout overlays and actor-scale composites are not runtime screenshots or gameplay acceptance. Remaining circle/short obstacles appear only as guide outlines in layout preview."
+}
