@@ -6,7 +6,7 @@
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-unique-run
 ```
 
-默认显式传 `--windowed`；实际全屏使用 `--fullscreen`，不能同时指定 `--size`。全屏通过 Godot CLI 请求 `Window.MODE_FULLSCREEN`，保留产品内容缩放设置，不把窗口强制改为 1280/960。每次截图记录 `DisplayServer.window_get_mode`、当前屏幕及其尺寸/位置/比例、系统可用矩形、原生窗口、root、逻辑 viewport、渲染纹理和 PNG 尺寸。全屏必须实际报告 mode=3，窗口矩形覆盖屏幕；macOS 也接受精确等于系统 API 返回的可用区域，不能用猜测的边距或比例容差放行。PNG 原始尺寸等于渲染纹理与原生窗口，逻辑 viewport 可按产品的 canvas_items 缩放单独记录。监督器再读取 PNG IHDR 核对尺寸，禁止放大截图充当全屏。报告保留窗口焦点事件，帮助识别并行渲染造成的输入中断。
+默认显式传 `--windowed`；实际全屏使用 `--fullscreen`，不能同时指定 `--size`。全屏通过 Godot CLI 请求 `Window.MODE_FULLSCREEN`，保留产品内容缩放设置，不把窗口强制改为 1280/960。每次截图记录 `DisplayServer.window_get_mode`、当前屏幕及其尺寸/位置/比例、系统可用矩形、原生窗口、root、逻辑 viewport、纹理代理和原始 PNG 尺寸。全屏必须实际报告 mode=3，窗口矩形覆盖屏幕；macOS 也接受精确等于系统 API 返回的可用区域，不能用猜测的边距或比例容差放行。原始图像尺寸须符合实际 `get_stretch_transform()` 对逻辑 viewport 的映射，并符合原生窗口与内容宽高比产生的相邻整数像素；不能把纹理代理的尺寸等同于 `get_image()` 返回的图像尺寸。监督器独立读取 PNG IHDR 核对，禁止重采样或放大截图充当全屏。未缩放窗口仍要求图像、逻辑 viewport 和原生窗口尺寸完全相等。报告保留窗口焦点事件，帮助识别并行渲染或人类打开试玩窗口造成的输入中断。
 
 ```sh
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-display-fullscreen --modes mouse --stage display --fullscreen

@@ -347,9 +347,15 @@ func screenshot(name: String):
 	var window_position=DisplayServer.window_get_position()
 	var window_size=DisplayServer.window_get_size()
 	var viewport_size=root.get_visible_rect().size
+	var stretch=root.get_stretch_transform()
+	var mapped_size=(stretch*root.get_visible_rect()).size
 	var sample={"path":path,"elapsed_ms":Time.get_ticks_msec()-started_ms,"requested_mode":"fullscreen" if config.get("fullscreen",false) else "windowed","window_mode":DisplayServer.window_get_mode(),"root_mode":root.mode,"screen":screen,"screen_scale":DisplayServer.screen_get_scale(screen),"screen_size":[screen_size.x,screen_size.y],"window_size":[window_size.x,window_size.y],"root_size":[root.size.x,root.size.y],"viewport_size":[int(viewport_size.x),int(viewport_size.y)],"texture_size":[texture.get_width(),texture.get_height()],"png_size":[picture.get_width(),picture.get_height()],"window_focused":root.has_focus()}
 	sample.content_scale_mode=root.content_scale_mode
 	sample.content_scale_size=[root.content_scale_size.x,root.content_scale_size.y]
+	sample.content_scale_aspect=root.content_scale_aspect
+	sample.content_scale_factor=root.content_scale_factor
+	sample.stretch_transform=[stretch.x.x,stretch.x.y,stretch.y.x,stretch.y.y,stretch.origin.x,stretch.origin.y]
+	sample.mapped_viewport_size=[mapped_size.x,mapped_size.y]
 	sample.screen_position=[screen_position.x,screen_position.y]
 	sample.screen_usable_rect=[usable.position.x,usable.position.y,usable.size.x,usable.size.y]
 	sample.window_position=[window_position.x,window_position.y]
@@ -359,7 +365,8 @@ func screenshot(name: String):
 	screenshots.append(path)
 	var required_mode=DisplayServer.WINDOW_MODE_FULLSCREEN if config.get("fullscreen",false) else DisplayServer.WINDOW_MODE_WINDOWED
 	expect(sample.window_mode==required_mode and int(root.mode)==int(required_mode),"screenshot uses requested native window mode")
-	expect(sample.png_size==sample.texture_size and sample.png_size==sample.root_size and sample.png_size==sample.window_size,"PNG preserves actual rendered texture and window dimensions")
+	expect(sample.root_size==sample.window_size,"root reports actual native window dimensions")
+	expect(sample.png_size==[roundi(mapped_size.x),roundi(mapped_size.y)],"raw viewport image dimensions follow the observed stretch transform")
 	if config.get("fullscreen",false): expect(sample.fullscreen_coverage!="","fullscreen viewport covers screen or exact macOS system usable area")
 	else: expect(sample.png_size==sample.viewport_size,"windowed layout PNG matches requested logical viewport")
 	visual_evidence=inspect_visible_assets()

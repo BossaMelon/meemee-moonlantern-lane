@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -25,6 +26,45 @@ RESTORE_STAGES = {stage for stage, _ in STAGES if stage != "start"} | {"restore-
 
 def command_output(*cmd: str, cwd: Path) -> str:
     return subprocess.check_output(cmd, cwd=cwd, text=True).strip()
+
+
+def image_geometry_matches(sample: dict, dimensions: list[int]) -> bool:
+    """Check raw image against public viewport mapping, never texture proxy size."""
+    def positive_pair(value):
+        return (isinstance(value, list) and len(value) == 2
+                and all(isinstance(x, (int, float)) and math.isfinite(x) and x > 0 for x in value))
+
+    window, viewport = sample.get("window_size"), sample.get("viewport_size")
+    transform = sample.get("stretch_transform")
+    if not all(positive_pair(x) for x in (dimensions, window, viewport, sample.get("texture_size"))):
+        return False
+    if dimensions != sample.get("png_size") or window != sample.get("root_size"):
+        return False
+    if not isinstance(transform, list) or len(transform) != 6 or not all(isinstance(x, (int, float)) and math.isfinite(x) for x in transform):
+        return False
+    # This root UI uses axis-aligned content scaling, not a rotated/subviewport capture.
+    sx, xy, yx, sy, _, _ = transform
+    if sx <= 0 or sy <= 0 or xy != 0 or yx != 0:
+        return False
+    mapped = [viewport[0] * sx, viewport[1] * sy]
+    if dimensions != [math.floor(x + 0.5) for x in mapped]:
+        return False
+    mode = sample.get("content_scale_mode")
+    if mode == 0:
+        return dimensions == viewport == window
+    if mode != 1:  # This suite supports the product's CANVAS_ITEMS contract.
+        return False
+    aspect = sample.get("content_scale_aspect")
+    if aspect == 0:
+        fitted = window
+    elif aspect in (1, 2, 3, 4):
+        scale = min(window[0] / viewport[0], window[1] / viewport[1])
+        fitted = [viewport[0] * scale, viewport[1] * scale]
+    else:
+        return False
+    # Integer rasterization may choose either adjacent pixel at an aspect-fit edge.
+    # The observed transform must still match exactly above; no percentage tolerance.
+    return all(math.floor(fitted[i]) <= dimensions[i] <= math.ceil(fitted[i]) for i in (0, 1))
 
 
 def main() -> int:
@@ -147,9 +187,7 @@ def main() -> int:
                     and sample.get("window_mode") == (3 if args.fullscreen else 0)
                     and sample.get("root_mode") == (3 if args.fullscreen else 0)
                     and len(dimensions) == 2 and all(x > 0 for x in dimensions)
-                    and dimensions == sample.get("png_size") == sample.get("texture_size")
-                    and sample.get("window_size") == sample.get("root_size") == dimensions
-                    and len(sample.get("viewport_size", [])) == 2 and all(x > 0 for x in sample["viewport_size"])
+                    and image_geometry_matches(sample, dimensions)
                     and (full_coverage if args.fullscreen else sample.get("viewport_size") == dimensions))
             run["display_verified"] = display_valid
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
