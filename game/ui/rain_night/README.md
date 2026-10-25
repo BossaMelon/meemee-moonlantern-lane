@@ -4,6 +4,8 @@
 
 字体检查入口：`Godot --headless --path . --script game/ui/checks/portable_font.gd -- /private/tmp/NEW_FONT_CHECK`。检查实际 FontFile 数据 hash、完整随包字体链和真实 Main 中经 InputEvent 打开的标签/按钮字体绑定，并扫描生产源码/场景的字符全集（保守包含注释）及实际文字。`--missing-glyph` 是预期 exit1 的缺字负例。缺资源负例应在隔离小项目中保留同一检查/provider/清单/许可而不放字体及导入缓存，必须 exit1；不移动真实字体、不接触玩家存档。字体必须经 W01 冷导入基础正常加载，不能用原文件解码或系统字体回退绕过失败。
 
+默认检查1440×904虚拟视口，输出目录后加 `--small` 检查844×390；记录账本/菜谱/菜单/装备实际浮层与滚动区域几何，不能据此声称原生全屏。字形度量影响输入时沿用 `card_touch_scroll.gd` 等真实输入定向检查，不要求重跑无关经营链。
+
 原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。清单/OFL/NOTICE 属非资源文件，打包方需明确随包纳入，并在无源码/原导入缓存的真实包检查中验证。此 headless 检查不声称已经过冷打包、原生全屏/844×390或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
 
 `panels.gd` 是只读 typed-view 组件：`present(view, page, selected_item="")` 深拷贝输入，显示真实字段；`get_action_control(id)` 返回当前可见页面的 Control，`status_line()` 提供一行世界 HUD 摘要。没有 Session、存档、计时推进、发奖或成交模拟。组件 fixture 检查不能作为新雨夜游戏或 Q06 证据。

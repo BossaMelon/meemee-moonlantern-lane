@@ -4,6 +4,7 @@ var folder="/private/tmp/p07-portable-font"
 var failures: Array=[]
 var checks=0
 var bindings: Array=[]
+var layouts: Array=[]
 var fonts: Array=[]
 var missing: Array=[]
 var required: Dictionary={}
@@ -87,11 +88,15 @@ func run():
 		expect(FileAccess.file_exists(row.license_path) and FileAccess.get_sha256(row.license_path)==row.license_sha256,"original OFL license is included unchanged")
 		if row.has("notice_path"): expect(FileAccess.file_exists(row.notice_path) and FileAccess.get_sha256(row.notice_path)==row.notice_sha256,"original font copyright notice is included")
 	scan("res://game");scan("res://scenes");add_text(FileAccess.get_file_as_string("res://project.godot"))
-	viewport=SubViewport.new();viewport.size=Vector2i(1440,904);root.add_child(viewport)
+	viewport=SubViewport.new();viewport.size=Vector2i(844,390) if "--small" in OS.get_cmdline_user_args() else Vector2i(1440,904);root.add_child(viewport)
 	ui=load("res://scenes/main.tscn").instantiate();ui.save_path=folder+"/unused-player-save.json";viewport.add_child(ui)
 	await frames();inspect_bindings(ui)
 	for entry in ["world_journal","world_craft","world_menu","world_gear"]:
-		await click(entry);inspect_bindings(ui);await click("sheet_close")
+		await click(entry);inspect_bindings(ui)
+		expect(Rect2(Vector2.ZERO,ui.size).encloses(ui.sheet_surface.get_global_rect()),"font metrics keep actual Main sheet inside viewport: "+entry)
+		expect(ui.scroll.size.y>=80,"font metrics leave usable scroll area: "+entry)
+		layouts.append({"entry":entry,"ui_size":str(ui.size),"sheet_rect":str(ui.sheet_surface.get_global_rect()),"scroll_rect":str(ui.scroll.get_global_rect()),"body_minimum":str(ui.body.get_combined_minimum_size())})
+		await click("sheet_close")
 	if "--missing-glyph" in OS.get_cmdline_user_args(): required[0x10ffff]=true
 	for code in required:
 		if not primary.has_char(code): missing.append({"codepoint":"U+%04X"%code,"character":String.chr(code)})
@@ -106,6 +111,6 @@ func finish():
 	var sources={}
 	for path in ["game/ui/portable_font.gd","game/ui/main.gd","game/ui/checks/portable_font.gd","assets/fonts/font-manifest.json","assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import"]:
 		sources[path]=FileAccess.get_sha256("res://"+path) if FileAccess.file_exists("res://"+path) else "not-in-this-fixture-or-export"
-	file.store_string(JSON.stringify({"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual Main Label/Button font bindings via GUI InputEvents in headless SubViewport. Corpus conservatively includes production source comments; no OS fallback, native pixels, export or platform claim."},"  "));file.close()
+	file.store_string(JSON.stringify({"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"layouts":layouts,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual Main Label/Button font bindings via GUI InputEvents in headless SubViewport. Corpus conservatively includes production source comments; geometry only, no OS fallback, native pixels, export or platform claim."},"  "));file.close()
 	print("PORTABLE FONT ",checks," checks, missing glyphs ",missing.size(),", failures ",failures.size())
 	quit(0 if failures.is_empty() else 1)
