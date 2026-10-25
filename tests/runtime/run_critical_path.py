@@ -19,6 +19,7 @@ STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
           ("after-collected", "finished"), ("after-finished", "complete")]
 AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
+RESTORE_STAGES = {stage for stage, _ in STAGES if stage != "start"} | {"restore-smoke"}
 
 
 def command_output(*cmd: str, cwd: Path) -> str:
@@ -114,10 +115,12 @@ def main() -> int:
             run["failures"] = result.get("failures", [])
             run["product_exit_observed"] = result.get("product_exit_observed", False)
             run["saved_sha256"] = result.get("saved_sha256", "")
+            run["automatic_restore_verified"] = result.get("automatic_restore_verified", False)
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
+                             and (stage not in RESTORE_STAGES or run["automatic_restore_verified"] is True)
                              and (expected in ("complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
                              and result.get("pixel_room_loaded") is True
                              and result.get("display") not in (None, "headless"))

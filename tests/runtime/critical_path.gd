@@ -21,6 +21,11 @@ var product_exit_observed = false
 var saved_sha256 = ""
 var pickup_proofs: Array = []
 var restore_sources: Array = []
+var startup_snapshot: Dictionary = {}
+var startup_feedback = ""
+var startup_files: Dictionary = {}
+var automatic_restore_verified = false
+var input_count = 0
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -45,6 +50,7 @@ func expect(value: bool, message: String):
 		quit(1)
 
 func emit_input(event: InputEvent, local: bool = false):
+	input_count+=1
 	var entry={"elapsed_ms":Time.get_ticks_msec()-started_ms,"event":event.as_text(),"class":event.get_class(),"local":local,"pressed":event.is_pressed()}
 	if event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag: entry.position=[event.position.x,event.position.y]
 	if event is InputEventJoypadMotion: entry.axis=event.axis; entry.axis_value=event.axis_value
@@ -64,7 +70,12 @@ func fresh(size: Vector2i):
 	ui=Main.instantiate()
 	# Configuration only: no seed/economy/phase/state replacement.
 	ui.save_path=folder+"/restaurant-save.json"
+	startup_files=save_file_hashes()
 	root.add_child(ui)
+	# _ready() performs the product's automatic load. Observe it before any
+	# test input or rendered frame, then compare again after normal processing.
+	startup_snapshot=ui.game.snapshot()
+	startup_feedback=ui.feedback.text
 	ui.tree_exiting.connect(_observe_product_exit)
 	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
 	await frames(6)
@@ -195,6 +206,21 @@ func screenshot(name: String):
 func json_equal(a: Variant,b: Variant) -> bool:
 	return JSON.parse_string(JSON.stringify(a,"",true,true))==JSON.parse_string(JSON.stringify(b,"",true,true))
 
+func save_file_hashes() -> Dictionary:
+	var hashes: Dictionary={}
+	for suffix in ["",".bak"]:
+		var path=ui.save_path+suffix
+		hashes["primary" if suffix.is_empty() else "backup"]=FileAccess.get_sha256(path) if FileAccess.file_exists(path) else "missing"
+	return hashes
+
+func compare_restored_snapshot(actual: Dictionary, expected: Dictionary, label: String):
+	var differences: Array=[]
+	for field in expected:
+		if not json_equal(expected[field],actual.get(field)): differences.append(field)
+	for field in actual:
+		if not expected.has(field): differences.append(field)
+	expect(json_equal(actual,expected),label+"; differing fields="+str(differences))
+
 func record_checkpoint(name: String):
 	checkpoint=name
 	var file=FileAccess.open(folder+"/"+name+"-expected.json",FileAccess.WRITE)
@@ -227,24 +253,33 @@ func save_and_exit(name: String):
 	await screenshot(mode+"-"+name)
 	await expect_product_exit(name,ui.get_action_control("quit"))
 
-func restore(name: String):
+func restore(name: String, check_explicit_button: bool = false):
 	var expected=JSON.parse_string(FileAccess.get_file_as_string(folder+"/"+name+"-expected.json"))
 	var context=JSON.parse_string(FileAccess.get_file_as_string(folder+"/"+name+"-context.json"))
 	expect(context.producer_process_id!=OS.get_process_id(),"restore runs in a different process from its checkpoint producer")
-	restore_sources.append({"checkpoint":name,"producer_attempt":context.producer_attempt,"producer_process_id":context.producer_process_id})
+	restore_sources.append({"checkpoint":name,"producer_attempt":context.producer_attempt,"producer_process_id":context.producer_process_id,"method":"automatic_startup","startup_files":startup_files})
 	# Carry only test observations across process segments, never gameplay state.
 	battle_observed=context.battle_observed
-	await activate("load")
-	expect("恢复成功" in ui.feedback.text,"load reports success in a new OS process")
+	expect(input_count==0,"automatic restore is observed before any injected input")
+	expect("恢复成功" in startup_feedback,"automatic startup restore reports success")
+	var startup_file=FileAccess.open(folder+"/"+attempt+"-startup-actual.json",FileAccess.WRITE)
+	startup_file.store_string(JSON.stringify(startup_snapshot,"  ",true,true)); startup_file.close()
+	compare_restored_snapshot(startup_snapshot,expected,"exact automatic startup snapshot: "+name)
 	var actual: Dictionary=ui.game.snapshot()
 	var restored_file=FileAccess.open(folder+"/"+attempt+"-restored-actual.json",FileAccess.WRITE)
 	restored_file.store_string(JSON.stringify(actual,"  ",true,true)); restored_file.close()
-	var differences: Array=[]
-	for field in expected:
-		if not json_equal(expected[field],actual.get(field)): differences.append(field)
-	expect(json_equal(actual,expected),"new-process exact snapshot restore: "+name+"; differing fields="+str(differences))
+	compare_restored_snapshot(actual,expected,"automatic restore remains exact after rendered frames: "+name)
+	expect(save_file_hashes()==startup_files,"automatic restore leaves primary and backup bytes unchanged")
 	if ui.game.view().phase=="expedition":
 		expect(ui.game.snapshot().expedition.input=={"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false},"restored combat has no held input")
+	if not failures.is_empty(): return
+	automatic_restore_verified=true
+	# Explicit restore remains a separate regression on the visible restaurant
+	# button. Combat startup must not depend on that hidden control.
+	if check_explicit_button:
+		await activate("load")
+		expect("恢复成功" in ui.feedback.text,"explicit restore button still reports success")
+		compare_restored_snapshot(ui.game.snapshot(),expected,"explicit restore preserves the automatically restored snapshot: "+name)
 	await screenshot(mode+"-restored-"+name)
 
 func trade(day: int, hot: bool, resume: bool = false):
@@ -452,7 +487,8 @@ func run():
 	if stage=="exit-smoke":
 		await save_and_exit("smoke")
 	elif stage=="restore-smoke":
-		await restore("smoke")
+		await restore("smoke",true)
+		if not failures.is_empty(): return
 		checkpoint="complete"; write_report(); quit(0 if failures.is_empty() else 1)
 	elif stage=="battle-pause":
 		await activate("tab_gear"); await activate("start_expedition")
@@ -493,16 +529,20 @@ func run():
 		await prepare_day(2,hot); await trade(2,hot)
 	elif stage=="after-hagrid":
 		await restore("hagrid-pending")
+		if not failures.is_empty(): return
 		await trade(2,hot,true); await end_day(2)
 		await gear(3); await battle(3)
 	elif stage=="after-combat":
 		await restore("combat-paused")
+		if not failures.is_empty(): return
 		await battle(3,true)
 	elif stage=="after-drop":
 		await restore("combat-drop")
+		if not failures.is_empty(): return
 		await battle(3,true)
 	elif stage=="after-collected":
 		await restore("combat-collected")
+		if not failures.is_empty(): return
 		verify_pickups_once()
 		await battle(3,true)
 		await prepare_day(3,hot); await trade(3,hot)
@@ -512,6 +552,7 @@ func run():
 		await save_and_exit("finished")
 	elif stage=="after-finished":
 		await restore("finished")
+		if not failures.is_empty(): return
 		var before: Dictionary=ui.game.snapshot()
 		# Isolated negative fixture only; no player's save or economy is modified.
 		ui.save_path=folder+"/invalid.json"
@@ -526,5 +567,8 @@ func run():
 func write_report():
 	if input_file!=null: input_file.flush()
 	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"restore_sources":restore_sources,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"desktop_touch_emulation":Input.emulate_touch_from_mouse,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
+	report["automatic_restore_verified"]=automatic_restore_verified
+	report["startup_files"]=startup_files
+	report["startup_feedback"]=startup_feedback
 	var file=FileAccess.open(folder+"/"+attempt+"-report.json",FileAccess.WRITE)
 	if file!=null: file.store_string(JSON.stringify(report,"  ")); file.close()
