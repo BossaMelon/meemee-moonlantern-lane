@@ -46,3 +46,7 @@ A02正式场景接线仅更换绘制：全场/浅渠覆盖层均按manifest逻�
 `run_return_boundaries.gd` 默认要求正式rain-night-v1 Session，不会回退到adapter：公开指令右500ms→左1000ms，对比一次1000与20×50的**完整snapshot**（含requests），并核验真实暂停、磁盘保存/恢复、主动撤退与终态再次advance。`-- --component-only` 明确只跑组件；组件用有效受控战斗/清场夹具触发defeated/completed，入口由普通输入触发，retreat沿现有leave；各终止边界都必须丢弃未处理余帧，不得出现负余数。组件结果不冒充真实Session取得库存。47项组件回归已纳入rain_model_cases.gd，原run_rain_model.gd入口继续覆盖。
 
 本次主审回归在正式组合SHA `4cc5c2fa8765e4806f37098895f7a440122f5df4` 的独立临时归档 `/private/tmp/e02-return-boundary-4cc5c2f` 运行，仅覆盖本次E02模型/测试。红色 `/tmp/e02-return-red`、绿色 `/tmp/e02-return-green`；原主审探针在该新归档原样复跑，输出review-return-partition-result.json。原 `/private/tmp/moonlantern-review-4cc5c2f-ya1m9hvo` 保持只读。旧model v1与存档校验/迁移规则均未改；只对新发生的质量模型终止转换清零remainder_ms。
+
+`window_focus_boundaries.gd` 是F04的**headless信号边界组件**：在实际4.7.2引擎上用真实InputEvent建立四种设备保持，再显式触发所属Window的focus_exited/focus_entered信号，断言本地与真实模型input同步清零、无新输入不重放、新输入仍有效、Control焦点变化不清零、重复信号不重复写、返店不发非法命令、离树/换Window正确断开重连。显式信号是逻辑夹具，不冒充OS最小化；不调用产品_notification、不补发release事件。红色/tmp/e02-f04-red，绿色/tmp/e02-f04-green，实际OS原生复验归P06，勿因此占渲染槽或修改tests/runtime。
+
+公开契约：[Window.focus_exited](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-signal-focus-exited)、[Node.get_window](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-method-get-window) 与 [Window/应用通知的区分](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-constant-notification-wm-window-focus-out)。面板只增加所属Window的生命周期绑定，复用原release_inputs；公共接口、自动暂停与时间语义不变。
