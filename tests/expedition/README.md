@@ -25,3 +25,5 @@
 HUD改版后 `--active-exit` 走「实际按住动作→真实Esc暂停→浮层保存退出」，不点击隐藏工具。`hud_runtime.gd` 使用 `--fullscreen` 启动，原生窗口覆盖screen或精确macOS usable rect且稳定500ms后才创建场景，绝不强制缩为1280/960测试框；记录Window/DisplayServer模式、screen/usable/window/viewport/PNG尺寸、Retina比例、焦点事件和每次真实输入的焦点状态，PNG直接取viewport。键鼠/手柄/触屏、实际预警、暂停纸面分别截图。可用 `--source ABS_JSON` 复用正常获得的P03探险快照；截图证明实际运行，不替代完整餐厅流程或设备验证。渲染应遵循协调者分配的独占slot，别并发启动原生窗口。
 
 `--headless --script tests/expedition/touch_emulation.gd` 是叠加触控HUD的输入回归，不开原生窗口：开启实际引擎双向鼠标/触屏模拟，确认只移动不自动施法、不注入鼠标瞄准，显式触屏施法仍工作并能松开；真实鼠标不会控制隐藏虚拟摇杆。报告写到 `/tmp/e01-hud-touch-emulation.json`，红色对照保留为同目录 `e01-hud-touch-emulation-red.json`。它不替代原生全屏/设备证据。
+
+`--headless --script tests/expedition/gui_priority.gd -- --output ABS_JSON` 用真实Viewport事件检查场地覆盖GUI时的点击优先级：暂停鼠标按下不施法、抬起只发一次暂停，暂停保存不改完整状态/requests，Esc可恢复，普通场地仍真正施法，场地按下后在GUI上抬起只清施法。默认报告 `/tmp/e01-gui-priority.json`；红色对照 `/tmp/e01-gui-priority-red.json`。独立reviewer原始probe保持不改，在临时项目原样复跑，不占原生slot；其修复后Esc步骤会变成恢复，所以末尾旧的paused-save标签不再代表暂停状态，该分支由此回归单独覆盖。

@@ -30,4 +30,6 @@
 
 playing 时只常驻 `pause_button`；**先通过暂停按钮、Esc或Start打开真实暂停浮层**，`save_button/save_quit_button/return_button` 此时才可见且可操作，公开对象及原信号保留。不要在playing时直接定位隐藏的保存按钮；P02/P03应先走暂停路径。浮层四按钮支持左右/上下/Tab循环。新HUD不改变退出冻结、清零幂等和cancel_save_quit协议，不调用OS退出，也不变更模型、经济、存档或数值。
 
+全屏field与HUD重叠时，可见且可交互的工具按钮优先接收鼠标；悬停/按下按钮不产生战斗施法。普通场地点击仍施法，从场地按下后移到GUI上松开只结束该次施法，不误点击未收到按下的按钮。命中检测使用按钮自身含canvas的逆变换，不依赖鼠标hover缓存。
+
 E01 只改 game/expedition/**、scenes/expedition/**、tests/expedition/**。P01 在 tests/run.gd 接入 `tests/expedition/prototype_cases.gd` 的 `run(session_factory, output_dir)`，实际返回 P16/P17 case 和模拟轨迹；不得在模块缺失时写假通过。模型独立检查入口另见 tests/expedition/run_model.gd。
