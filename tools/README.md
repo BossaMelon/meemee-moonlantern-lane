@@ -28,6 +28,23 @@ python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
 `--stage prototype` 实际运行核心测试；它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
 当前完成程度与运行证据只维护在 [项目状态](../docs/project-status.md)。
 
+## 渲染验收串行入口
+
+同用户多个 Godot 渲染窗口会争焦点；对**一次完整前台 supervisor/渲染命令**加锁，
+覆盖它启动并等待的全部验收阶段，只传入当前任务已授权的命令。P02/E01/P03/root 统一使用：
+
+```sh
+python3 tools/with_render_lock.py -- python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/UNIQUE_RUN
+python3 tools/with_render_lock.py -- ./tools/启动月灯巷.command --windowed --resolution 844x390
+```
+
+锁为同机同用户共享的 `/tmp/moonlantern-render-UID.lock`，跨工作树生效；无需删除锁文件。
+等待可 Ctrl-C 中断，命令退出（包括失败/终止）自动释放。命令原 argv、环境、stdout/stderr、
+退出码保持，入口不经 shell 拼接、不打印敏感 argv，不开其他 app、不杀无关进程。
+只包完整前台命令，不后台化或只锁某个子阶段；headless 逻辑检查直接运行，**不使用此入口**。
+这是 Mac/POSIX 开发验收工具，不是游戏运行时依赖；锁不能替代当前 root 明确授予的渲染 slot，
+已在运行的旧窗口不会被接管或改变。
+
 ## Mac 源码启动器
 
 在完整项目目录中双击 [启动月灯巷.command](启动月灯巷.command)，或运行：
