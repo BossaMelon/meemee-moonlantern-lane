@@ -19,7 +19,7 @@ from pathlib import Path
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
           ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
           ("after-collected", "finished"), ("after-finished", "complete")]
-AUXILIARY_STAGES = {"display": "display-checked", "layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
+AUXILIARY_STAGES = {"display": "display-checked", "navigation": "navigation-complete", "layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete", "battle-pause": "pause-checked"}
 RESTORE_STAGES = {stage for stage, _ in STAGES if stage != "start"} | {"restore-smoke"}
 
 
@@ -157,12 +157,13 @@ def main() -> int:
                              and result.get("attempt") == attempt
                              and result.get("process_id") == run["process_id"]
                              and (stage not in RESTORE_STAGES or run["automatic_restore_verified"] is True)
-                             and (expected in ("complete", "display-checked", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
+                             and (expected in ("complete", "display-checked", "navigation-complete", "layout-complete", "pause-checked") or (run["product_exit_observed"] and len(run["saved_sha256"]) == 64))
                              and run["active_scene"] in ("restaurant", "expedition")
                              and run["active_assets_loaded"] is True
                              and result.get("active_asset_evidence", {}).get("visible") is True
                              and result.get("active_asset_evidence", {}).get("observed_after_render") is True
-                             and result.get("display") not in (None, "headless") and display_valid)
+                             and result.get("display") not in (None, "headless") and display_valid
+                             and result.get("verification_kind") == "rendered_runtime" and result.get("rendering_verified") is True)
             write_report()
             print(f"{mode}/{stage}: {'PASS' if run['passed'] else 'FAIL'}; {run['checks']} checks; {log_path}", flush=True)
             if not run["passed"]:

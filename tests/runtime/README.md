@@ -1,6 +1,6 @@
 # P03 主场景运行验收
 
-使用已有 Godot 4.7.2，通过引擎真实渲染主场景并注入 `InputEvent`。不使用 Computer Use，不直接提交核心命令、发按钮信号、修改经济状态或调用测试专用战斗模拟。采购/备餐通用驱动复用 UI owner 的 `game/ui/checks/restaurant.gd`；战斗决策复用 E01 `tests/expedition/action_driver.gd`，只读取实际 session 的位置并转成设备事件。
+使用已有 Godot 4.7.2，通过引擎真实渲染主场景并注入 `InputEvent`。不使用 Computer Use，不直接提交核心命令、发按钮信号、修改经济状态或调用测试专用战斗模拟。沿用 UI owner 的场景预加载、帧等待、库存和数量辅助；P03 自己编排新世界入口与采购/备餐，覆盖旧 helper 的导航。战斗决策复用 E01 `tests/expedition/action_driver.gd`，只读取实际 session 的位置并转成设备事件。
 
 ```sh
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-unique-run
@@ -13,7 +13,13 @@ python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --out
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-display-windowed --modes touch --stage display --windowed --size 844 390
 ```
 
-`display` 只验证实际显示模式、尺寸与初始场景绘制，不代表视觉验收或三日玩法通过。新世界物件交互 UI 需等正式 action_id/返回契约后接入真实输入，不能沿用隐藏 tabbar 或直接调用选页函数。显示接口依据 [Godot 4.7 Window](https://docs.godotengine.org/en/4.7/classes/class_window.html#enum-window-mode) 与 [DisplayServer](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html#class-displayserver-method-screen-get-size)。
+`display` 只验证实际显示模式、尺寸与初始场景绘制，不代表视觉验收或三日玩法通过。显示接口依据 [Godot 4.7 Window](https://docs.godotengine.org/en/4.7/classes/class_window.html#enum-window-mode) 与 [DisplayServer](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html#class-displayserver-method-screen-get-size)。
+
+场景适配依据 P02 `e769385` 的公开协议。`open_sheet()` 先以真实输入关页，再经 `world_lane/world_home` 与相应世界物件进入册页；只读 `get_open_sheet()/get_world_view()` 核对结果。内部旧语义 `tab_*` 只作为测试调用别名，绝不传给产品、定位隐藏 tabbar 或调用内部选页函数；轨迹记录实际 `world_*`、`recipe_*`、`sheet_close`、Escape/B 和可见按钮。鼠标 Escape、手柄 B、触屏合上按钮分别验证关页与回到原物件焦点。采购结束、柜台开门、账本结算按实际阶段路由；保存/恢复/退出先打开暂停册，比较的是实际暂停后保存的完整状态。
+
+GUI 指针继续通过 `Input.parse_input_event`，保留产品的触摸/模拟鼠标路径。使用公开 `Viewport.get_final_transform()` 和 `InputEvent.xformed_by()` 将控件逻辑坐标转换为窗口坐标，记录转换前后位置；不把 Retina/window 尺寸误作控件坐标，也不借改变根窗口尺寸修正命中。动作输入读取 E01 `1e02964` 的 `_centers()/touch_radius(kind)`，不硬编码拖动半径；场地坐标经面板变换后注入，实际设备输入决定 `input_mode`。保存、保存退出和返回工具只在真实暂停后定位。
+
+`--stage navigation` 是渲染环境中的世界入口、关页回焦、菜谱选择和暂停控件定向检查。独立 `navigation_headless.gd` 仅用于无窗口逻辑诊断，配置必须指定 `stage: navigation`；`verification_kind=headless_navigation`、无截图且 `rendering_verified=false`，渲染监督器不能接受它。可选 `logical_size` 只在这个诊断中模拟内容缩放，验证同一 InputEvent 坐标适配，不是全屏证据。例如配置 `{ "output": "/private/tmp/NEW_NAV", "mode": "mouse", "stage": "navigation", "attempt": "nav", "size": [1920,1200], "logical_size": [960,600] }`，再用 `Godot --headless --windowed --path . --log-file /private/tmp/NEW_NAV.log --script tests/runtime/navigation_headless.gd -- --config /private/tmp/NEW_CONFIG.json`。失败保留完整状态、实际输入绑定与源码 SHA256；不能在测试里补产品绑定或绕过恢复后错误册页。
 
 可用 `--modes mouse` 定向跑一种输入；`--stage after-hagrid` 从此 output 中实际产生的文件续跑一个进程，报告会标记仅定向阶段，不能当完整路线结果。全量运行拒绝覆写已有存档证据。输出包含 candidate commit/tree、未提交状态、源码 SHA256、引擎/系统版本、实际命令/退出码、JSONL 输入事件、阶段断言、存档与恢复前完整快照以及 viewport PNG。缺报告、未完成 checkpoint、超时、脚本或引擎错误、headless 均失败。
 
@@ -41,6 +47,8 @@ python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --out
 `--stage battle-pause` 是独立最小诊断：实际进入场地，移动、瞄准施法、释放保持输入，再使用对应暂停输入。它同时要求仍在动作场地与已暂停，避免把误触“返回饭店”后的餐厅暂停计为通过。手柄只在轴值或按下状态改变时发事件；诊断完成由 harness 退出，不提供保存退出或新进程恢复证明。
 
 焦点诊断记录 `focus_entered/exited` 当时和下一帧的窗口焦点、输入序号、测试保持缓存、产品设备输入与权威动作输入，避免假设窗口/应用通知的先后顺序。战斗还在施法/闪避/技能的请求或观测状态改变时保留同类只读样本，JSONL 每条输入附焦点状态。失焦不会清理或重播驱动缓存，也不往核心补状态；失焦清输入和仍聚焦时丢输入须据记录分别判断。原生渲染须服从总协调分配的时段及正式共享锁，其他 chat 占用时仅做静态准备，不自行抢焦点。
+
+H01 `81f04a8` 已提供共享锁，获得原生渲染时段后用 `python3 /Users/yuehao.wang/.codex/worktrees/66a0/meemee-moonlantern-lane/tools/with_render_lock.py -- python3 tests/runtime/run_critical_path.py ...` 包住整轮；caller cwd 不变。P03 不复制该工具到自己的范围。headless 诊断不占渲染锁。
 
 监督器在每个进程结束后另存产品存档与备份的原始字节、SHA256，避免后续阶段覆盖唯一磁盘证据。这些文件与只读内存预期快照分别记录。
 

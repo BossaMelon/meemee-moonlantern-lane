@@ -32,6 +32,9 @@ var focus_events: Array = []
 var window_size_events: Array = []
 var combat_input_samples: Array = []
 var last_combat_input_summary: Dictionary = {}
+var sheet_origin = ""
+var verification_kind = "rendered_runtime"
+const SHEET_ENTRANCES = {"shopping":"world_stall","craft":"world_craft","shelf":"world_menu","gear":"world_gear","journal":"world_journal","storage":"world_storage","counter":"world_counter","order":"world_counter"}
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -41,6 +44,8 @@ func _initialize():
 	mode=str(config.get("mode","mouse"))
 	stage=str(config.get("stage","start"))
 	attempt=str(config.get("attempt",stage))
+	for path in ["game/ui/main.gd","game/ui/shop_canvas.gd","game/ui/checks/restaurant.gd","game/expedition/expedition_panel.gd","game/core/game_session.gd","tests/runtime/critical_path.gd","tests/runtime/navigation_headless.gd"]:
+		if FileAccess.file_exists("res://"+path): source_hashes[path]=FileAccess.get_sha256("res://"+path)
 	DirAccess.make_dir_recursive_absolute(folder)
 	input_file=FileAccess.open(folder+"/"+attempt+"-inputs.jsonl",FileAccess.WRITE)
 	started_ms=Time.get_ticks_msec()
@@ -69,11 +74,23 @@ func emit_input(event: InputEvent, local: bool = false):
 	if local: root.push_input(event,true)
 	else: Input.parse_input_event(event)
 
+func emit_gui_pointer(event: InputEvent):
+	# Controls expose logical viewport coordinates. Input.parse_input_event
+	# receives window coordinates; preserve its normal touch/mouse emulation.
+	var mapped=event.xformed_by(root.get_final_transform())
+	trace.append({"pointer_mapping":{"viewport":str(event.position),"window":str(mapped.position),"transform":str(root.get_final_transform())}})
+	emit_input(mapped)
+
 func fresh(size: Vector2i, restore_existing: bool = false):
 	# Godot desktop ScrollContainer enables the touchscreen drag path only
 	# with this runtime emulation flag; no project setting is saved.
 	Input.emulate_touch_from_mouse=(mode=="touch")
-	if config.get("fullscreen",false):
+	if verification_kind=="headless_navigation":
+		expect(DisplayServer.get_name()=="headless" and not config.get("fullscreen",false),"headless navigation makes no native window claim")
+		root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
+		root.content_scale_size=Vector2i.ZERO
+		root.size=size
+	elif config.get("fullscreen",false):
 		# The CLI requests actual fullscreen. Never replace its screen-sized
 		# viewport with the old 1280/960 test dimensions or enlarge a PNG.
 		var deadline=Time.get_ticks_msec()+10000
@@ -107,6 +124,7 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 	startup_feedback=ui.feedback.text
 	ui.tree_exiting.connect(_observe_product_exit)
 	ui.action_completed.connect(func(_kind,_args,result): last_result=result; action_count+=1)
+	expect(ui.has_method("get_open_sheet") and ui.has_method("get_world_view"),"published world/sheet read-only API is present")
 	# Match the parent helper's route/restart intent, but never move or reset a
 	# save here: every P03 route uses a distinct supervisor-owned directory.
 	var has_existing=startup_files.primary!="missing" or startup_files.backup!="missing"
@@ -119,6 +137,80 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		expect(ui.size==root.get_visible_rect().size,"main scene fills actual fullscreen viewport")
 	else:
 		expect(ui.size==Vector2(size),"viewport uses requested dimensions")
+
+func activate_visible(id: String):
+	var control=ui.get_action_control(id)
+	expect(is_instance_valid(control) and control.is_visible_in_tree(),"actual visible control exists: "+id)
+	if not is_instance_valid(control) or not control.is_visible_in_tree(): return
+	await activate_control(control,id)
+
+func close_sheet():
+	if ui.get_open_sheet()=="": return
+	if ui.get_open_sheet()=="pause":
+		await activate_visible("resume")
+		expect(not ui.game.view().paused and ui.get_open_sheet()=="","resume closes real pause sheet")
+		return
+	var origin=sheet_origin
+	if mode=="pad":
+		trace.append({"actual_navigation":"ui_cancel","device":"pad_B","from_sheet":ui.get_open_sheet()})
+		await pad_button(JOY_BUTTON_B)
+	elif mode=="mouse":
+		trace.append({"actual_navigation":"ui_cancel","device":"keyboard_Escape","from_sheet":ui.get_open_sheet()})
+		await key(KEY_ESCAPE,true); await key(KEY_ESCAPE,false)
+	else: await activate_visible("sheet_close")
+	await frames(3)
+	expect(ui.get_open_sheet()=="","real close input returns to world")
+	if origin!="": expect(root.gui_get_focus_owner()==ui.get_action_control(origin),"closing sheet restores actual object focus: "+origin)
+	sheet_origin=""
+
+func open_sheet(kind: String):
+	if ui.get_open_sheet()==kind: return
+	await close_sheet()
+	if not failures.is_empty(): return
+	if kind=="pause":
+		await activate_visible("pause")
+		expect(ui.game.view().paused and ui.get_open_sheet()=="pause","visible pause control opens pause sheet")
+		return
+	expect(SHEET_ENTRANCES.has(kind),"published world entrance exists for sheet: "+kind)
+	if not SHEET_ENTRANCES.has(kind): return
+	var world="lane" if kind=="shopping" else "room"
+	if ui.get_world_view()!=world:
+		await activate_visible("world_lane" if world=="lane" else "world_home")
+		expect(ui.get_world_view()==world and ui.get_open_sheet()=="","real doorway reaches "+world)
+	if not failures.is_empty(): return
+	var entrance: String=SHEET_ENTRANCES[kind]
+	await activate_visible(entrance)
+	var expected="order" if kind=="counter" and not ui.game.view().pending.is_empty() else kind
+	expect(ui.get_open_sheet()==expected,"world object opens expected visible sheet: "+entrance+" -> "+expected)
+	sheet_origin=entrance
+
+func activate(id: String):
+	# Legacy semantic callers are routed through visible objects. These aliases
+	# never reach get_action_control(), and the trace contains actual world IDs.
+	if id.begins_with("tab_"):
+		await open_sheet(id.trim_prefix("tab_")); return
+	if id=="to_shelf": await open_sheet("shelf"); return
+	if id=="pause":
+		if ui.game.view().paused: await activate("resume")
+		else: await open_sheet("pause")
+		return
+	if id in ["save","load","quit","resume"]:
+		await open_sheet("pause")
+	elif id=="primary":
+		var target={"shopping":"shopping","preparation":"counter","closing":"journal","settled":"journal"}.get(ui.game.view().phase,"")
+		expect(target!="","current phase has an economic primary action")
+		if target=="": return
+		await open_sheet(target)
+	elif id.begins_with("buy_"): await open_sheet("shopping")
+	elif id.begins_with("craft_"):
+		await open_sheet("craft")
+		await activate_visible("recipe_"+id.trim_prefix("craft_"))
+	elif id.begins_with("fulfill_") or id=="special_decline": await open_sheet("order")
+	elif id.begins_with("upgrade_"): await open_sheet("journal")
+	elif id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]: await open_sheet("gear")
+	if not failures.is_empty(): return
+	await activate_visible(id)
+	if id=="resume": expect(not ui.game.view().paused and ui.get_open_sheet()=="","resume returns to unpaused world")
 
 func pad_button(index: int):
 	for down in [true,false]:
@@ -155,25 +247,25 @@ func scroll_to(button: Button):
 		if mode=="touch":
 			var at=scroll_gesture_origin(clip)
 			var touch=InputEventScreenTouch.new()
-			touch.index=0; touch.position=at; touch.pressed=true; emit_input(touch)
+			touch.index=0; touch.position=at; touch.pressed=true; emit_gui_pointer(touch)
 			for j in range(1,7):
 				var drag=InputEventScreenDrag.new()
 				drag.index=0; drag.position=at-Vector2(0,direction*j*20); drag.relative=Vector2(0,-direction*20)
-				emit_input(drag); await frames(1)
+				emit_gui_pointer(drag); await frames(1)
 			# Hold before lifting to end the gesture without a kinetic fling.
 			# Otherwise the button can move between its measured rect and tap.
 			await create_timer(0.25,true,false,true).timeout
 			touch=InputEventScreenTouch.new()
-			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_input(touch)
+			touch.index=0; touch.position=at-Vector2(0,direction*120); touch.pressed=false; emit_gui_pointer(touch)
 		else:
-			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_input(motion)
+			var motion=InputEventMouseMotion.new(); motion.position=clip.get_center(); motion.global_position=motion.position; emit_gui_pointer(motion)
 			var wheel=InputEventMouseButton.new()
 			wheel.position=clip.get_center(); wheel.global_position=wheel.position
 			wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN if direction>0 else MOUSE_BUTTON_WHEEL_UP
-			wheel.pressed=true; emit_input(wheel)
+			wheel.pressed=true; emit_gui_pointer(wheel)
 			var release=InputEventMouseButton.new()
 			release.position=wheel.position; release.global_position=wheel.global_position
-			release.button_index=wheel.button_index; release.pressed=false; emit_input(release)
+			release.button_index=wheel.button_index; release.pressed=false; emit_gui_pointer(release)
 		await frames(2)
 	await screenshot(mode+"-scroll-failure-"+str(button.get_meta("action_id",button.name)))
 	expect(false,"real scrolling reaches "+str(button.get_meta("action_id",button.name)))
@@ -196,36 +288,35 @@ func activate_control(button: Button, id: String):
 		await scroll_to(button)
 		await frames(2)
 		var rect=button.get_global_rect()
-		expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(rect),"target on viewport: "+id)
+		expect(root.get_visible_rect().encloses(rect),"target on logical viewport: "+id)
 		if mode=="mouse":
 			var motion=InputEventMouseMotion.new()
 			motion.position=rect.get_center(); motion.global_position=motion.position
-			emit_input(motion); await frames(1)
+			emit_gui_pointer(motion); await frames(1)
 		for down in [true,false]:
 			trace.append({"control_input":id,"pressed":down,"at":str(rect.get_center()),"current_rect":str(button.get_global_rect()),"scroll_vertical":ui.scroll.scroll_vertical})
 			if mode=="touch":
 				var event=InputEventScreenTouch.new()
 				event.index=0; event.position=rect.get_center(); event.pressed=down
-				emit_input(event)
+				emit_gui_pointer(event)
 			else:
 				var event=InputEventMouseButton.new()
 				event.position=rect.get_center(); event.global_position=event.position
 				event.button_index=MOUSE_BUTTON_LEFT; event.pressed=down
 				event.button_mask=MOUSE_BUTTON_MASK_LEFT if down else 0
-				emit_input(event)
+				emit_gui_pointer(event)
 			await frames(1)
 	await frames(3)
 	var economic=id=="primary" or id.begins_with("buy_") or id.begins_with("craft_") or id.begins_with("display_") or id.begins_with("fulfill_") or id.begins_with("upgrade_") or id.begins_with("equip_") or id in ["install_cauldron","sell_cauldron","consume_pie","start_expedition"]
 	if economic and action_count==count_before: await screenshot(mode+"-intent-failure-"+id)
-	if economic: expect(action_count>count_before,"real control emits expected economic intent: "+id)
+	if economic: expect(action_count==count_before+1,"one real control input emits exactly one economic intent: "+id)
 	if action_count>count_before: expect(last_result.get("ok",false),"command result: "+id+" "+str(last_result.get("message","")))
 	var v: Dictionary=ui.game.view()
-	if id.begins_with("tab_"): expect(ui.tab==id.trim_prefix("tab_"),"tab input actually selects "+id)
 	if id.begins_with("craft_"):
 		var output=id.trim_prefix("craft_")
 		expect(ui.illustration.effects.any(func(effect): return effect.item_id==output and effect.source=="craft"),"actual cooking triggers matching visual effect: "+output)
 		await screenshot(mode+"-actual-craft-"+output)
-	trace.append({"mode":mode,"action":id,"day":v.day,"phase":v.phase,"cash":v.cash,"cursor":v.cursor,"clock_ms":v.clock_ms})
+	trace.append({"mode":mode,"action":id,"sheet":ui.get_open_sheet(),"world":ui.get_world_view(),"day":v.day,"phase":v.phase,"cash":v.cash,"cursor":v.cursor,"clock_ms":v.clock_ms})
 	print("P03 INPUT ",mode," ",id," => ",v.day,"/",v.phase)
 
 func quantity(value: int):
@@ -294,6 +385,7 @@ func observe_input_state() -> Dictionary:
 			sample.authoritative_input=view.expedition.get("input",{}).duplicate(true)
 			if is_instance_valid(ui.battle_panel) and ui.battle_panel.has_method("current_input"):
 				sample.product_device_input=ui.battle_panel.current_input().duplicate(true)
+				sample.input_mode=ui.battle_panel.get("input_mode")
 	return sample
 
 func record_focus(focused: bool):
@@ -429,6 +521,7 @@ func restore(name: String, check_explicit_button: bool = false):
 	await screenshot(mode+"-restored-"+name)
 
 func trade(day: int, hot: bool, resume: bool = false):
+	if resume and ui.game.view().paused: await activate("resume")
 	if not resume:
 		await activate("primary")
 		expect(ui.game.view().phase=="trading","restaurant opened")
@@ -448,6 +541,7 @@ func trade(day: int, hot: bool, resume: bool = false):
 				expect(v.pending.character_id=="hagrid","Hagrid is pending before restart")
 				await save_and_exit("hagrid-pending")
 				return
+			await open_sheet("order")
 			await screenshot(mode+"-order-day"+str(day))
 			var preferred="floating_pie" if day==1 else ("moon_stew" if hot else "ember_soup")
 			var picked=""
@@ -464,12 +558,14 @@ func trade(day: int, hot: bool, resume: bool = false):
 	expect(ui.game.view().phase=="closing","customer queue completes")
 	await activate("primary")
 	expect(ui.game.view().phase=="settled","daily settlement committed")
+	await open_sheet("pause")
 	var settled: Dictionary=ui.game.snapshot()
 	# Repeated confirmation is directed to the disabled page's settlement? The
 	# primary now means next-day, so do not mislabel a different action as retry.
 	await activate("save")
 	await activate("load")
 	expect(json_equal(settled,ui.game.snapshot()),"settled restore adds no second fee/reward")
+	await activate("resume")
 
 func inject_combat(input: Dictionary):
 	var panel=ui.battle_panel
@@ -480,7 +576,8 @@ func inject_combat(input: Dictionary):
 				var e=InputEventKey.new(); e.keycode=code; e.physical_keycode=code; e.pressed=next[code]; emit_input(e)
 		pressed_keys=next
 		var p: Dictionary=ui.game.view().expedition.player
-		var point=(Vector2(p.x,p.y)+Vector2(input.aim_x,input.aim_y)*100.0)/Vector2(960,540)*panel.field.size+panel.field.position
+		var local_point=(Vector2(p.x,p.y)+Vector2(input.aim_x,input.aim_y)*100.0)/Vector2(960,540)*panel.field.size+panel.field.position
+		var point=panel.get_global_transform_with_canvas()*local_point
 		var motion=InputEventMouseMotion.new(); motion.position=point; motion.global_position=point; emit_input(motion,true)
 	elif mode=="pad":
 		for pair in [[JOY_AXIS_LEFT_X,input.move_x],[JOY_AXIS_LEFT_Y,input.move_y],[JOY_AXIS_RIGHT_X,input.aim_x],[JOY_AXIS_RIGHT_Y,input.aim_y]]:
@@ -496,13 +593,14 @@ func inject_combat(input: Dictionary):
 		var values={"move":Vector2(input.move_x,input.move_y),"aim":Vector2(input.aim_x,input.aim_y),"cast":input.cast,"dodge":input.dodge,"skill":input.skill}
 		var index=0
 		for kind in values:
+			var center=panel.get_global_transform_with_canvas()*centers[kind]
 			var on: bool=values[kind].length_squared()>0.00001 if values[kind] is Vector2 else values[kind]
 			if on and not active_touches.get(index,false):
-				var e=InputEventScreenTouch.new(); e.index=index; e.position=centers[kind]; e.pressed=true; emit_input(e,true)
+				var e=InputEventScreenTouch.new(); e.index=index; e.position=center; e.pressed=true; emit_input(e,true)
 			if on and values[kind] is Vector2:
-				var e=InputEventScreenDrag.new(); e.index=index; e.position=centers[kind]+values[kind]*55.0; emit_input(e,true)
+				var e=InputEventScreenDrag.new(); e.index=index; e.position=panel.get_global_transform_with_canvas()*(centers[kind]+values[kind]*panel.touch_radius(kind)); emit_input(e,true)
 			if not on and active_touches.get(index,false):
-				var e=InputEventScreenTouch.new(); e.index=index; e.position=centers[kind]; e.pressed=false; emit_input(e,true)
+				var e=InputEventScreenTouch.new(); e.index=index; e.position=center; e.pressed=false; emit_input(e,true)
 			active_touches[index]=on
 			index+=1
 
@@ -520,6 +618,7 @@ func battle(day: int, resume: bool = false):
 	if not resume:
 		await activate("start_expedition")
 		expect(ui.game.view().phase=="expedition","real expedition mounted")
+		expect(ui.battle_panel.has_method("touch_radius"),"published E01 adaptive touch radius API is present")
 	else:
 		await pause_combat()
 		expect(not ui.game.view().paused,"resume paused battle through real input")
@@ -571,7 +670,9 @@ func battle(day: int, resume: bool = false):
 		await process_frame
 		observe_combat_input(input)
 		iteration+=1
-		if iteration==30: await screenshot(mode+"-combat-day"+str(day))
+		if iteration==30:
+			expect(ui.battle_panel.input_mode=={"mouse":"keyboard","pad":"gamepad","touch":"touch"}[mode],"actual device input selects matching combat HUD")
+			await screenshot(mode+"-combat-day"+str(day))
 	var end: Dictionary=ui.game.view()
 	expect(end.phase=="shopping","battle returns to restaurant")
 	expect(end.expedition.return_reason=="completed","actual enemies defeated and drops collected")
@@ -608,6 +709,38 @@ func prepare_day(day: int, hot: bool):
 		targets.comet_pie=1
 	await shop_and_prepare(targets,hot)
 
+func shop_and_prepare(targets: Dictionary, hot: bool):
+	await open_sheet("shopping")
+	var needed={}
+	for recipe in ui.game.view().recipes:
+		if not targets.has(recipe.output): continue
+		var missing=maxi(0,int(targets[recipe.output])-int(inventory(recipe.output).bag))
+		for raw in recipe.inputs: needed[raw]=needed.get(raw,0)+missing*int(recipe.inputs[raw])
+	for raw in needed:
+		var missing=maxi(0,int(needed[raw])-int(inventory(raw).bag))
+		if missing>0:
+			await quantity(missing)
+			await activate("buy_"+str(raw))
+	await activate("primary")
+	expect(ui.game.view().phase=="preparation" and ui.get_open_sheet()=="","procurement returns to real preparation world")
+	if hot and inventory("stirring_cauldron").installed==0: await activate("install_cauldron")
+	await open_sheet("craft")
+	for output in targets:
+		var missing=maxi(0,int(targets[output])-int(inventory(output).bag))
+		if missing>0:
+			await quantity(missing)
+			await activate("craft_"+str(output))
+			if ui.game.view().day==1 or output in ["ember_soup","star_soup","comet_pie"]: await screenshot(mode+"-"+str(output)+"-cooking")
+	await open_sheet("shelf")
+	for output in targets:
+		var count=int(inventory(output).bag)
+		if count<=0: continue
+		await quantity(count)
+		await activate("select_"+str(output))
+		await activate("display_"+str(output))
+		await activate("price_standard")
+	await screenshot(mode+"-menu-day"+str(ui.game.view().day))
+
 func end_day(day: int):
 	if day==1:
 		await activate("upgrade_field_kit")
@@ -625,6 +758,39 @@ func gear(day: int):
 		await activate("consume_pie")
 		expect(inventory("floating_pie").bag==before-1 and ui.game.view().next_expedition_shield,"food removes a real dish and grants next expedition shield")
 
+func navigation_checks():
+	expect(ui.get_open_sheet()=="" and ui.get_world_view()=="room","new game starts in the room without a sheet")
+	var before: Dictionary=ui.game.snapshot()
+	for kind in ["shopping","craft","shelf","counter","journal","gear","storage"]:
+		await open_sheet(kind)
+		if not failures.is_empty(): return
+		expect(ui.get_action_control("pause").disabled,"open sheet owns focus instead of background pause: "+kind)
+		await screenshot(mode+"-navigation-"+kind)
+		await close_sheet()
+		if not failures.is_empty(): return
+		expect(json_equal(before,ui.game.snapshot()),"world navigation leaves complete economic state unchanged: "+kind)
+	await activate_visible("world_stove")
+	sheet_origin="world_stove"
+	expect(ui.get_open_sheet()=="craft","actual stove opens the recipe book")
+	await activate_visible("recipe_moon_stew")
+	expect(is_instance_valid(ui.get_action_control("craft_moon_stew")) and ui.get_action_control("craft_moon_stew").is_visible_in_tree(),"recipe selection exposes its actual craft control")
+	await quantity(3)
+	await close_sheet()
+	if not failures.is_empty(): return
+	await open_sheet("pause")
+	for id in ["resume","save","load","quit"]:
+		var button=ui.get_action_control(id)
+		expect(is_instance_valid(button) and button.is_visible_in_tree() and not button.disabled,"pause sheet exposes real "+id)
+	var paused: Dictionary=ui.game.snapshot()
+	await activate("save")
+	expect("保存成功" in ui.feedback.text,"pause sheet saves through the actual product control")
+	await activate("load")
+	compare_restored_snapshot(ui.game.snapshot(),paused,"explicit load preserves complete paused snapshot")
+	expect(ui.get_open_sheet()=="pause","restoring a paused save exposes the pause sheet and resume control")
+	if not failures.is_empty(): return
+	await activate("resume")
+	expect(json_equal(before,ui.game.snapshot()),"navigation and pause roundtrip preserve complete economic state")
+
 func run():
 	expect(not config.is_empty(),"supervisor config supplied")
 	var size=Vector2i(1280,800) if mode=="mouse" else Vector2i(960,640)
@@ -634,6 +800,10 @@ func run():
 	var hot=mode!="touch"
 	if stage=="display":
 		checkpoint="display-checked"; write_report(); quit(0 if failures.is_empty() else 1)
+	elif stage=="navigation":
+		await navigation_checks()
+		if not failures.is_empty(): return
+		checkpoint="navigation-complete"; write_report(); quit(0)
 	elif stage=="exit-smoke":
 		await save_and_exit("smoke")
 	elif stage=="restore-smoke":
@@ -659,15 +829,18 @@ func run():
 		expect(ui.game.view().paused,"published device pause input pauses actual combat")
 		checkpoint="pause-checked"; write_report(); quit(0 if failures.is_empty() else 1)
 	elif stage=="layout":
-		for id in ["pause","save","load","quit","primary","tab_gear"]:
+		for id in ["pause","world_gear","world_stove","world_menu","world_counter","world_journal","world_lane"]:
 			var control=ui.get_action_control(id)
-			expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(control.get_global_rect()),"narrow viewport contains "+id)
+			expect(is_instance_valid(control) and control.is_visible_in_tree() and root.get_visible_rect().encloses(control.get_global_rect()),"narrow viewport contains actual world control "+id)
+		await open_sheet("shopping")
 		expect(ui.scroll.size.y>=96,"narrow layout leaves usable scroll height")
+		await close_sheet()
 		await activate("tab_gear"); await activate("start_expedition")
 		if not failures.is_empty(): return
 		await screenshot(mode+"-narrow-combat")
+		await pause_combat()
 		for control in [ui.battle_panel.pause_button,ui.battle_panel.save_button,ui.battle_panel.return_button]:
-			expect(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(control.get_global_rect()),"narrow combat button on screen: "+control.text)
+			expect(control.is_visible_in_tree() and root.get_visible_rect().encloses(control.get_global_rect()),"narrow paused combat button on screen: "+control.text)
 		checkpoint="layout-complete"; write_report(); quit(0 if failures.is_empty() else 1)
 	elif stage=="start":
 		await screenshot(mode+"-opening")
@@ -726,6 +899,15 @@ func write_report():
 	report["focus_events"]=focus_events
 	report["window_size_events"]=window_size_events
 	report["combat_input_samples"]=combat_input_samples
+	report["verification_kind"]=verification_kind
+	report["source_sha256"]=source_hashes
+	if verification_kind=="headless_navigation": report["suite"]="p03-headless-world-navigation"
+	report["rendering_verified"]=verification_kind=="rendered_runtime" and DisplayServer.get_name()!="headless" and not display_samples.is_empty()
+	report["input_bindings"]={}
+	for action in ["ui_accept","ui_cancel","shop_pause"]:
+		report.input_bindings[action]=[]
+		if InputMap.has_action(action):
+			for event in InputMap.action_get_events(action): report.input_bindings[action].append({"event":event.as_text(),"device":event.device})
 	report["active_assets_loaded"]=visual_evidence.get("active_scene")==report.active_scene and visual_evidence.get("active_assets_loaded",false)
 	# The last live rendered frame is authoritative; children may already be
 	# exiting when the product's tree_exiting observer writes the final report.
