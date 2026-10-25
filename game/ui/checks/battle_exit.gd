@@ -54,6 +54,12 @@ func run():
 	if "--playing" in OS.get_cmdline_user_args():
 		await activate_control(ui.battle_panel.pause_button,"resume_before_product_quit")
 		expect(not ui.game.view().paused,"playing save-quit fixture is active")
+		var player_x=ui.game.view().expedition.player.x
+		await key(KEY_D,true)
+		await create_timer(0.12).timeout
+		await key(KEY_D,false)
+		await frames()
+		expect(ui.game.view().expedition.player.x>player_x,"failed exit cancellation restores actual combat input and advance")
 	ui.save_path=folder+("/expedition-playing.json" if "--playing" in OS.get_cmdline_user_args() else "/expedition.json")
 	ui.tree_exiting.connect(_observe_exit)
 	await screenshot("expedition-before-exit-844")

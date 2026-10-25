@@ -12,9 +12,9 @@
 
 ## 主界面与动作边界
 
-E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`，发出 `returned`、`pause_requested`、`save_requested`、`save_quit_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
+E01 固定接口：`scenes/expedition/expedition.tscn` 的根 Control 提供 `bind_session(session)`、`refresh()`、`release_inputs()`、`cancel_save_quit()`，发出 `returned`、`pause_requested`、`save_requested`、`save_quit_requested`。主 UI 在 `phase=expedition` 显示全屏动作层、隐藏经营页面，原点保持在 viewport (0,0)，避免 E01 触控坐标偏移。动作场景自己推进 `session.advance()`，主 UI 此时不推进；返回信号恢复经营页。
 
-动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；退出意图在释放输入与写文件前冻结经营及动作处理，成功后直接请求退出，避免帧末退出前再推进会话。失败时恢复处理、暂停并显示实际错误，保留窗口。
+动作期间主 UI 不再消费动作按键，避免 Start/Escape 双暂停以及 B 闪避触发取消。暂停/保存前调用 `release_inputs()`；恢复经营存档时同样先释放保持输入。全屏层继承中文字体与像素按钮样式；暂停时主 UI 的通用焦点链使动作按钮可用手柄导航，恢复后焦点回到动作面板。E01 的保存退出信号连接 `_save(true)`；退出意图在释放输入与写文件前冻结经营及动作处理，成功后直接请求退出，避免帧末退出前再推进会话。失败时恢复处理、调用 E01 `cancel_save_quit()`、暂停并显示实际错误，保留窗口；继续后动作可再次推进。
 
 ## 输入回归
 

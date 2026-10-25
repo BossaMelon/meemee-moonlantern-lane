@@ -71,7 +71,7 @@ func _ready():
 		var startup_load = _load_game()
 		if not save_writes_allowed:
 			game.set_paused(true)
-			_notice("存档无法恢复。原存档与备份已保留，退出不会覆盖；请修复文件后重试恢复。")
+			_notice("存档无法恢复。可以重试恢复，或退出并保留原存档与备份。")
 			_show_file_error("RestoreFailure","存档未恢复，原文件已保留",str(startup_load.message)+"\n退出不会覆盖原存档或备份。")
 	else:
 		save_writes_allowed = true
@@ -709,7 +709,9 @@ func _save(exit_when_saved: bool):
 		return
 	if exit_when_saved:
 		set_process(main_was_processing)
-		if is_instance_valid(battle_panel): battle_panel.process_mode=battle_process_mode
+		if is_instance_valid(battle_panel):
+			battle_panel.process_mode=battle_process_mode
+			battle_panel.cancel_save_quit()
 	_notice(("保存成功：" if result.ok else "保存失败：")+str(result.message))
 	_refresh()
 	if not result.ok:
