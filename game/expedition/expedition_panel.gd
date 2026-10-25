@@ -20,7 +20,7 @@ var mouse_aim = false
 var frame_ms = 0.0
 var textures: Dictionary = {}
 var manifest: Dictionary = {}
-var font: SystemFont
+var font: Font
 var message = ""
 var serial = 0
 var last_input: Dictionary = EMPTY_INPUT.duplicate()
@@ -62,8 +62,7 @@ func _ready():
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["PingFang SC","Noto Sans CJK SC","Arial"])
+	font = preload("res://game/ui/portable_font.gd").get_font()
 	hud_style = _box(Color(0.045,0.095,0.105,0.86),Color(0.72,0.65,0.43,0.48),8)
 	menu_style = _box(Color("142a2b"),Color("ac9767"),10)
 	# This project's effective desktop defaults have keyboard-only ui_accept.
@@ -448,10 +447,9 @@ func _input(event: InputEvent):
 func _texture(id: String, background: bool = false) -> Texture2D:
 	if textures.has(id): return textures[id]
 	var path = "res://assets/pixel/"+("backgrounds/" if background else "sprites/")+id+".png"
-	if not FileAccess.file_exists(path): return null
-	var image = Image.load_from_file(path)
-	if image == null or image.is_empty(): return null
-	var texture = ImageTexture.create_from_image(image)
+	if not ResourceLoader.exists(path,"Texture2D"): return null
+	var texture = ResourceLoader.load(path,"Texture2D") as Texture2D
+	if texture == null: return null
 	textures[id] = texture
 	return texture
 
