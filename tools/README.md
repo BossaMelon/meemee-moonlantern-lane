@@ -163,3 +163,55 @@ step 上加入条件和失败吞并。更复杂的 YAML 写法应先更新并验
 
 Mac 原型和无显示测试可立即推进。Windows 导出、iOS 构建、触屏/实体手柄、
 人类趣味验证各有独立证据要求；当前未运行这些验证，且本机缺完整 Xcode。
+
+## D01：Mac 质量 demo 源码运行包装
+
+[build_local_demo.py](build_local_demo.py) 复用现有 Godot 4.7.2 `.app`，输出可双击的
+`月灯巷质量试玩.app`、`开始试玩.command`、说明和 manifest。它是自带编辑器引擎的离线源码包装，
+不是 Godot 原生导出、签名/公证发行包或 Steam 发行成果。实际构建须等 root 给最终审核候选 SHA：
+
+```sh
+python3 tools/build_local_demo.py \
+  --repo /absolute/source-worktree \
+  --candidate ROOT_APPROVED_FULL_40_HEX_SHA \
+  --godot-app "/absolute/已有 Godot.app" \
+  --output "/absolute/existing-parent/全新质量试玩"
+```
+
+占位符须替换；没有候选或引擎默认值，不接受 HEAD、分支、短 SHA 或 tag 对象。
+输出父目录必须已存在，路径须为无 symlink 的规范路径（例如使用 `/private/tmp` 而非 `/tmp`）。
+已有成功/失败输出都拒绝覆盖；候选源码目录内仅允许已忽略的输出路径，不写引擎目录或 Git 存储。
+不下载、安装、扫描/迁移旧玩家存档、修改全局配置或自动上传发布。
+
+构建器使用 `git archive` 并逐文件对照候选 Git blob，忽略脏工作区和未跟踪文件，保留候选自己的
+可执行启动器；链接、子模块、越界路径及 export-ignore/subst 导致的遗漏/内容变化均拒绝。
+不修改游戏源码。仅新增隔离用户目录的 `override.cfg`；冷导入产生的 `.godot`、`.import`/`.uid`
+元数据和验证 sidecar 显式列哈希及来源，其他新增文件或候选源码/模式变化导致失败。
+manifest 记录源码 SHA/tree/archive、逐文件内容/模式、构建器、引擎、配置和生成文件哈希。
+隔离配置的预期内容与哈希由本次 player/verify 目录生成；每次探测结束和交付前都逐字节核对
+运行配置及配置 sidecar，并要求它们是单链接常规文件。篡改、链接替换或内容不符均拒收，
+阶段切换使用原子替换，不经符号链接写入外部文件。
+
+每包分配独立 player/verify 用户目录，新默认相对路径为
+`user://profiles/rain-night-v1/moonlantern.json`。构建时三次独立进程走实际 `.app` 可执行入口：
+冷导入后加载候选真实 Main，通过 headless Escape 输入建立非默认暂停标记并调用核心默认保存；
+第二次由 Main 自动恢复并比较完整快照/主备档哈希；第三次仅核对 player 目录与主备档仍为空。
+探针不覆盖 `scene.save_path` 或手动注入恢复状态，读取实际 profile/version/default 路径和资源。
+所有进程输出与入口 `launcher.log` 均检查引擎错误；非零、超时、缺报告或不匹配都拒收。
+失败保留新输出、日志和 failed manifest，不清理或重用旧输出；超时/中断只处理本次新会话的进程组。
+即使父进程已退出、管道已关闭，也要核验整组退出；TERM 宽限后仍存在则发 KILL，
+退出核验失败就拒收，不向未知进程组发送信号。执行记录保留组 ID、清理信号和组退出核验结果。
+
+这些是 **headless 打包/默认核心保存及 Main 恢复诊断**。manifest 的 native、LaunchServices、Q06、
+外部旧 v2 主备档哈希保护标记保持未验证；不冒充 UI 保存退出/完整输入或人类趣味通过。
+后续实际双击入口、真实保存退出/恢复、旧档哈希保护证据和原生时段由 root/P06 按最终固定包验收，
+不在其它任务持有渲染 slot 时启动原生。
+
+工具守卫测试：
+
+```sh
+python3 -m unittest discover -s tools -p test_build_local_demo.py -v
+```
+
+测试只用临时 Git/小型假引擎协议夹具；假项目明确不能作为游戏运行，临时目录自动清理。
+它们不构建真实交付包，也不称为游戏、原生或 Q06 验收。现有 required CI 不替代这项本地守卫测试。
