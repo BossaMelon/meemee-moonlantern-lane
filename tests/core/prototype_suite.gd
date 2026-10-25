@@ -223,6 +223,18 @@ func test_p03():
 	expect(not b.view().pending.is_empty(),"special order active")
 	act(b,"fulfill",{"order_id":b.view().pending.id,"item_id":"lamp"})
 	expect(b.snapshot().sales.back().revenue == 17,"budget equals price accepted")
+	var device = Session.new(1)
+	act(device,"buy",{"item_id":"bell","quantity":1})
+	act(device,"finish_shopping")
+	var original_items = device.snapshot().items
+	var original_cash = device.view().cash
+	act(device,"install",{"uid":original_items[0].uid})
+	expect(count(device,"bell","installed") == 1 and count(device,"bell","bag") == 0,"install moves one existing instance")
+	expect("waterproof" in device.view().inventory[5].tags,"installed device grants lamp effect")
+	act(device,"uninstall",{"uid":original_items[0].uid})
+	expect(device.snapshot().items == original_items and device.view().cash == original_cash,"uninstall restores same uid, cost and bag location without money change")
+	expect("waterproof" not in device.view().inventory[5].tags,"uninstall removes granted effect")
+	reject(device,"uninstall",{"uid":original_items[0].uid})
 
 func test_p04():
 	var g = Session.new(7)
@@ -259,7 +271,9 @@ func test_p04():
 	expect(reject(h,"display",{"item_id":"feather","quantity":1}).code == "capacity","actual third SKU hits shelf capacity")
 	act(h,"open_shop")
 	h.advance(3000)
-	if not h.view().pending.is_empty(): reject(h,"fulfill",{"order_id":h.view().pending.id,"item_id":"charm"})
+	expect(not h.view().pending.is_empty(),"required-effect rejection reaches special order")
+	var mismatch = reject(h,"fulfill",{"order_id":h.view().pending.get("id",""),"item_id":"charm"})
+	expect(mismatch.code == "unmatched" and "light" in mismatch.message,"on-shelf charm cannot bypass required light effect")
 	var poor = Session.new(1)
 	act(poor,"buy",{"item_id":"timber","quantity":1})
 	act(poor,"finish_shopping"); act(poor,"craft",{"recipe_id":"lamp","quantity":1}); act(poor,"display",{"item_id":"lamp","quantity":1})
@@ -377,6 +391,29 @@ func test_p07():
 	expect(g.snapshot() == frozen,"pause freezes economic state, cursor and phase clock")
 	act(g,"pause",{"value":false}); g.advance(500)
 	expect(g.view().cursor == 1,"resume continues saved clock")
+	# Populate persistent capabilities as well as economy before comparing a reload.
+	g = prepared(7)
+	act(g,"buy",{"item_id":"bell","quantity":1},"persistent-device")
+	var bell_uid = g.snapshot().items.back().uid
+	act(g,"finish_shopping"); act(g,"install",{"uid":bell_uid})
+	act(g,"craft",{"recipe_id":"lamp","quantity":4}); act(g,"display",{"item_id":"lamp","quantity":4})
+	act(g,"open_shop"); finish_trade(g); act(g,"upgrade",{"upgrade_id":"supply_pass"}); act(g,"next_day")
+	act(g,"recover",{},"persistent-recovery")
+	act(g,"buy",{"item_id":"pen","quantity":4})
+	act(g,"finish_shopping"); act(g,"price",{"item_id":"pen","tier":"friendly"})
+	act(g,"display",{"item_id":"pen","quantity":4}); act(g,"open_shop"); g.advance(1500)
+	expect(g.set_paused(true).ok,"public pause before persistent-state save")
+	expect(count(g,"bell","installed") == 1 and "supply_pass" in g.snapshot().upgrades,"save has nonempty equipment and upgrades")
+	expect(g.snapshot().daily_recovery == 1 and g.snapshot().clock_ms == 500,"save has used daily reward and fractional clock")
+	clone = roundtrip(g,"persistent-capabilities")
+	var restored = clone.snapshot()
+	expect(clone.command("buy",{"item_id":"bell","quantity":1},"persistent-device").code == "duplicate","reload preserves committed request across days")
+	expect(clone.snapshot() == restored,"duplicate after reload cannot rebuy device")
+	reject(clone,"recover")
+	clone.advance(60000)
+	expect(clone.snapshot() == restored,"loaded paused game preserves partial clock")
+	for game in [g,clone]: expect(game.set_paused(false).ok,"resume populated save")
+	same_continuation(g,clone)
 
 func test_p08():
 	for seed_value in seeds:
