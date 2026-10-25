@@ -332,7 +332,8 @@ static func _coordinates(e: Dictionary) -> bool:
 	return e.has_all(["x","y"]) and _number(e.x,0,WIDTH) and _number(e.y,0,HEIGHT)
 
 static func validate(value: Variant) -> String:
-	if value is Dictionary and value.get("version") == 2: return Rain.validate(value)
+	if value is Dictionary and Rain._integer(value.get("version"),2,2): return Rain.validate(value)
+	if value is Dictionary and not Rain._integer(value.get("version"),1,1): return "动作版本非法"
 	if not value is Dictionary: return "动作状态须为对象"
 	var s: Dictionary = value
 	if not s.has_all(["version","status","day","run_id","remaining_ms","remainder_ms","tick","rng_state","weapon_id","skills","input","next_projectile","next_cast","entrance_armed","return_reason","player","enemies","projectiles","drops"]): return "动作状态缺少字段"

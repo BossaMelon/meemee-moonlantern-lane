@@ -2966,6 +2966,304 @@
       "sha256": "8b8ee043fe3c7270befd7ec06798fdd0fd3df5f48dd056c3ccb34342b5e66fe1",
       "art_revision": 2,
       "usage": "short paper overlay; render text live"
+    },
+    "garden_stump": {
+      "file": "sprites/garden_stump.png",
+      "size": [
+        64,
+        64
+      ],
+      "source": "source/garden-stump.png",
+      "source_crop": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        372,
+        229,
+        1167,
+        863
+      ],
+      "export_method": "fit",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "pivot": [
+        32,
+        56
+      ],
+      "opaque_bounds": [
+        2,
+        14,
+        62,
+        62
+      ],
+      "sha256": "afa53e9ebd2480c9888d1e084b53a497e832ae3b379da0abdc45528be5ff884b",
+      "asset_set": "rain_garden",
+      "usage": "solid stump; sort at contact-base pivot",
+      "footprint": {
+        "space": "native sprite pixels; origin top-left",
+        "kind": "visible_contact_base_hint",
+        "polygon": [
+          [
+            9,
+            51
+          ],
+          [
+            20,
+            48
+          ],
+          [
+            43,
+            48
+          ],
+          [
+            55,
+            52
+          ],
+          [
+            46,
+            57
+          ],
+          [
+            18,
+            57
+          ]
+        ],
+        "authority": "visual base only; gameplay owner defines collision from visible base, never full canopy rectangle"
+      }
+    },
+    "sporecaster_idle": {
+      "file": "sprites/sporecaster_idle.png",
+      "size": [
+        40,
+        40
+      ],
+      "source": "source/sporecaster-idle.png",
+      "source_crop": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        467,
+        222,
+        1068,
+        825
+      ],
+      "export_method": "scale:0.045",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        64,
+        0,
+        40,
+        40
+      ],
+      "pivot": [
+        20,
+        36
+      ],
+      "opaque_bounds": [
+        6,
+        11,
+        33,
+        38
+      ],
+      "sha256": "847102669a0488bfdd1e74b1fee825c800fd471e10cddb924799da8f9a049e06",
+      "asset_set": "rain_garden",
+      "enemy_kind": "sporecaster",
+      "pose": "idle",
+      "usage": "state-selected pose; shared foot pivot; gameplay owns telegraph/release timing"
+    },
+    "sporecaster_windup": {
+      "file": "sprites/sporecaster_windup.png",
+      "size": [
+        40,
+        40
+      ],
+      "source": "source/sporecaster-windup.png",
+      "source_crop": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        390,
+        363,
+        1146,
+        802
+      ],
+      "export_method": "scale:0.045",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        128,
+        0,
+        40,
+        40
+      ],
+      "pivot": [
+        20,
+        36
+      ],
+      "opaque_bounds": [
+        3,
+        18,
+        37,
+        38
+      ],
+      "sha256": "f2b32041bc9a5f0ac2a2e8826b957e965d9ed0c57c2108e2ebb5a03f7abf6610",
+      "asset_set": "rain_garden",
+      "enemy_kind": "sporecaster",
+      "pose": "windup",
+      "usage": "state-selected pose; shared foot pivot; gameplay owns telegraph/release timing"
+    },
+    "sporecaster_release": {
+      "file": "sprites/sporecaster_release.png",
+      "size": [
+        40,
+        40
+      ],
+      "source": "source/sporecaster-release.png",
+      "source_crop": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        403,
+        99,
+        1127,
+        886
+      ],
+      "export_method": "scale:0.045",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        0,
+        64,
+        40,
+        40
+      ],
+      "pivot": [
+        20,
+        36
+      ],
+      "opaque_bounds": [
+        3,
+        3,
+        36,
+        38
+      ],
+      "sha256": "b6a3309bb59003812a463cabf761ad922adbd4b2a2f055dc393354fd048a48c9",
+      "asset_set": "rain_garden",
+      "enemy_kind": "sporecaster",
+      "pose": "release",
+      "usage": "state-selected pose; shared foot pivot; gameplay owns telegraph/release timing"
+    },
+    "spore_cloud": {
+      "file": "sprites/spore_cloud.png",
+      "size": [
+        64,
+        40
+      ],
+      "source": "source/spore-cloud.png",
+      "source_crop": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "source_opaque_bounds": [
+        48,
+        258,
+        1502,
+        857
+      ],
+      "export_method": "fit",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        64,
+        64,
+        64,
+        40
+      ],
+      "pivot": [
+        32,
+        33
+      ],
+      "opaque_bounds": [
+        2,
+        13,
+        62,
+        38
+      ],
+      "sha256": "4c460ec63949a49853813fb4d042a4add90ae4bb8dbf31dcc0cba58a86280b1c",
+      "asset_set": "rain_garden",
+      "usage": "grounded hazardous spore cluster; never a collectible",
+      "export_palette_subset": [
+        "#25283f",
+        "#202438",
+        "#374568",
+        "#596a88",
+        "#c46588",
+        "#ea9ab1",
+        "#492f34",
+        "#332d36"
+      ],
+      "motion_hint": "small grounded pulse with fixed pivot; spawn/dissolve by game hazard state, no floating pickup bob or glitter",
+      "boundary_note": "scalloped lower contour is visible ground edge; art does not define damage radius or lifetime"
+    },
+    "water_ripple": {
+      "file": "sprites/water_ripple.png",
+      "size": [
+        32,
+        16
+      ],
+      "source": "source/water-ripple-v2.png",
+      "source_crop": [
+        0,
+        0,
+        1774,
+        887
+      ],
+      "source_opaque_bounds": [
+        297,
+        288,
+        1475,
+        671
+      ],
+      "export_method": "fit",
+      "atlas": "atlases/rain_garden.png",
+      "region": [
+        128,
+        64,
+        32,
+        16
+      ],
+      "pivot": [
+        16,
+        8
+      ],
+      "opaque_bounds": [
+        2,
+        3,
+        30,
+        12
+      ],
+      "sha256": "0d6d51496c99490c6bfe3b8602b2bd1d04fab0f2a6ac3f8b23b55c77f1ba2df4",
+      "asset_set": "rain_garden",
+      "usage": "reusable shallow-water footstep ring; transparent center reveals terrain below",
+      "export_alignment": "centered after fit",
+      "motion_hint": "brief expanding ring at foot contact; stop when step ends; no collision",
+      "terrain_note": "water and light shoreline come from map implementation, not this effect"
     }
   },
   "backgrounds": {
@@ -3202,6 +3500,69 @@
       ],
       "mode": "RGB",
       "sha256": "5b697bc9d30ab205d704650bf7bcc5d22c5b1c1200aa05eb70c0417b399eb7d1",
+      "runtime": false
+    },
+    "garden-stump.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "2d718cbc8321f67d40da846267d3b6261d7386bf60c4cb7d59204b21dfae6b11",
+      "runtime": false
+    },
+    "sporecaster-idle.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "3eb99626a6eebed60d49c8f570ff5788d040aefdce3fc7d6fbd5d9faf6775864",
+      "runtime": false
+    },
+    "sporecaster-windup.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "c002ad7d8db656886fc383c914d72339a454dc1a01915f192b15ed05c36cdae9",
+      "runtime": false
+    },
+    "sporecaster-release.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "7da398c086f373a6e00f22c8824c137f52532f642ee80092a8f43f63d26ce1c4",
+      "runtime": false
+    },
+    "spore-cloud.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "785f25a073d2a7619ffe8c2f47b204e6452b32b266655f09b07870063a216523",
+      "runtime": false
+    },
+    "water-ripple.png": {
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "f5097ef98042cc19b8cc0c479afe0df6855fa481bddb895748692b3eb7db3329",
+      "runtime": false
+    },
+    "water-ripple-v2.png": {
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "6aba15c7a82e878915eb968f9d636ef72a485e042e20ea9f2f1bb1a57e64fccd",
       "runtime": false
     }
   },
