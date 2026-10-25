@@ -245,6 +245,19 @@ func test_save_identity():
 	expect(underway.validate_snapshot(corrupt) != "","cursor corruption rejected against actual sales")
 	corrupt = underway.snapshot(); corrupt.service.reservations[0].batch_id = "fake-pot"
 	expect(underway.validate_snapshot(corrupt) != "","ordinary/floating channel cannot invent a pot batch")
+	corrupt = g.snapshot(); corrupt.night.queues["n1-w2"][0] = null
+	expect(g.validate_snapshot(corrupt) != "","malformed future-wave order cannot survive until start_wave")
+	corrupt = g.snapshot(); corrupt.items[0].temperature = "hot"
+	expect(g.validate_snapshot(corrupt) != "","only actual stew may carry temperature")
+	corrupt = underway.snapshot(); corrupt.service.orders[0].budget += 1
+	expect(underway.validate_snapshot(corrupt) != "","current-wave order cannot diverge from committed immutable queue")
+	var expedition = Session.new(1); act(expedition,"start_expedition")
+	path = output_dir+"/model-identity.json"; expect(expedition.save_to(path).ok,"model identity primary and backup created")
+	for field in ["version","ruleset","map_id","map_revision"]:
+		corrupt = expedition.snapshot(); corrupt.expedition[field] = "wrong"
+		file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(corrupt)); file.close()
+		var unchanged = expedition.snapshot()
+		expect(not expedition.load_from(path).ok and expedition.snapshot() == unchanged,"wrong model identity cannot silently restore backup: "+field)
 
 func test_optional_hagrid():
 	var g = Session.new(7); act(g,"finish_shopping"); act(g,"open_shop"); advance_wave(g)
@@ -266,8 +279,41 @@ func test_optional_hagrid():
 	expect(declined.snapshot().quests.hagrid_patrol == "declined" and declined.snapshot().service.orders.size() == 9,"skipping character leaves ordinary queue intact")
 	for branch in [g,declined]: advance_wave(branch); act(branch,"start_wave",{"wave_id":"n2-w3"}); advance_wave(branch); act(branch,"settle"); roundtrip(branch,"hagrid-outcome")
 
+func test_saved_field_types():
+	var g = prepare_quick(); act(g,"open_shop"); act(g,"advance",{"delta_ms":1500})
+	var source = g.snapshot()
+	for section in ["", "night", "service", "progression", "items", "ledger", "sales"]:
+		var original = source if section == "" else (source[section][0] if source[section] is Array else source[section])
+		for key in original:
+			if original[key] == null: continue
+			var corrupt = source.duplicate(true)
+			var target = corrupt if section == "" else (corrupt[section][0] if corrupt[section] is Array else corrupt[section])
+			target[key] = false if original[key] is String else "wrong-type"
+			expect(g.validate_snapshot(corrupt) != "","malformed saved type rejected without script exception: "+section+"."+str(key))
+	var path = output_dir+"/invalid-validator-result.json"
+	var store = preload("res://game/core/save_store.gd")
+	expect(g.save_to(path).ok,"validator boundary fixture saved through actual core")
+	var bytes = FileAccess.get_file_as_bytes(path)
+	var interrupted = func(_state): return null
+	expect(not store.load_state(path,interrupted).ok and not store.save_state(path,source,interrupted).ok,"missing validator result cannot be converted to an empty success string")
+	expect(FileAccess.get_file_as_bytes(path) == bytes,"failed validator leaves existing save bytes unchanged")
+	for field in ["version","profile_id"]:
+		var wrong = source.duplicate(true); wrong[field] = "wrong-version" if field == "version" else false
+		var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(wrong)); file.close()
+		var damaged = FileAccess.get_file_as_bytes(path)
+		expect(not g.save_to(path).ok and FileAccess.get_file_as_bytes(path) == damaged,"save refuses malformed existing identity without rewriting: "+field)
+	for field in ["intrinsic_tags","effect_id"]:
+		var corrupt = source.duplicate(true)
+		var dish = corrupt.items.filter(func(item): return item.item_id == "floating_pie")[0]
+		dish[field] = "wrong-array" if field == "intrinsic_tags" else false
+		expect(g.validate_snapshot(corrupt) != "","malformed dish effect type rejected: "+field)
+	for field in ["quantity","item_id"]:
+		var corrupt = source.duplicate(true); var purchase = corrupt.ledger.filter(func(row): return row.kind == "buy")[0]
+		purchase.args[field] = "wrong-number" if field == "quantity" else false
+		expect(g.validate_snapshot(corrupt) != "","malformed economic argument rejected: "+field)
+
 func run(folder: String) -> Dictionary:
 	output_dir = folder+"/fixtures-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
-	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity(); test_optional_hagrid()
+	test_profile(); test_throughput(); test_guards_and_waves(); test_heat(); test_menu_priority(); test_cooling_and_day_boundary(); test_save_identity(); test_optional_hagrid(); test_saved_field_types()
 	var result = {"suite":"quality-service-focused","checks":checks,"failures":failures,"traces":traces}
 	return result

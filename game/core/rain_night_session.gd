@@ -7,8 +7,8 @@ const WAIT_MS = 20000
 const MAP_ID = "rain-garden-two-routes"
 const DELIVERY_MS = {"ordinary":3000,"floating":1500,"pot":4500}
 const QUALITY_UPGRADES = {
-	"field_kit":{"name":"散射魔杖","cost":60,"description":"菜品收入达到24后投资，次晨可装备散射杖"},
-	"shelf":{"name":"扩展菜单","cost":60,"description":"次晨同时供应第三种料理"}}
+	"field_kit":{"name":"散射魔杖","cost":110,"description":"菜品收入达到24后投资，次晨可装备散射杖"},
+	"shelf":{"name":"扩展菜单","cost":110,"description":"次晨同时供应第三种料理"}}
 const PHASE_COMMANDS = {
 	"buy":["shopping"],"finish_shopping":["shopping"],"craft":["shopping","preparation","intermission"],
 	"display":["preparation","intermission"],"undisplay":["preparation","intermission"],
@@ -417,7 +417,7 @@ func save_to(path: String = SAVE_PATH) -> Dictionary:
 	for target in [path,path+".bak"]:
 		if FileAccess.file_exists(target):
 			var existing = JSON.parse_string(FileAccess.get_file_as_string(target))
-			if existing is Dictionary and (existing.get("version") != 3 or existing.get("profile_id") != PROFILE_ID):
+			if existing is Dictionary and (not _whole(existing.get("version"),3,3) or not existing.get("profile_id") is String or existing.profile_id != PROFILE_ID):
 				return _fail("incompatible_save","原路径含其他版本或规则存档，已保留")
 	if path == SAVE_PATH: DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_PATH.get_base_dir()))
 	return Store.save_state(path,_s,validate_snapshot)
@@ -428,14 +428,14 @@ func load_from(path: String = SAVE_PATH) -> Dictionary:
 func validate_snapshot(data: Variant) -> String:
 	if not data is Dictionary: return "存档必须为对象"
 	var s: Dictionary = _normalize(data)
-	if s.get("version") != 3: return "不支持的存档版本"
-	if s.get("profile_id") != PROFILE_ID or s.get("rules_version") != 1: return "不支持的存档规则"
+	if not _whole(s.get("version"),3,3): return "不支持的存档版本"
+	if not s.get("profile_id") is String or s.profile_id != PROFILE_ID or not _whole(s.get("rules_version"),1,1): return "不支持的存档规则"
 	for key in _s:
 		if not s.has(key): return "存档缺少字段："+key
 	for key in ["seed","rng_state"]:
 		if not s[key] is String or not s[key].is_valid_int() or str(int(s[key])) != s[key]: return "随机状态须为无损整数字符串"
 	if not _whole(s.day,1) or s.phase not in ["shopping","preparation","trading","intermission","closing","settled","expedition"]: return "非法日期或阶段"
-	if not s.paused is bool or s.clock_ms != 0: return "非法暂停或旧经营时钟"
+	if not s.paused is bool or not _whole(s.clock_ms,0,0): return "非法暂停或旧经营时钟"
 	for key in ["cash","initial_cash","next_uid","cursor","daily_recovery"]:
 		if not _whole(s[key]): return "非法经济整数："+key
 	if s.next_uid < 1 or s.daily_recovery > 1: return "非法实例序号或恢复次数"
@@ -443,11 +443,12 @@ func validate_snapshot(data: Variant) -> String:
 		if not s[key] is Array: return "非法数组："+key
 	for key in ["night","service","pending","progression","commits","requests","supply","tiers","quests","expedition","expedition_attempts","expedition_meals","collected_drops"]:
 		if not s[key] is Dictionary: return "非法对象："+key
-	if not s.expedition.is_empty() and (s.expedition.get("version") != 2 or s.expedition.get("ruleset") != PROFILE_ID or s.expedition.get("map_id") != MAP_ID or s.expedition.get("map_revision") != 1): return "不支持的存档规则"
+	if not s.expedition.is_empty():
+		if not _whole(s.expedition.get("version"),2,2) or not s.expedition.get("ruleset") is String or s.expedition.ruleset != PROFILE_ID or not s.expedition.get("map_id") is String or s.expedition.map_id != MAP_ID or not _whole(s.expedition.get("map_revision"),1,1): return "不支持的存档规则"
 	var night = s.night; var service = s.service
-	if not night.has_all(["id","day","weather","event_id","waves","queues"]) or night.id != "n%d" % s.day or night.day != s.day or not night.queues is Dictionary or night.weather != "rain" or night.event_id != "rain_return" or not night.waves is Array or night.waves.size() != 3: return "非法夜晚规则"
+	if not night.has_all(["id","day","weather","event_id","waves","queues"]) or not night.id is String or night.id != "n%d" % s.day or not _whole(night.day,int(s.day),int(s.day)) or not night.queues is Dictionary or not night.weather is String or night.weather != "rain" or not night.event_id is String or night.event_id != "rain_return" or not night.waves is Array or night.waves.size() != 3: return "非法夜晚规则"
 	if not service.has_all(["night_id","wave_id","next_wave_id","wave_index","status","orders","reservations","menu_priority","held_uids","elapsed_ms","remainder_ms"]): return "波次字段缺失"
-	if service.night_id != night.id or not _whole(service.wave_index,0,3) or not (service.wave_id == null or service.wave_id is String) or not (service.next_wave_id == null or service.next_wave_id is String): return "波次身份错误"
+	if not service.night_id is String or service.night_id != night.id or not _whole(service.wave_index,0,3) or not (service.wave_id == null or service.wave_id is String) or not (service.next_wave_id == null or service.next_wave_id is String): return "波次身份错误"
 	for key in ["orders","reservations","menu_priority","held_uids"]:
 		if not service[key] is Array: return "非法波次数组"
 	if not _whole(service.elapsed_ms) or int(service.elapsed_ms)%STEP_MS != 0 or not _whole(service.remainder_ms,0,49): return "非法固定步经营时钟"
@@ -460,10 +461,10 @@ func validate_snapshot(data: Variant) -> String:
 	if s.phase == "intermission" and wave_index not in [1,2]: return "波间位置错误"
 	if s.phase in ["closing","settled"] and wave_index != 3: return "尚未完成三波"
 	var expected_status = "active" if s.phase == "trading" else ("intermission" if s.phase == "intermission" else ("complete" if s.phase in ["closing","settled"] else "planned"))
-	if service.status != expected_status: return "经营阶段与波次状态不一致"
+	if not service.status is String or service.status != expected_status: return "经营阶段与波次状态不一致"
 	var uids = {}; var types = []; var equipped = 0
 	for item in s.items:
-		if not item is Dictionary or not item.has_all(["uid","item_id","cost","location"]): return "物品实例缺失"
+		if not item is Dictionary or not item.has_all(["uid","item_id","cost","location","prepared_wave_id","temperature"]): return "物品实例缺失"
 		if not _whole(item.uid,1) or item.uid >= s.next_uid or uids.has(str(item.uid)) or not Catalog.ITEMS.has(item.item_id) or not _whole(item.cost): return "物品实例非法"
 		uids[str(item.uid)] = item
 		if item.location not in ["bag","shelf","installed","reserved"]: return "非法库存位置"
@@ -475,11 +476,13 @@ func validate_snapshot(data: Variant) -> String:
 			equipped += 1
 		if Catalog.ITEMS[item.item_id].kind == "dish":
 			if not item.has_all(["prepared_wave_id","intrinsic_tags","effect_id"]) or not item.prepared_wave_id is String or item.prepared_wave_id.is_empty(): return "菜品缺少制作身份"
-			if item.intrinsic_tags != Catalog.ITEMS[item.item_id].tags or item.effect_id != Catalog.ITEMS[item.item_id].effect_id: return "固有料理效果被改写"
+			if not item.intrinsic_tags is Array or not item.effect_id is String or item.intrinsic_tags != Catalog.ITEMS[item.item_id].tags or item.effect_id != Catalog.ITEMS[item.item_id].effect_id: return "固有料理效果被改写"
 			if item.item_id == "moon_stew":
 				if item.get("temperature") not in ["hot","held","cooled"]: return "非法炖锅温度"
 				var hot_wave = service.wave_id if s.phase == "trading" else service.next_wave_id
 				if item.temperature == "hot" and item.prepared_wave_id != hot_wave: return "跨波热菜未处理"
+			elif item.temperature != null: return "非炖锅料理不应有温度"
+		elif item.prepared_wave_id != null or item.temperature != null: return "原料或设备不应有制作波次或温度"
 	if s.items.size() > CAPACITY or equipped > 1 or types.size() > (3 if "shelf" in s.active_upgrades else 2): return "库存/菜单/设备超容量"
 	var priority_seen = []
 	for id in service.menu_priority:
@@ -506,6 +509,7 @@ func validate_snapshot(data: Variant) -> String:
 	if s.phase != "settled" and s.active_upgrades != s.upgrades: return "升级未按次晨生效"
 	var progress = s.progression; var active_kit = "field_kit" in s.active_upgrades
 	if not progress.has_all(["owned_weapons","equipped_weapon","skills","pending_unlocks"]): return "成长字段缺失"
+	if not progress.owned_weapons is Array or not progress.skills is Array or not progress.pending_unlocks is Array or not progress.equipped_weapon is String: return "成长字段类型错误"
 	if progress.owned_weapons != (["bolt_wand","fan_wand"] if active_kit else ["bolt_wand"]) or progress.skills != ["gust"] or progress.equipped_weapon not in progress.owned_weapons: return "成长所有权不一致"
 	if progress.pending_unlocks != (["fan_wand"] if "field_kit" in s.upgrades and not active_kit else []): return "待生效成长不一致"
 	for id in s.supply:
@@ -517,6 +521,14 @@ func validate_snapshot(data: Variant) -> String:
 	for wave in range(1,4):
 		var key = night.id+"-w%d" % wave
 		if not night.queues.get(key) is Array or night.queues[key].is_empty() or night.queues[key].size() > 9: return "夜晚队列缺失"
+		for i in range(night.queues[key].size()):
+			var definition = night.queues[key][i]
+			if not definition is Dictionary or not definition.has_all(["id","wave_id","required","budget","special","text","status","arrival_ms","patience_ms","waited_ms","channel","character_id","quest_id","rewards"]): return "未来波次订单字段缺失"
+			if not definition.id is String or definition.id != key+"-c%02d" % (i+1) or not definition.wave_id is String or definition.wave_id != key or not definition.required is Array or definition.required.is_empty() or not _whole(definition.budget,0,100): return "未来波次订单身份或需求非法"
+			if not definition.special is bool or definition.special or not definition.text is String or not definition.status is String or definition.status != "waiting" or not _whole(definition.arrival_ms,0,0) or not _whole(definition.patience_ms,WAIT_MS,WAIT_MS) or not _whole(definition.waited_ms,0,0) or definition.channel != null: return "预生成队列状态被改写"
+			if not definition.character_id is String or definition.character_id != "" or not definition.quest_id is String or definition.quest_id != "" or definition.rewards != []: return "普通队列混入人物委托"
+			for tag in definition.required:
+				if tag not in Catalog.TAGS: return "未来波次含未知需求"
 	if service.orders.size() != (0 if wave_index == 0 else night.queues[service.wave_id].size()): return "本波订单数量错误"
 	for order in service.orders:
 		if not order is Dictionary or not order.has_all(["id","wave_id","required","budget","special","status","arrival_ms","patience_ms","waited_ms","channel","character_id","quest_id","rewards"]): return "订单字段缺失"
@@ -530,6 +542,9 @@ func validate_snapshot(data: Variant) -> String:
 		if order.status in ["delivered","left"]: processed += 1
 		if s.commits.has(order.id) != (order.status in ["delivered","left"]): return "订单提交身份不一致"
 		order_ids[order.id] = order
+		var definition = night.queues[service.wave_id][order_ids.size()-1]
+		for key in definition:
+			if key not in ["status","waited_ms","channel"] and (typeof(order.get(key)) != typeof(definition[key]) or order.get(key) != definition[key]): return "当前订单与预生成队列不一致"
 	var reserved_uids = []; var reserved_orders = []; var channel_counts = {}; var pot_batch = ""; var pot_time = 0
 	for reservation in service.reservations:
 		if not reservation is Dictionary or not reservation.has_all(["item_uid","order_id","channel","remaining_ms","batch_id","price","cost"]): return "在途预留字段缺失"
@@ -560,6 +575,7 @@ func validate_snapshot(data: Variant) -> String:
 	var sale_ids = {}; var revenues = {}; var costs = {}; var night_processed = 0; var wave_processed = 0
 	for sale in s.sales:
 		if not sale is Dictionary or not sale.has_all(["day","order_id","item_id","revenue","cost","reasons","effect_id","wave_id"]): return "成交记录字段缺失"
+		if not sale.item_id is String or not sale.effect_id is String or not (sale.wave_id == null or sale.wave_id is String): return "成交元数据类型错误"
 		if not _whole(sale.day,1,int(s.day)) or not sale.order_id is String or sale_ids.has(sale.order_id) or not _whole(sale.revenue) or not _whole(sale.cost) or not sale.reasons is Array or sale.reasons.is_empty(): return "成交记录非法"
 		if not s.commits.has(sale.order_id): return "成交未提交"
 		if sale.revenue > 0:
@@ -617,7 +633,7 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 	for i in range(s.ledger.size()):
 		var row = s.ledger[i]
 		if not row is Dictionary or not row.has_all(["index","kind","day","cash_delta","moves","created","removed","args","events"]): return "经济流水字段缺失"
-		if row.index != i or not row.kind is String or not _whole(row.day,1,int(s.day)) or not _whole(row.cash_delta,-1000000) or not row.moves is Dictionary or not row.created is Array or not row.removed is Array or not row.args is Dictionary or not row.events is Array: return "非法经济流水"
+		if not _whole(row.index,i,i) or not row.kind is String or not _whole(row.day,1,int(s.day)) or not _whole(row.cash_delta,-1000000) or not row.moves is Dictionary or not row.created is Array or not row.removed is Array or not row.args is Dictionary or not row.events is Array: return "非法经济流水"
 		var moves = {}; var input_cost = 0; var output_cost = 0
 		for item in row.removed:
 			if not item is Dictionary or not item.has_all(["uid","item_id","cost"]) or not _whole(item.uid,1) or not live.has(str(item.uid)) or not Catalog.ITEMS.has(item.item_id) or not _whole(item.cost): return "消耗实例非法"
@@ -631,6 +647,9 @@ func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> St
 		for id in row.moves:
 			if not Catalog.ITEMS.has(id) or not _whole(row.moves[id],-80,80) or row.moves[id] != moves.get(id,0): return "非法库存流水"
 		var expected_cash = 0
+		if row.kind in ["buy","craft","recycle","consume"] and not _whole(row.args.get("quantity"),1,CAPACITY): return "经济流水数量类型错误"
+		if row.kind in ["buy","recycle","consume"] and not row.args.get("item_id") is String: return "经济流水物品类型错误"
+		if row.kind == "craft" and not row.args.get("recipe_id") is String: return "经济流水配方类型错误"
 		match row.kind:
 			"inheritance":
 				if i != 0 or row.created.size() != 1 or row.created[0].item_id != "stirring_cauldron" or output_cost != 0 or not row.removed.is_empty(): return "遗留厨具来源错误"

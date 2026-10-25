@@ -76,8 +76,9 @@ func test_meal_transfer():
 	act(g,"leave_expedition"); reject(g,"start_expedition")
 	traces.append({"scenario":"meal-transfer","actions":g.action_trace(),"final":g.snapshot()})
 
-func test_rare_four_uses():
-	var origin = acquire_rare(23); var base = origin.snapshot()
+func test_rare_four_uses(origin = null):
+	if origin == null: origin = acquire_rare(23)
+	var base = origin.snapshot()
 	var rare_uid = base.items.filter(func(i): return i.item_id == "sparkcap")[0].uid
 	var raw = fixture(base,"rare-raw-sale")
 	act(raw,"recycle",{"item_id":"sparkcap","quantity":1})

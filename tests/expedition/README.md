@@ -36,3 +36,5 @@ E02 使用相同 Godot，新增独立质量模型入口，保留全部旧入口�
 - `run_rain_deep.gd`：两种武器由普通输入真正进入深处，在活盾精英旁经历投手warning/active、风咒清真实区，击败精英并拾取moonheart后返程；保留组合状态JSON续跑比较、输入/事件/路径。输出 `/tmp/e02-deep-shelf.json` 与 `canal.json`。
 
 质量模型remaining_ms为null；动作HUD改读elapsed_ms。地形/水/资源/预警/硬直均从view绘制。面板输入与GUI路由继续由旧的gui_priority/touch_emulation/input_boundary_regressions覆盖；绘制及真实InputEvent不替代核心经济、完整保存退出、目标设备或人类趣味验收。
+
+`rain_runtime.gd` 复用原真实输入注入器，在仅持有质量动作模型的adapter上执行键鼠／触屏／合成手柄：两路、深处孢子、风清、实际月心掉落、暂停真实鼠标保存及窄屏。默认输出 `/tmp/e02-rain-runtime`，支持 `-- --output ABS_DIR`。用canonical渲染锁启动；传引擎 `--fullscreen` 时保留真实native/Retina viewport，窄屏段再明确切windowed。报告明确标为component，不冒充Session经济/Q06/新进程恢复或实体设备；NO_FOCUS及后台启动并不保证macOS不会取焦点，应以报告记录为准。
