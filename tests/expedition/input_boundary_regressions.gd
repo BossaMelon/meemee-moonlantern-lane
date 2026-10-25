@@ -97,6 +97,8 @@ func run():
 		if active_exit:
 			key(KEY_D,true); key(KEY_J,true)
 			await create_timer(0.2).timeout
+			key(KEY_ESCAPE,true); await process_frame; key(KEY_ESCAPE,false); await process_frame
+			expect(g.view().paused,"active gameplay opens the real pause menu before save-and-quit")
 		await click(panel.save_quit_button)
 		return
 	g = Session.new(23); g.command("start_expedition"); g.set_paused(true)
@@ -188,12 +190,16 @@ func cancelled_exit():
 	panel.queue_free(); await process_frame
 	g = Session.new(23); g.command("start_expedition")
 	attach(); await process_frame
+	key(KEY_ESCAPE,true); await process_frame; key(KEY_ESCAPE,false); await process_frame
+	expect(g.view().paused,"save-and-quit is reached from the actual pause menu")
 	await click(panel.save_quit_button)
 	var frozen = canonical(g.snapshot())
 	key(KEY_D,true); panel.release_inputs()
 	for i in range(3): await process_frame
 	expect(canonical(g.snapshot()) == frozen,"pending exit rejects further frames and input without changing requests")
 	panel.cancel_save_quit()
+	key(KEY_ESCAPE,true); await process_frame; key(KEY_ESCAPE,false); await process_frame
+	expect(not g.view().paused,"cancelled exit can continue through actual pause input")
 	key(KEY_D,true)
 	await process_frame; await process_frame
 	expect(g.snapshot().expedition.input.move_x > 0,"host cancellation restores actual combat input")

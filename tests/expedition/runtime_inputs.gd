@@ -87,7 +87,7 @@ func touch(input: Dictionary):
 			root.push_input(start,true)
 		if on and values[kind] is Vector2:
 			var drag = InputEventScreenDrag.new()
-			drag.index = index; drag.position = center+values[kind]*55.0
+			drag.index = index; drag.position = center+values[kind]*panel.touch_radius(kind)
 			root.push_input(drag,true)
 		if not on and active_touches.get(index,false):
 			var stop = InputEventScreenTouch.new()
