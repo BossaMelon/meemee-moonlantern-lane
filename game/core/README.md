@@ -1,6 +1,6 @@
 # 雨夜核心公共 API（P04 / save v3）
 
-冻结设计为 docs/06-rain-night-quality-slice.md；类型以 H04 `c8aa174` 的 quality-slice-v1 契约为准。Godot 4.7.2，单人离线，运行时无网络或 LLM。
+冻结设计为 docs/06-quality-slice.md；类型以 H04 `c8aa174` 的 quality-slice-v1 契约为准。Godot 4.7.2，单人离线，运行时无网络或 LLM。
 
 ```gdscript
 const Session = preload("res://game/core/game_session.gd")
@@ -57,7 +57,7 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 
 波末装配锅按菜单优先序/UID保留最多三份菜单上的 hot/held 炖锅，其余全部 cooled；凉菜永不回热，不能满足 warming，仍可满足 hearty。取消保温菜上架、拆锅会立即变凉。跨日保留真实温度与原制作波次，不恢复新鲜。菜品 intrinsic_tags/effect_id 不随厨具变化。旧波饼仍可出售，走普通通道，基础价格不变。
 
-首夜即 rain / rain_return；雨价按菜品标签与事件计算25%加价、半入、封顶原基础价25%。原料售回单独记 ingredient_sales，不算菜品收入或毛利。日结 summary 包含收入、已售成本、费用与未售UID。
+首夜即 rain / rain_return；雨价按菜品标签与事件计算：价格档倍率后加25%，正数半入；活动倍率上限25%。原料售回单独记 ingredient_sales，不算菜品收入或毛利。日结 summary 包含收入、已售成本、费用与未售UID。
 
 餐前槽 `pending_meal_effect` 为 null 或 `{effect_id:"light_step"|"clear_breath",source_item_uid:int,used:false}`。食用真实消耗一份储藏料理、无现金变化；失败出发不消耗槽。最终 E02 集成将把槽原子转移至模型 meal_effect。
 
