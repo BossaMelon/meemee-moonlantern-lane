@@ -133,6 +133,15 @@ def main() -> int:
                 header = png.read_bytes()[:24] if png.is_file() else b""
                 dimensions = list(struct.unpack(">II", header[16:24])) if len(header) == 24 and header[:8] == b"\x89PNG\r\n\x1a\n" and header[12:16] == b"IHDR" else []
                 sample["actual_png_size"] = dimensions
+                window_rect = sample.get("window_position", []) + sample.get("window_size", [])
+                screen_rect = sample.get("screen_position", []) + sample.get("screen_size", [])
+                usable = sample.get("screen_usable_rect", [])
+                full_coverage = (len(window_rect) == len(screen_rect) == 4 and window_rect == screen_rect)
+                if result.get("display") == "macOS" and len(usable) == len(screen_rect) == 4:
+                    usable_inside_screen = (usable[0] >= screen_rect[0] and usable[1] >= screen_rect[1]
+                                            and usable[0] + usable[2] <= screen_rect[0] + screen_rect[2]
+                                            and usable[1] + usable[3] <= screen_rect[1] + screen_rect[3])
+                    full_coverage = full_coverage or (usable_inside_screen and window_rect == usable)
                 display_valid = display_valid and (
                     sample.get("requested_mode") == evidence["requested_window_mode"]
                     and sample.get("window_mode") == (3 if args.fullscreen else 0)
@@ -141,7 +150,7 @@ def main() -> int:
                     and dimensions == sample.get("png_size") == sample.get("texture_size")
                     and sample.get("window_size") == sample.get("root_size") == dimensions
                     and len(sample.get("viewport_size", [])) == 2 and all(x > 0 for x in sample["viewport_size"])
-                    and (sample.get("screen_size") == dimensions if args.fullscreen else sample.get("viewport_size") == dimensions))
+                    and (full_coverage if args.fullscreen else sample.get("viewport_size") == dimensions))
             run["display_verified"] = display_valid
             run["passed"] = (run["exit_code"] == 0 and not run["engine_errors"] and run["checks"] > 0
                              and not run["failures"] and run["checkpoint"] == expected

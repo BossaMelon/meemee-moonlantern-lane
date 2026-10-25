@@ -73,9 +73,10 @@ func fresh(size: Vector2i, restore_existing: bool = false):
 		# viewport with the old 1280/960 test dimensions or enlarge a PNG.
 		var deadline=Time.get_ticks_msec()+10000
 		while Time.get_ticks_msec()<deadline:
-			if root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN and DisplayServer.window_get_size()==DisplayServer.screen_get_size(DisplayServer.window_get_current_screen()): break
+			if root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN and fullscreen_coverage()!="": break
 			await process_frame
 		expect(root.mode==Window.MODE_FULLSCREEN and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"CLI enters actual fullscreen mode")
+		expect(fullscreen_coverage()!="","fullscreen window reaches the API-reported screen area before scene startup")
 	else:
 		expect(root.mode==Window.MODE_WINDOWED and DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_WINDOWED,"CLI enters explicit windowed mode")
 		root.content_scale_mode=Window.CONTENT_SCALE_MODE_DISABLED
@@ -228,24 +229,42 @@ func screenshot(name: String):
 	var picture=texture.get_image()
 	var screen=DisplayServer.window_get_current_screen()
 	var screen_size=DisplayServer.screen_get_size(screen)
+	var screen_position=DisplayServer.screen_get_position(screen)
+	var usable=DisplayServer.screen_get_usable_rect(screen)
+	var window_position=DisplayServer.window_get_position()
 	var window_size=DisplayServer.window_get_size()
 	var viewport_size=root.get_visible_rect().size
 	var sample={"path":path,"elapsed_ms":Time.get_ticks_msec()-started_ms,"requested_mode":"fullscreen" if config.get("fullscreen",false) else "windowed","window_mode":DisplayServer.window_get_mode(),"root_mode":root.mode,"screen":screen,"screen_scale":DisplayServer.screen_get_scale(screen),"screen_size":[screen_size.x,screen_size.y],"window_size":[window_size.x,window_size.y],"root_size":[root.size.x,root.size.y],"viewport_size":[int(viewport_size.x),int(viewport_size.y)],"texture_size":[texture.get_width(),texture.get_height()],"png_size":[picture.get_width(),picture.get_height()],"window_focused":root.has_focus()}
 	sample.content_scale_mode=root.content_scale_mode
 	sample.content_scale_size=[root.content_scale_size.x,root.content_scale_size.y]
+	sample.screen_position=[screen_position.x,screen_position.y]
+	sample.screen_usable_rect=[usable.position.x,usable.position.y,usable.size.x,usable.size.y]
+	sample.window_position=[window_position.x,window_position.y]
+	sample.fullscreen_coverage=fullscreen_coverage()
 	display_samples.append(sample)
 	expect(picture.save_png(path)==OK,"engine viewport PNG: "+name)
 	screenshots.append(path)
 	var required_mode=DisplayServer.WINDOW_MODE_FULLSCREEN if config.get("fullscreen",false) else DisplayServer.WINDOW_MODE_WINDOWED
 	expect(sample.window_mode==required_mode and int(root.mode)==int(required_mode),"screenshot uses requested native window mode")
 	expect(sample.png_size==sample.texture_size and sample.png_size==sample.root_size and sample.png_size==sample.window_size,"PNG preserves actual rendered texture and window dimensions")
-	if config.get("fullscreen",false): expect(sample.window_size==sample.screen_size,"fullscreen viewport occupies actual screen dimensions")
+	if config.get("fullscreen",false): expect(sample.fullscreen_coverage!="","fullscreen viewport covers screen or exact macOS system usable area")
 	else: expect(sample.png_size==sample.viewport_size,"windowed layout PNG matches requested logical viewport")
 	visual_evidence=inspect_visible_assets()
 	visual_evidence.viewport_png=path
 	visual_evidence.observed_after_render=true
 	visual_evidence.elapsed_ms=Time.get_ticks_msec()-started_ms
 	expect(visual_evidence.active_assets_loaded,"visible "+visual_evidence.active_scene+" pixel assets loaded after actual draw")
+
+func fullscreen_coverage() -> String:
+	var screen=DisplayServer.window_get_current_screen()
+	var window_rect=Rect2i(DisplayServer.window_get_position(),DisplayServer.window_get_size())
+	var screen_rect=Rect2i(DisplayServer.screen_get_position(screen),DisplayServer.screen_get_size(screen))
+	if window_rect==screen_rect: return "screen"
+	# macOS native fullscreen can exclude the system's top safe region.
+	# Require an exact API-reported rectangle, never a guessed tolerance.
+	var usable=DisplayServer.screen_get_usable_rect(screen)
+	if DisplayServer.get_name()=="macOS" and screen_rect.encloses(usable) and window_rect==usable: return "macos_usable_rect"
+	return ""
 
 func active_scene_name() -> String:
 	if not is_instance_valid(ui): return ""

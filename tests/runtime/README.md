@@ -6,7 +6,7 @@
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-unique-run
 ```
 
-默认显式传 `--windowed`；实际全屏使用 `--fullscreen`，不能同时指定 `--size`。全屏通过 Godot CLI 请求 `Window.MODE_FULLSCREEN`，保留产品内容缩放设置，不把窗口强制改为 1280/960。每次截图记录 `DisplayServer.window_get_mode`、当前屏幕及其尺寸/比例、原生窗口、root、逻辑 viewport、渲染纹理和 PNG 尺寸。全屏必须实际报告 mode=3、窗口覆盖屏幕，PNG 原始尺寸等于渲染纹理与原生窗口；逻辑 viewport 可按产品的 canvas_items 缩放单独记录。监督器再读取 PNG IHDR 核对尺寸，禁止放大截图充当全屏。报告保留窗口焦点事件，帮助识别并行渲染造成的输入中断。
+默认显式传 `--windowed`；实际全屏使用 `--fullscreen`，不能同时指定 `--size`。全屏通过 Godot CLI 请求 `Window.MODE_FULLSCREEN`，保留产品内容缩放设置，不把窗口强制改为 1280/960。每次截图记录 `DisplayServer.window_get_mode`、当前屏幕及其尺寸/位置/比例、系统可用矩形、原生窗口、root、逻辑 viewport、渲染纹理和 PNG 尺寸。全屏必须实际报告 mode=3，窗口矩形覆盖屏幕；macOS 也接受精确等于系统 API 返回的可用区域，不能用猜测的边距或比例容差放行。PNG 原始尺寸等于渲染纹理与原生窗口，逻辑 viewport 可按产品的 canvas_items 缩放单独记录。监督器再读取 PNG IHDR 核对尺寸，禁止放大截图充当全屏。报告保留窗口焦点事件，帮助识别并行渲染造成的输入中断。
 
 ```sh
 python3 tests/runtime/run_critical_path.py --godot /absolute/path/to/Godot --output /private/tmp/p03-display-fullscreen --modes mouse --stage display --fullscreen
