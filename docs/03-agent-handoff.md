@@ -1,6 +1,8 @@
 # 开发接手说明
 
-更新：2026-10-25。先读 [仓库约定](../AGENTS.md)、[项目状态](project-status.md)、[技术决定](04-technical-decisions.md) 和 [任务清单](../harness/tasks.json)。当前事实以实际文件、工具输出和证据为准。
+长期目标为 Steam 可售品质；本文的三日、一小场地与数量限制是原型技术基线。用户“不好玩、地图和战斗单调”的反馈及当前验收/下一步统一见 [项目状态](project-status.md)。新阶段由既有 H02 owner 在总协调收敛后另起分支编写 `docs/06-quality-slice.md`，不把旧技术通过解释成品质通过，也不在旧 PR #9 顺带扩设计。
+
+更新：2026-10-26。先读 [仓库约定](../AGENTS.md)、[项目状态](project-status.md)、[技术决定](04-technical-decisions.md) 和 [任务清单](../harness/tasks.json)。当前事实以实际文件、工具输出和证据为准。
 
 ## 1. 当前授权与历史
 
