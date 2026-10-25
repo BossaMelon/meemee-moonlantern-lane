@@ -47,8 +47,51 @@ jobs:
           echo 'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  .tools/godot.zip' | sha256sum --check
           unzip -q .tools/godot.zip -d .tools
           chmod +x .tools/Godot_v4.7.2-stable_linux.x86_64
+      - name: Cold import resources and check failure logs
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+          from pathlib import Path
+          sys.path.insert(0, "tools")
+          from build_local_demo import run_process
+          root = Path.cwd()
+          logs = root / "output/linux-cold-import"
+          logs.mkdir(parents=True, exist_ok=False)
+          if (root / ".godot").exists():
+              raise SystemExit("Expected an initially cold import cache")
+          engine_log = logs / "engine.log"
+          result = run_process(
+              [str(root / ".tools/Godot_v4.7.2-stable_linux.x86_64"),
+               "--headless", "--path", str(root), "--import", "--log-file", str(engine_log)],
+              os.environ.copy(), 120, logs / "process.log")
+          result["engine_log_present"] = engine_log.is_file()
+          result["engine_error_logged"] |= bool(re.search(
+              r"(?m)^\s*(?:SCRIPT ERROR|ERROR):",
+              engine_log.read_text(errors="replace") if engine_log.is_file() else ""))
+          (logs / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+          ok = (result["exit_code"] == 0 and not result["timed_out"]
+                and not result["interrupted"] and result["engine_log_present"]
+                and not result["engine_error_logged"])
+          if not ok:
+              print((logs / "process.log").read_text(errors="replace"))
+              if engine_log.is_file():
+                  print(engine_log.read_text(errors="replace"))
+              print(json.dumps(result))
+          raise SystemExit(0 if ok else 1)
+          PY
       - name: Execute real prototype contracts
         run: python3 tools/gate.py --stage prototype --godot .tools/Godot_v4.7.2-stable_linux.x86_64
+      - name: Preserve cold import diagnostics
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-cold-import-${{ github.sha }}
+          path: |
+            output/linux-cold-import/result.json
+            output/linux-cold-import/process.log
+            output/linux-cold-import/engine.log
+            output/gate-report.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve successful prototype evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

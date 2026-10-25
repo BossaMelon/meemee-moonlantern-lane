@@ -1,9 +1,14 @@
 extends SceneTree
 ## Source/imported-resource and actual Main binding gate; no native/layout claim.
-var folder="/private/tmp/p07-portable-font"
+var folder=""
+var requested_output=""
+var output_root=""
+var probe_started=false
+var path_cases: Array=[]
 var failures: Array=[]
 var checks=0
 var bindings: Array=[]
+var layouts: Array=[]
 var fonts: Array=[]
 var missing: Array=[]
 var required: Dictionary={}
@@ -12,10 +17,121 @@ var viewport: SubViewport
 var primary: Font
 
 func _initialize():
-	if not OS.get_cmdline_user_args().is_empty(): folder=OS.get_cmdline_user_args()[0]
-	if not folder.begins_with("/private/tmp/"): quit(2); return
-	DirAccess.make_dir_recursive_absolute(folder)
+	var args=OS.get_cmdline_user_args()
+	if args.is_empty(): reject_output("explicit_output_required");return
+	folder=args[0]
+	requested_output=folder
+	for flag in args.slice(1):
+		if flag not in ["--small","--missing-glyph","--path-tests"]: reject_output("unknown_argument");return
+	var reason=prepare_output()
+	if not reason.is_empty(): reject_output(reason);return
 	call_deferred("run")
+
+func reject_output(reason: String):
+	printerr("PORTABLE_FONT_PATH_ERROR "+JSON.stringify({"protocol":1,"error":reason,"requested_output":requested_output,"font_probe_ran":probe_started}))
+	quit(2)
+
+func syntax_error(path: String, windows: bool) -> String:
+	if path.is_empty() or path!=path.strip_edges(): return "invalid_absolute_path"
+	for character in path:
+		if character.unicode_at(0)<32: return "control_character_in_path"
+	var value=path.replace("\\","/") if windows else path
+	if windows:
+		# Runner TEMP uses drive-absolute paths; device/UNC and drive-relative paths are rejected.
+		if value.length()<4 or value.substr(1,2)!=":/" or value[0].to_upper() not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ": return "drive_absolute_path_required"
+		value=value.substr(3)
+	else:
+		if not value.begins_with("/") or "\\" in value or ":" in value: return "absolute_filesystem_path_required"
+		value=value.substr(1)
+	if value.is_empty() or value.ends_with("/") or "//" in value: return "nonempty_leaf_required"
+	for part in value.split("/"):
+		if part in [".",".."]: return "path_traversal_rejected"
+		if windows:
+			if part.ends_with(".") or part.ends_with(" "): return "windows_path_alias_rejected"
+			for character in '<>:"|?*':
+				if character in part: return "invalid_windows_path_component"
+			var name=part.get_slice(".",0).to_upper()
+			if name in ["CON","PRN","AUX","NUL"] or (name.length()==4 and name.substr(0,3) in ["COM","LPT"] and name[3] in "123456789"): return "windows_device_name_rejected"
+	return ""
+
+func native_path(path: String) -> String:
+	var value=path.replace("\\","/") if OS.get_name()=="Windows" else path
+	# Resolve the standard macOS aliases before checking for links below a temp root.
+	if OS.get_name()=="macOS":
+		if value=="/tmp" or value.begins_with("/tmp/"): value="/private/tmp"+value.substr(4)
+		elif value=="/var" or value.begins_with("/var/"): value="/private/var"+value.substr(4)
+	return value.trim_suffix("/")
+
+func within(path: String, root_path: String, windows: bool) -> bool:
+	var value=path.replace("\\","/").trim_suffix("/")
+	var base=root_path.replace("\\","/").trim_suffix("/")
+	if windows: value=value.to_lower();base=base.to_lower()
+	return value==base or value.begins_with(base+"/")
+
+func matching_root(path: String, roots: Array, player_root: String, windows: bool) -> String:
+	if not syntax_error(path,windows).is_empty() or within(path,player_root,windows): return ""
+	for base in roots:
+		if within(path,base,windows) and not within(base,path,windows): return base
+	return ""
+
+func has_link(path: String) -> bool:
+	var cursor=path
+	while cursor.length()>1:
+		var parent=cursor.get_base_dir()
+		if parent==cursor or parent.is_empty() or parent.ends_with(":"): break
+		var directory=DirAccess.open(parent)
+		if directory!=null and directory.is_link(cursor.get_file()): return true
+		cursor=parent
+	return false
+
+func prepare_output() -> String:
+	var windows=OS.get_name()=="Windows"
+	var reason=syntax_error(folder,windows)
+	if not reason.is_empty(): return reason
+	folder=native_path(folder)
+	var player=native_path(ProjectSettings.globalize_path("user://"))
+	if within(folder,player,windows): return "player_directory_rejected"
+	var roots: Array=[]
+	for name in ["RUNNER_TEMP","TMPDIR","TEMP","TMP"]:
+		var root_path=native_path(OS.get_environment(name))
+		if not syntax_error(root_path,windows).is_empty(): continue
+		if DirAccess.dir_exists_absolute(root_path) and not has_link(root_path) and not within(root_path,player,windows): roots.append(root_path)
+	if not windows:
+		for root_path in ["/private/tmp","/tmp"]:
+			var canonical=native_path(root_path)
+			if DirAccess.dir_exists_absolute(canonical) and not has_link(canonical): roots.append(canonical)
+	var ignored_output=false
+	if FileAccess.file_exists("res://.gitignore"):
+		for line in FileAccess.get_file_as_string("res://.gitignore").split("\n"):
+			if line.strip_edges() in ["output/","/output/"]: ignored_output=true
+	if ignored_output:
+		var project_output=native_path(ProjectSettings.globalize_path("res://output"))
+		if DirAccess.dir_exists_absolute(project_output) and not has_link(project_output): roots.append(project_output)
+	output_root=matching_root(folder,roots,player,windows)
+	if output_root.is_empty(): return "outside_allowed_temp_or_ignored_output"
+	if not DirAccess.dir_exists_absolute(folder.get_base_dir()): return "output_parent_must_exist"
+	if has_link(folder): return "symlink_or_junction_rejected"
+	if DirAccess.dir_exists_absolute(folder) or FileAccess.file_exists(folder): return "output_already_exists"
+	# Single atomic mkdir: never reuse an existing directory or create parents.
+	if DirAccess.make_dir_absolute(folder)!=OK: return "fresh_output_creation_failed"
+	return ""
+
+func path_tests():
+	var cases=[
+		["C:\\Runner Temp\\font-one",true,true], ["c:/runner temp/字体-two",true,true],
+		["C:relative",true,false], ["C:/Runner Temp/../player",true,false],
+		["C:/Runner Temp-extra/font",true,false], ["C:/Runner Temp/NUL",true,false],
+		["C:/Runner Temp/name.",true,false], ["\\\\server\\share\\font",true,false],
+		["C:/Runner Temp/player/new",true,false],
+		["/tmp/font-one",false,true], ["relative/font",false,false],
+		["/tmp/../player",false,false], ["/tmp-extra/font",false,false],
+		["/tmp/player/new",false,false]]
+	for row in cases:
+		var roots=["C:/Runner Temp"] if row[1] else ["/tmp"]
+		var player="C:/Runner Temp/player" if row[1] else "/tmp/player"
+		var accepted=not matching_root(row[0],roots,player,row[1]).is_empty()
+		expect(accepted==row[2],"path policy lexical case: "+row[0])
+		path_cases.append({"path":row[0],"windows_syntax":row[1],"expected":row[2],"accepted":accepted,"lexical_only":true})
 
 func expect(ok: bool, message: String):
 	checks+=1
@@ -72,6 +188,8 @@ func inspect_bindings(node: Node):
 	for child in node.get_children(): inspect_bindings(child)
 
 func run():
+	probe_started=true
+	if "--path-tests" in OS.get_cmdline_user_args(): path_tests()
 	var manifest=JSON.parse_string(FileAccess.get_file_as_string("res://assets/fonts/font-manifest.json"))
 	expect(manifest is Dictionary,"font manifest is available")
 	if not manifest is Dictionary: finish();return
@@ -87,11 +205,15 @@ func run():
 		expect(FileAccess.file_exists(row.license_path) and FileAccess.get_sha256(row.license_path)==row.license_sha256,"original OFL license is included unchanged")
 		if row.has("notice_path"): expect(FileAccess.file_exists(row.notice_path) and FileAccess.get_sha256(row.notice_path)==row.notice_sha256,"original font copyright notice is included")
 	scan("res://game");scan("res://scenes");add_text(FileAccess.get_file_as_string("res://project.godot"))
-	viewport=SubViewport.new();viewport.size=Vector2i(1440,904);root.add_child(viewport)
+	viewport=SubViewport.new();viewport.size=Vector2i(844,390) if "--small" in OS.get_cmdline_user_args() else Vector2i(1440,904);root.add_child(viewport)
 	ui=load("res://scenes/main.tscn").instantiate();ui.save_path=folder+"/unused-player-save.json";viewport.add_child(ui)
 	await frames();inspect_bindings(ui)
 	for entry in ["world_journal","world_craft","world_menu","world_gear"]:
-		await click(entry);inspect_bindings(ui);await click("sheet_close")
+		await click(entry);inspect_bindings(ui)
+		expect(Rect2(Vector2.ZERO,ui.size).encloses(ui.sheet_surface.get_global_rect()),"font metrics keep actual Main sheet inside viewport: "+entry)
+		expect(ui.scroll.size.y>=80,"font metrics leave usable scroll area: "+entry)
+		layouts.append({"entry":entry,"ui_size":str(ui.size),"sheet_rect":str(ui.sheet_surface.get_global_rect()),"scroll_rect":str(ui.scroll.get_global_rect()),"body_minimum":str(ui.body.get_combined_minimum_size())})
+		await click("sheet_close")
 	if "--missing-glyph" in OS.get_cmdline_user_args(): required[0x10ffff]=true
 	for code in required:
 		if not primary.has_char(code): missing.append({"codepoint":"U+%04X"%code,"character":String.chr(code)})
@@ -103,9 +225,10 @@ func finish():
 	for code in required:
 		if code>=0x3400 and code<=0x9fff: han+=1
 	var file=FileAccess.open(folder+"/font-report.json",FileAccess.WRITE)
+	if file==null: reject_output("report_write_failed");return
 	var sources={}
 	for path in ["game/ui/portable_font.gd","game/ui/main.gd","game/ui/checks/portable_font.gd","assets/fonts/font-manifest.json","assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import"]:
 		sources[path]=FileAccess.get_sha256("res://"+path) if FileAccess.file_exists("res://"+path) else "not-in-this-fixture-or-export"
-	file.store_string(JSON.stringify({"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual Main Label/Button font bindings via GUI InputEvents in headless SubViewport. Corpus conservatively includes production source comments; no OS fallback, native pixels, export or platform claim."},"  "));file.close()
-	print("PORTABLE FONT ",checks," checks, missing glyphs ",missing.size(),", failures ",failures.size())
+	file.store_string(JSON.stringify({"protocol":1,"output_directory":folder,"output_policy":{"fresh":true,"accepted_root":output_root},"path_cases":path_cases,"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"layouts":layouts,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual Main Label/Button font bindings via GUI InputEvents in headless SubViewport. Corpus conservatively includes production source comments; geometry only, no OS fallback, native pixels, export or platform claim."},"  "));file.close()
+	print("PORTABLE_FONT_RESULT "+JSON.stringify({"protocol":1,"report":folder+"/font-report.json","checks":checks,"failures":failures.size(),"exit_code":0 if failures.is_empty() else 1}))
 	quit(0 if failures.is_empty() else 1)
