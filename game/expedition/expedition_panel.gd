@@ -3,6 +3,7 @@ extends Control
 signal returned
 signal pause_requested
 signal save_requested
+signal save_quit_requested
 signal action_events(events: Array)
 var session
 var state: Dictionary = {}
@@ -23,6 +24,7 @@ var last_input: Dictionary = {}
 var field = Rect2()
 var pause_button: Button
 var save_button: Button
+var save_quit_button: Button
 var return_button: Button
 var session_prefix = ""
 
@@ -32,10 +34,16 @@ func _ready():
 	focus_mode = Control.FOCUS_ALL
 	font = SystemFont.new()
 	font.font_names = PackedStringArray(["PingFang SC","Noto Sans CJK SC","Arial"])
+	# This project's effective desktop defaults have keyboard-only ui_accept.
+	# Add the missing controller confirmation without replacing existing bindings.
+	var confirm = InputEventJoypadButton.new()
+	confirm.button_index = JOY_BUTTON_A
+	if not InputMap.action_has_event("ui_accept",confirm): InputMap.action_add_event("ui_accept",confirm)
 	var path = "res://assets/pixel/manifest.json"
 	if FileAccess.file_exists(path): manifest = JSON.parse_string(FileAccess.get_file_as_string(path))
 	pause_button = _button("暂停 / Esc",func(): release_inputs(); pause_requested.emit())
 	save_button = _button("保存",func(): release_inputs(); save_requested.emit())
+	save_quit_button = _button("保存退出",func(): release_inputs(); save_quit_requested.emit())
 	return_button = _button("返回饭店",_leave)
 	resized.connect(_layout)
 	_layout()
@@ -54,13 +62,29 @@ func _layout():
 	if pause_button == null: return
 	var scale_factor = clampf(minf((size.x-24.0)/960.0,(size.y-160.0)/540.0),0.2,1.0)
 	field = Rect2(Vector2((size.x-960.0*scale_factor)/2.0,62),Vector2(960,540)*scale_factor)
-	pause_button.position = Vector2(size.x-350,12)
-	pause_button.size = Vector2(130,46)
-	save_button.position = Vector2(size.x-210,12)
-	save_button.size = Vector2(80,46)
-	return_button.position = Vector2(size.x-120,12)
-	return_button.size = Vector2(110,46)
+	var compact = size.x < 1000
+	var widths = [96,64,88,88] if compact else [130,80,110,110]
+	var buttons = [pause_button,save_button,save_quit_button,return_button]
+	var left = size.x-12.0-24.0
+	for width in widths: left -= width
+	for i in range(buttons.size()):
+		var button: Button = buttons[i]
+		button.add_theme_font_size_override("font_size",16 if compact else 18)
+		button.position = Vector2(left,8 if compact else 12)
+		button.size = Vector2(widths[i],44 if compact else 46)
+		left += widths[i]+8
+		button.focus_neighbor_left = button.get_path_to(buttons[(i+3)%4])
+		button.focus_neighbor_right = button.get_path_to(buttons[(i+1)%4])
+		button.focus_next = button.focus_neighbor_right
+		button.focus_previous = button.focus_neighbor_left
+	focus_neighbor_top = get_path_to(pause_button)
+	focus_neighbor_right = get_path_to(pause_button)
+	pause_button.text = _pause_text(session != null and session.view().get("paused",false))
 	queue_redraw()
+
+func _pause_text(paused: bool) -> String:
+	if size.x < 1000: return "继续" if paused else "暂停"
+	return "继续 / Esc" if paused else "暂停 / Esc"
 
 func bind_session(value):
 	session = value
@@ -71,7 +95,7 @@ func refresh():
 	if session != null:
 		var view: Dictionary = session.view()
 		state = view.get("expedition",{})
-		if pause_button != null: pause_button.text = "继续 / Esc" if view.get("paused",false) else "暂停 / Esc"
+		if pause_button != null: pause_button.text = _pause_text(view.get("paused",false))
 	queue_redraw()
 
 func _command(kind: String, args: Dictionary = {}):
@@ -113,6 +137,9 @@ func _process(delta: float):
 	if input != last_input:
 		var result = _command("expedition_input",input)
 		if result.get("ok",false): last_input = input.duplicate(true)
+	if view.get("paused",false):
+		refresh()
+		return
 	# Accumulate fractional milliseconds; don't round every rendered frame.
 	frame_ms += delta*1000.0
 	var elapsed = int(frame_ms)

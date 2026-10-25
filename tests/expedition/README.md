@@ -7,6 +7,7 @@
 "$GODOT" --headless --path . --log-file /tmp/e01-integration.log --script tests/expedition/run_integration.gd -- --output /tmp/e01-integration
 "$GODOT" --path . --log-file /tmp/e01-runtime.log --script tests/expedition/runtime_inputs.gd -- --output /tmp/e01-runtime
 "$GODOT" --path . --log-file /tmp/e01-real-runtime.log --script tests/expedition/runtime_inputs.gd -- --real-core --output /tmp/e01-real-runtime
+"$GODOT" --path . --log-file /tmp/e01-save-quit.log --script tests/expedition/runtime_inputs.gd -- --save-quit-only --output /tmp/e01-save-quit
 ```
 
 - `model_cases.gd`：空间碰撞、范围、闪避、攻击防连扣、一次食物盾、散射同敌防多伤、正面盾/绕后、风咒推退/打断/冷却、环形波命中与闪避、两模式交替、满仓/最后掉落、撤退/战败/超时、暂停、浮点 JSON 确定性、帧切分及五种子敌群策略。受控几何边界 fixture 不作为正常成长或库存来源证据。
@@ -16,3 +17,5 @@
 独立窗口脚本的 `ActionAdapter` 明确只绑定动作模型，用于隔离真实控件/渲染路径；它不持有经济档，也不证明完整 core、餐厅 P14、成长获取或真正保存退出恢复。完整集成以实际会话的 P16/P17 和 P03/UI 运行检查为准，不能拿此 adapter 代替。合成触屏/手柄不能宣称 iOS 真机或实体手柄验收。截图应记录实际尺寸、美术来源 revision/manifest；临时美术组合不是最终集成 head 的截图。
 
 `--real-core` 明确改用实际 Session v2：先经正常命令连续经营两日并取得武器/技能，第三日再由真实面板和 InputEvent 完成战斗、拾取入库存、GUI 保存完整会话并装载到新 Session。缺 v2 时失败，不退回 adapter。正常命令搭建前置存档不宣称完成餐厅 UI；新 Session 装载不冒充操作系统进程重启。报告包含实际引擎版本、源码/manifest SHA256、事件和两种截图尺寸，供组合验收核对。
+
+`--save-quit-only` 为产品出口的定向检查：844×390 下分别用鼠标、真实触屏事件、手柄方向导航+A 确认「保存退出」，每次只发一次独立信号，设备及模拟保持输入在回调前已清零，原「保存」未被代触发；四个工具按钮均在屏内且至少 44px 高。此检查监听宿主信号，不代替 P02 的完整保存/进程退出实现。

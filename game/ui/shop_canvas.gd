@@ -30,6 +30,11 @@ func _ready():
 	queue_redraw()
 
 func set_state(value: Dictionary):
+	var old_order = str(state.get("pending",{}).get("id",""))
+	var new_order = str(value.get("pending",{}).get("id",""))
+	# Do not visually deliver a previous ordinary sale to a newly arrived guest.
+	if not new_order.is_empty() and new_order!=old_order:
+		effects = effects.filter(func(effect): return effect.source!="sale")
 	state = value
 	queue_redraw()
 
@@ -107,11 +112,10 @@ func _draw_effect(effect: Dictionary):
 	var start = _at("serve",Vector2(236,180)) if effect.source=="sale" else _at("kitchen",Vector2(104,152))
 	var end = _at("customer",Vector2(220,227))-Vector2(0,26) if effect.source=="sale" else _at("serve",Vector2(236,180))
 	var at = start.lerp(end,fraction)-Vector2(0,8+sin(fraction*PI)*12)
-	_sprite(effect.item_id,at)
+	if effect.effect_id=="floating_delivery": _sprite("floating_plates",at+Vector2(0,10))
+	_sprite(effect.item_id,at-Vector2(0,8) if effect.effect_id=="floating_delivery" else at)
 	var amber = Color("edc46e")
 	match str(effect.effect_id):
-		"floating_delivery":
-			_sprite("floating_plates",at+Vector2(0,10))
 		"ember_aura", "self_stir":
 			for n in range(5):
 				var offset = Vector2(-9+n*5,-10-fmod(effect.age*10+n*4,18))
