@@ -2,9 +2,9 @@
 
 `panels.gd` 是只读 typed-view 组件：`present(view, page, selected_item="")` 深拷贝输入，显示真实字段；`get_action_control(id)` 返回当前可见页面的 Control，`status_line()` 提供一行世界 HUD 摘要。没有 Session、存档、计时推进、发奖或成交模拟。组件 fixture 检查不能作为新雨夜游戏或 Q06 证据。
 
-组件页为 `forecast/service/menu/meal/rare/growth`。依赖到齐后由主 UI 挂在现有纸木浮层中，保留 `world_*`、`get_open_sheet()`、`get_world_view()`；不增加常驻侧栏，不提供隐藏旧 tabbar。主场景的 Session 构造/profile/default save 在 P04 正式发布前不接，不启动旧 v2 用户路径。
+组件页为 `forecast/service/menu/meal/rare/growth`，由主 UI 挂在现有纸木浮层中，保留 `world_*`、`get_open_sheet()`、`get_world_view()`；不增加常驻侧栏，不提供隐藏旧 tabbar。主场景按 P04 正式 facade 显式 `Session.new(seed,"rain-night-v1")`，默认存档为 `user://profiles/rain-night-v1/moonlantern.json`，不扫描旧 v2 用户路径。实际独立用户数据目录由 H05 启动器负责。
 
-`intent_requested(kind,args)` 只传意图，由主 UI 使用真实 Session.command 和新 request ID，随后按真实结果刷新；组件不提前改显示库存、现金、成交或餐前槽。`world_requested(world_id)` 仅合上浮层并聚焦实际物件，玩家仍须点击/确认该物件。`content_changed` 让宿主重新连可见焦点链并做延后布局。
+`intent_requested(kind,args)` 只传意图，由主 UI 使用真实 Session.command 和新 request ID，随后按真实结果刷新；组件不提前改显示库存、现金、成交或餐前槽。`world_requested(world_id)` 仅合上浮层并聚焦实际物件，玩家仍须点击/确认该物件。`content_changed` 已接宿主焦点链重建和延后布局；初始焦点/A确认/B与Esc由主场景配置，独立组件不修改全局输入映射。
 
 | 真实世界入口 | 相关组件与动作 |
 |---|---|

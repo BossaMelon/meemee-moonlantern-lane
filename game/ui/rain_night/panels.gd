@@ -12,6 +12,7 @@ const EFFECTS={"light_step":"轻步 · 首次闪避延长","clear_breath":"清�
 const TAGS={"meal":"料理","quick":"快捷","portable":"外带","hearty":"正餐","warming":"暖身","heat_hold":"保温","trail_light":"照路","celebration":"庆功"}
 const RARE={"sparkcap":{"name":"星火菇","value":4,"dish":"星火汤"},"moonheart":{"name":"月心菇","value":8,"dish":"彗星馅饼"}}
 const GEAR_NAMES={"bolt_wand":"直线魔杖","fan_wand":"扇射魔杖","gust":"风咒"}
+const REASONS={"unprepared":"菜单份数不足","unmatched":"现有菜品效果不匹配","cooled":"炖锅已凉，不能满足暖身需求","congestion":"供餐通道拥堵，等候耗尽","budget":"标价超过预算","matched":"需求与预算匹配","ordinary":"普通餐盘","floating":"浮空餐盘","pot":"热锅成组"}
 var state: Dictionary={}
 var page="forecast"
 var selected_item=""
@@ -85,6 +86,7 @@ func _button(id: String, caption: String, callback: Callable, enabled: bool=true
 	button.set_meta("action_id",id)
 	button.text=caption
 	button.custom_minimum_size=Vector2(48,48)
+	button.focus_mode=Control.FOCUS_ALL
 	button.disabled=not enabled
 	button.pressed.connect(callback,CONNECT_DEFERRED)
 	add_child(button)
@@ -178,7 +180,7 @@ func _order_reason(id: String) -> String:
 	for sale in state.get("sales",[]):
 		if sale.get("order_id","")==id:
 			var reasons: Array[String]=[]
-			for reason in sale.get("reasons",[]): reasons.append(str(reason))
+			for reason in sale.get("reasons",[]): reasons.append(REASONS.get(reason,str(reason)))
 			if not reasons.is_empty(): return "；".join(reasons)
 	return "暂未收到原因"
 
@@ -281,6 +283,8 @@ func _growth():
 	for upgrade in state.get("upgrades",[]):
 		if upgrade.upgrade_id not in ["field_kit","shelf"]: continue
 		_text("%s · %d金\n%s" % [upgrade.name,upgrade.cost,upgrade.description],"growth_"+str(upgrade.upgrade_id))
+		var remaining=int(state.get("cash",0))-int(upgrade.cost)
+		_text("购买后可用%d金"%remaining if remaining>=0 else "还差%d金"%(-remaining),"growth_balance_"+str(upgrade.upgrade_id),MUTED)
 		_button("upgrade_"+str(upgrade.upgrade_id),"已购买" if upgrade.owned else "投资明天 · "+str(upgrade.name),_request.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),not upgrade.owned and upgrade.available and _allowed("upgrade",["settled"]))
 		if not upgrade.available and not upgrade.owned: _text(str(upgrade.reason),"growth_reason_"+str(upgrade.upgrade_id),MUTED)
 	var progression: Dictionary=state.get("progression",{})
