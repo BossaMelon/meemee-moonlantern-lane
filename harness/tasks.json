@@ -328,6 +328,44 @@
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "service_tier": "default"
+    },
+    {
+      "id": "V01",
+      "owner": "runtime_verification",
+      "allowed_paths": [
+        "tests/runtime/font_boundary.gd",
+        "tests/runtime/font_boundary.gd.uid",
+        "tests/runtime/quality_runtime.py",
+        "tests/runtime/run_critical_path.py",
+        "tests/runtime/test_quality_runtime.py"
+      ],
+      "depends_on": [
+        "E03"
+      ],
+      "chat_id": "01a17302-168c-7d22-90fd-9633ccf7e434",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
+    },
+    {
+      "id": "E04",
+      "owner": "expedition_implementation",
+      "allowed_paths": [
+        "tests/expedition/return_boundary_cases.gd",
+        "tests/expedition/rain_model_cases.gd",
+        "tests/expedition/run_rain_model.gd",
+        "tests/expedition/run_return_boundaries.gd",
+        "tests/expedition/portable_output_cases.gd",
+        "tests/expedition/portable_output_cases.gd.uid"
+      ],
+      "depends_on": [
+        "W01",
+        "E03"
+      ],
+      "chat_id": "01a172d3-48a0-74d1-a9ff-5c30499d3760",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     }
   ],
   "coordination": {
