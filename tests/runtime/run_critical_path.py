@@ -15,7 +15,8 @@ import uuid
 from pathlib import Path
 
 STAGES = [("start", "hagrid-pending"), ("after-hagrid", "combat-paused"),
-          ("after-combat", "finished"), ("after-finished", "complete")]
+          ("after-combat", "combat-drop"), ("after-drop", "combat-collected"),
+          ("after-collected", "finished"), ("after-finished", "complete")]
 AUXILIARY_STAGES = {"layout": "layout-complete", "exit-smoke": "smoke", "restore-smoke": "complete"}
 
 

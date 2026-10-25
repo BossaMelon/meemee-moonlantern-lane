@@ -18,6 +18,7 @@ var pending_product_exit = ""
 var product_exit_observed = false
 var saved_sha256 = ""
 var pickup_proofs: Array = []
+var restore_sources: Array = []
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
@@ -162,6 +163,8 @@ func record_checkpoint(name: String):
 	checkpoint=name
 	var file=FileAccess.open(folder+"/"+name+"-expected.json",FileAccess.WRITE)
 	file.store_string(JSON.stringify(ui.game.snapshot(),"  ",true,true)); file.close()
+	var context=FileAccess.open(folder+"/"+name+"-context.json",FileAccess.WRITE)
+	context.store_string(JSON.stringify({"producer_attempt":attempt,"producer_process_id":OS.get_process_id(),"battle_observed":battle_observed},"  ",true,true)); context.close()
 	write_report()
 
 func _observe_product_exit():
@@ -186,9 +189,20 @@ func save_and_exit(name: String):
 
 func restore(name: String):
 	var expected=JSON.parse_string(FileAccess.get_file_as_string(folder+"/"+name+"-expected.json"))
+	var context=JSON.parse_string(FileAccess.get_file_as_string(folder+"/"+name+"-context.json"))
+	expect(context.producer_process_id!=OS.get_process_id(),"restore runs in a different process from its checkpoint producer")
+	restore_sources.append({"checkpoint":name,"producer_attempt":context.producer_attempt,"producer_process_id":context.producer_process_id})
+	# Carry only test observations across process segments, never gameplay state.
+	battle_observed=context.battle_observed
 	await activate("load")
 	expect("恢复成功" in ui.feedback.text,"load reports success in a new OS process")
-	expect(json_equal(ui.game.snapshot(),expected),"new-process exact snapshot restore: "+name)
+	var actual: Dictionary=ui.game.snapshot()
+	var restored_file=FileAccess.open(folder+"/"+attempt+"-restored-actual.json",FileAccess.WRITE)
+	restored_file.store_string(JSON.stringify(actual,"  ",true,true)); restored_file.close()
+	var differences: Array=[]
+	for field in expected:
+		if not json_equal(expected[field],actual.get(field)): differences.append(field)
+	expect(json_equal(actual,expected),"new-process exact snapshot restore: "+name+"; differing fields="+str(differences))
 	if ui.game.view().phase=="expedition":
 		expect(ui.game.snapshot().expedition.input=={"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false},"restored combat has no held input")
 	await screenshot(mode+"-restored-"+name)
@@ -288,7 +302,7 @@ func battle(day: int, resume: bool = false):
 	ui.battle_panel.action_events.connect(func(events): action_events.append_array(events))
 	var observations_before: Dictionary=ui.game.view().expedition
 	var initial_position=Vector2(observations_before.player.x,observations_before.player.y)
-	var seen={"movement":false,"cast":false,"dodge":false,"skill":false,"hit":false,"telegraph":false,"drop":false}
+	var seen=battle_observed.get(str(day),{"movement":false,"cast":false,"dodge":false,"skill":false,"hit":false,"telegraph":false,"drop":false}).duplicate(true)
 	var iteration=0
 	while ui.game.view().phase=="expedition" and Time.get_ticks_msec()<until:
 		var s: Dictionary=ui.game.view().expedition
@@ -299,8 +313,15 @@ func battle(day: int, resume: bool = false):
 			for initial_enemy in observations_before.enemies:
 				if enemy.id==initial_enemy.id and enemy.hp<initial_enemy.hp: seen.hit=true
 		seen.drop=seen.drop or not s.drops.is_empty()
-		# On day 3 persist actual active combat, then a new process must load it.
-		if day==3 and stage=="after-hagrid" and seen.telegraph:
+		# Separate real-process checkpoints retain a telegraph, an uncollected
+		# drop, and an already-collected drop before the remaining fight.
+		var save_boundary=""
+		if day==3:
+			if stage=="after-hagrid" and seen.telegraph: save_boundary="combat-paused"
+			elif stage=="after-combat" and s.drops.any(func(drop): return not drop.collected): save_boundary="combat-drop"
+			elif stage=="after-drop" and s.drops.any(func(drop): return drop.collected): save_boundary="combat-collected"
+		if not save_boundary.is_empty():
+			battle_observed[str(day)]=seen
 			await release_combat()
 			await pause_combat()
 			expect(ui.game.view().paused,"active combat paused for restart")
@@ -310,9 +331,12 @@ func battle(day: int, resume: bool = false):
 			await activate_control(ui.battle_panel.save_button,"battle_save")
 			expect("保存成功" in ui.feedback.text,"combat save reaches actual store")
 			await screenshot(mode+"-combat-checkpoint")
-			# A real product exit control must be supplied by the published E01/UI
-			# integration. Do not retain the earlier harness-exit fallback.
-			expect(false,"published combat save-and-quit integration is required")
+			# E01 published this control/signal in 9fec5d4. P02 must bind the
+			# signal to its existing save-success-only exit; input proves routing.
+			expect(ui.battle_panel.has_signal("save_quit_requested"),"published E01 save-and-quit signal exists")
+			var quit_control=ui.battle_panel.get("save_quit_button")
+			expect(quit_control is Button,"published E01 save-and-quit control exists")
+			if quit_control is Button: await expect_product_exit(save_boundary,quit_control)
 			return
 		var input=CombatDriver.next_input(s)
 		# Exercise acquired actions once, then reuse E01's actual movement policy.
@@ -411,6 +435,13 @@ func run():
 	elif stage=="after-combat":
 		await restore("combat-paused")
 		await battle(3,true)
+	elif stage=="after-drop":
+		await restore("combat-drop")
+		await battle(3,true)
+	elif stage=="after-collected":
+		await restore("combat-collected")
+		verify_pickups_once()
+		await battle(3,true)
 		await prepare_day(3,hot); await trade(3,hot)
 		expect(ui.game.view().finished,"all three days finish")
 		var advanced_sales=ui.game.view().sales.filter(func(row): return row.get("item_id","")=="comet_pie" and row.get("revenue",0)>0)
@@ -431,6 +462,6 @@ func run():
 
 func write_report():
 	if input_file!=null: input_file.flush()
-	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
+	var report={"suite":"p03-main-scene-runtime","mode":mode,"stage":stage,"attempt":attempt,"checkpoint":checkpoint,"checks":checks,"failures":failures,"observations":observations,"actions":trace,"combat_observations":battle_observed,"action_events":action_events,"pickup_proofs":pickup_proofs,"restore_sources":restore_sources,"product_exit_observed":product_exit_observed,"saved_sha256":saved_sha256,"window_size":[DisplayServer.window_get_size().x,DisplayServer.window_get_size().y],"viewport_size":[root.size.x,root.size.y],"pixel_room_loaded":not ui.illustration.missing.visible if is_instance_valid(ui) else false,"screenshots":screenshots,"display":DisplayServer.get_name(),"engine":Engine.get_version_info().string,"process_id":OS.get_process_id(),"synthetic_input":true,"limitations":["No physical controller, iOS/Windows device or human fun claim."]}
 	var file=FileAccess.open(folder+"/"+attempt+"-report.json",FileAccess.WRITE)
 	if file!=null: file.store_string(JSON.stringify(report,"  ")); file.close()
