@@ -6,6 +6,39 @@ const DEFAULT_SAVE = "user://profiles/rain-night-v1/moonlantern.json"
 const RESTORES = {"after-spore":"spore-warning","after-intermission":"intermission","after-delivery":"delivery-in-flight","after-upgrade":"upgrade-pending","after-equipped":"next-morning-equipped"}
 var component_observations: Array=[]
 var default_profile: Dictionary={}
+var last_touch_positions: Dictionary={}
+
+func emit_input(event: InputEvent, local: bool=false):
+	if event is InputEventScreenTouch or event is InputEventScreenDrag: last_touch_positions[event.index]=event.position
+	super.emit_input(event,local)
+
+func release_combat():
+	if is_instance_valid(ui.battle_panel):
+		await super.release_combat()
+	else:
+		# Main removes the combat panel on a normal return. Release the physical
+		# devices using the positions actually emitted before removal; no aim
+		# geometry, focus grab, command, or replay of held inputs is needed.
+		for code in pressed_keys:
+			if pressed_keys[code]:
+				var event=InputEventKey.new(); event.keycode=code; event.physical_keycode=code; event.pressed=false; emit_input(event)
+			pressed_keys[code]=false
+		for axis in pad_axes:
+			if pad_axes[axis]!=0.0:
+				var event=InputEventJoypadMotion.new(); event.axis=axis; event.axis_value=0.0; emit_input(event)
+			pad_axes[axis]=0.0
+		for button in pad_buttons:
+			if pad_buttons[button]:
+				var event=InputEventJoypadButton.new(); event.button_index=button; event.pressed=false; emit_input(event)
+			pad_buttons[button]=false
+		for index in active_touches:
+			if active_touches[index]:
+				expect(last_touch_positions.has(index),"return release retains the last emitted touch position")
+				var event=InputEventScreenTouch.new(); event.index=index; event.position=last_touch_positions[index]; event.pressed=false; emit_input(event,true)
+			active_touches[index]=false
+		await frames(2)
+	var held: Dictionary=ui.game.snapshot().expedition.input
+	expect(json_equal(held,{"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}),"actual combat input is fully released at pause/return boundary")
 
 func screenshot(name: String):
 	if config.get("headless_diagnostic",false): return
@@ -119,7 +152,9 @@ func wait_wave(expected_phase: String):
 	expect(not rows.is_empty(),"completed wave has actual customer outcomes")
 	await create_timer(0.35,true,false,true).timeout
 	expect(json_equal(snapshot,ui.game.snapshot()),"true wave boundary freezes the complete state without forced waiting")
+	await open_sheet("counter"); observe_component("service")
 	await screenshot(mode+"-rain-wave-%d"%wave)
+	await close_sheet()
 
 func verify_delivery():
 	var saved=battle_observed.get("reserved",[])
@@ -239,6 +274,8 @@ func run():
 			await resume_restaurant()
 			await craft_display("moon_stew",3)
 			await activate("start_wave")
+			await open_sheet("counter"); observe_component("service")
+			await screenshot(mode+"-rain-in-flight-service")
 			await open_sheet("pause")
 			battle_observed.reserved=ui.game.snapshot().service.reservations.duplicate(true)
 			expect(not battle_observed.reserved.is_empty(),"real wave2 has in-flight delivery UIDs at pause")
