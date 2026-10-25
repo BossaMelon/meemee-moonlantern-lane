@@ -6,6 +6,7 @@ var report_dir = ""
 var seeds: Array = []
 var battle_origin: Dictionary = {}
 var last_settled: Dictionary = {}
+var configuration: Dictionary = {}
 
 func run_case(id: String, callback: Callable):
 	checks = 0; failures = []; traces = []; observed = []
@@ -63,10 +64,8 @@ func cook(g, id: String, count: int):
 	act(g,"craft",{"recipe_id":id,"quantity":count}); act(g,"display",{"item_id":id,"quantity":count})
 
 func basket(g, route: String):
-	act(g,"buy",{"item_id":"pumpkin","quantity":12})
-	if route == "heat": act(g,"buy",{"item_id":"cream","quantity":12})
-	else:
-		act(g,"buy",{"item_id":"flour","quantity":8}); act(g,"buy",{"item_id":"ember_herb","quantity":4})
+	var recipe = configuration.upgrade_restock_tradeoff.baseline_baskets["hot_meals" if route == "heat" else "quick_service"]
+	for purchase in recipe.buys: act(g,"buy",{"item_id":purchase.item_id,"quantity":int(purchase.quantity)})
 
 func normal_night(seed_value: int, route: String, explore: bool = false, tier: String = "standard"):
 	var g = Session.new(seed_value)
@@ -168,17 +167,22 @@ func test_actual_double_investment(settled: Dictionary, route: String, tier: Str
 		traces.append({"scenario":"second-investment-unaffordable","seed":settled.seed,"strategy":route,"tier":tier,"explored":explored,"cash_after_one":g.view().cash,"result":refused,"ledger":g.snapshot().ledger})
 		return
 	act(g,"upgrade",{"upgrade_id":"shelf"}); act(g,"next_day")
-	var cash_after_two = g.view().cash; var refused: Dictionary
-	if g.view().cash < 36: refused = reject(g,"buy",{"item_id":"pumpkin","quantity":12},"over-budget-full-restock")
-	else:
-		act(g,"buy",{"item_id":"pumpkin","quantity":12})
-		refused = reject(g,"buy",{"item_id":"cream","quantity":12},"over-budget-full-restock")
+	var cash_after_two = g.view().cash; var refused: Dictionary = {}
+	var full = roundtrip(g,"double-investment-before-basket")
+	for purchase in configuration.upgrade_restock_tradeoff.baseline_baskets.hot_meals.buys:
+		var unit_cost = preload("res://game/core/catalog.gd").ITEMS[purchase.item_id].buy
+		var args = {"item_id":purchase.item_id,"quantity":int(purchase.quantity)}
+		if full.view().cash < unit_cost*purchase.quantity:
+			refused = reject(full,"buy",args,"over-budget-full-restock"); break
+		act(full,"buy",args)
+	expect(not refused.is_empty(),"full unchanged baseline basket actually reaches cash guard")
+	if refused.is_empty(): return
 	expect(refused.code == "insufficient_cash","two paid upgrades make original full basket unaffordable without partial charge")
-	var pumpkins = g.snapshot().items.filter(func(i): return i.item_id == "pumpkin" and i.location == "bag").size()
-	var reduced = mini(pumpkins,int(g.view().cash/2)) if pumpkins > 0 else mini(12,int(g.view().cash/5))
+	var reduced_basket = configuration.upgrade_restock_tradeoff.reduced_hot_baskets[tier]
+	for purchase in reduced_basket.buys: act(g,"buy",{"item_id":purchase.item_id,"quantity":int(purchase.quantity)})
+	var reduced = g.snapshot().items.filter(func(i): return i.item_id == "pumpkin" and i.location == "bag").size()
 	expect(reduced > 0 and reduced < 12,"a deliberately reduced basket remains available")
-	if pumpkins == 0: act(g,"buy",{"item_id":"pumpkin","quantity":reduced})
-	act(g,"buy",{"item_id":"cream","quantity":reduced}); act(g,"finish_shopping")
+	act(g,"finish_shopping")
 	cook(g,"moon_stew",reduced); act(g,"open_shop"); advance_wave(g)
 	act(g,"start_wave",{"wave_id":"n2-w2"}); act(g,"decline",{"order_id":"n2-hagrid-patrol"}); advance_wave(g)
 	act(g,"start_wave",{"wave_id":"n2-w3"}); advance_wave(g); act(g,"settle")
@@ -229,6 +233,7 @@ func run(folder: String, selected: String = "") -> Dictionary:
 	if not fixture_data is Dictionary or not fixture_data.get("seeds") is Array or not fixture_data.seeds.all(func(n): return (n is int or n is float) and n == floor(n)) or fixture_data.seeds.map(func(n): return int(n)) != [1,7,23,99,20261025]:
 		return {"schema_version":1,"suite":"quality-slice","cases":[{"id":"Q05","status":"failed","checks":1,"failures":["Missing or mismatched quality fixture seeds"]}]}
 	seeds = fixture_data.seeds
+	configuration = fixture_data.configuration
 	if selected == "" or selected == "Q01": run_case("Q01",test_map_case)
 	if selected == "" or selected == "Q02": run_case("Q02",test_combat_case)
 	if selected == "" or selected == "Q03": run_case("Q03",func():
