@@ -270,6 +270,64 @@
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "service_tier": "default"
+    },
+    {
+      "id": "W01",
+      "owner": "engineering_delivery",
+      "allowed_paths": [
+        ".github/workflows/windows-validation.yml",
+        "tools/run_windows_gate.ps1",
+        "tools/README.md",
+        ".github/workflows/gate.yml"
+      ],
+      "depends_on": [
+        "H03",
+        "P06"
+      ],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "P07",
+      "owner": "ui_implementation",
+      "allowed_paths": [
+        "assets/fonts/**",
+        "assets/SOURCES.md",
+        "game/ui/portable_font.gd",
+        "game/ui/portable_font.gd.uid",
+        "game/ui/main.gd",
+        "game/ui/checks/portable_font.gd",
+        "game/ui/checks/portable_font.gd.uid",
+        "game/ui/rain_night/README.md"
+      ],
+      "depends_on": [
+        "H03",
+        "W01"
+      ],
+      "chat_id": "01a172c8-4c24-7dc1-bb64-307423676621",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "E03",
+      "owner": "expedition_implementation",
+      "allowed_paths": [
+        "game/expedition/expedition_panel.gd",
+        "game/expedition/RAIN_GARDEN_API.md",
+        "tests/expedition/export_resources.gd",
+        "tests/expedition/export_resources.gd.uid",
+        "tests/expedition/export_resources.py"
+      ],
+      "depends_on": [
+        "P07"
+      ],
+      "chat_id": "01a172d3-48a0-74d1-a9ff-5c30499d3760",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     }
   ],
   "coordination": {
