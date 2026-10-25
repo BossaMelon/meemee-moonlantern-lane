@@ -3,26 +3,35 @@
   "tasks": [
     {
       "id": "H01",
-      "owner": "repository_steward",
+      "owner": "engineering_delivery",
       "allowed_paths": [
         "tools/**",
         ".github/workflows/**",
         ".gitignore"
       ],
-      "depends_on": []
+      "depends_on": [],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     },
     {
       "id": "H02",
       "owner": "acceptance_contract",
       "allowed_paths": [
         "contracts/**",
-        "tests/fixtures/**"
+        "tests/fixtures/**",
+        "docs/05-restaurant-prototype.md"
       ],
-      "depends_on": []
+      "depends_on": [],
+      "chat_id": "01a172cf-4b61-7862-84fb-8fc3f779723f",
+      "service_tier": "default",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh"
     },
     {
       "id": "H03",
-      "owner": "platform_research",
+      "owner": "engineering_delivery",
       "allowed_paths": [
         "AGENTS.md",
         "README.md",
@@ -32,7 +41,11 @@
         "harness/tasks.json",
         ".github/pull_request_template.md"
       ],
-      "depends_on": []
+      "depends_on": [],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
     },
     {
       "id": "P01",
@@ -48,17 +61,59 @@
         "H01",
         "H02",
         "H03"
-      ]
+      ],
+      "chat_id": "01a172c8-545f-7391-9d0e-d8820e85fc07",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
     },
     {
       "id": "P02",
       "owner": "ui_implementation",
       "allowed_paths": [
-        "scenes/**",
+        "scenes/main.tscn",
+        "scenes/ui/**",
         "game/ui/**",
-        "assets/**"
+        "assets/SOURCES.md"
       ],
       "depends_on": [
+        "P01"
+      ],
+      "chat_id": "01a172c8-4c24-7dc1-bb64-307423676621",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "A01",
+      "owner": "pixel_art",
+      "chat_id": "01a172c8-6555-7a91-938b-e0f6d239133b",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "service_tier": "default",
+      "allowed_paths": [
+        "assets/pixel/**"
+      ],
+      "depends_on": [
+        "H01",
+        "H02",
+        "H03"
+      ]
+    },
+    {
+      "id": "E01",
+      "owner": "expedition_implementation",
+      "chat_id": "01a172d3-48a0-74d1-a9ff-5c30499d3760",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default",
+      "allowed_paths": [
+        "game/expedition/**",
+        "scenes/expedition/**",
+        "tests/expedition/**"
+      ],
+      "depends_on": [
+        "H02",
         "P01"
       ]
     },
@@ -72,5 +127,10 @@
         "P02"
       ]
     }
-  ]
+  ],
+  "coordination": {
+    "chat_id": "01a172aa-e83d-7df3-a710-087a1da16d66",
+    "service_tier": "default",
+    "delegation": "visible_chats_only"
+  }
 }
