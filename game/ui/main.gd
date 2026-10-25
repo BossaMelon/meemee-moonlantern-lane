@@ -110,7 +110,10 @@ func _configure_input():
 
 func _unhandled_input(event):
 	if not view.is_empty() and view.phase=="expedition": return
-	if event.is_action_pressed("shop_pause") or event.is_action_pressed("ui_cancel"):
+	# Effective Godot 4.7 defaults do not bind joypad B to ui_cancel.
+	# Keep this business-only; expedition receives its own B=dodge first.
+	var business_back=event is InputEventJoypadButton and event.button_index==JOY_BUTTON_B and event.pressed
+	if business_back or event.is_action_pressed("shop_pause") or event.is_action_pressed("ui_cancel"):
 		if sheet_open and tab!="pause": _close_sheet()
 		else: _toggle_pause()
 		get_viewport().set_input_as_handled()
