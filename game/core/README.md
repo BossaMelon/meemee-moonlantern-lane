@@ -28,7 +28,7 @@ var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 | open_shop | `{}` | preparation；仅开启第一波 |
 | start_wave | `{wave_id}` | intermission；必须匹配 service.next_wave_id |
 | settle / next_day | `{}` | closing / settled；一次日结与正常跨日 |
-| upgrade | `{upgrade_id}` | settled；field_kit / shelf 均60；field_kit另需累计菜品收入24 |
+| upgrade | `{upgrade_id}` | settled；field_kit / shelf 均110；field_kit另需累计菜品收入24 |
 | equip_weapon | `{weapon_id}` | shopping；field_kit 次晨解锁 fan_wand，可立刻装备 |
 | recycle | `{item_id,quantity}` | shopping / preparation；仅储藏；厨具18，sparkcap4，moonheart8 |
 | consume | `{item_id,quantity:1}` | shopping；floating_pie / star_soup 最小储藏UID；单一餐前效果槽 |

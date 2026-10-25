@@ -5,6 +5,7 @@ var simulations: Array = []
 var report_dir = ""
 var seeds: Array = []
 var battle_origin: Dictionary = {}
+var last_settled: Dictionary = {}
 
 func run_case(id: String, callback: Callable):
 	checks = 0; failures = []; traces = []; observed = []
@@ -67,14 +68,15 @@ func basket(g, route: String):
 	else:
 		act(g,"buy",{"item_id":"flour","quantity":8}); act(g,"buy",{"item_id":"ember_herb","quantity":4})
 
-func normal_night(seed_value: int, route: String, explore: bool = false):
+func normal_night(seed_value: int, route: String, explore: bool = false, tier: String = "standard"):
 	var g = Session.new(seed_value)
 	if explore:
 		act(g,"start_expedition"); drive(g,"shelf" if route == "quick" else "canal")
 	if route == "quick": act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
 	basket(g,route); act(g,"finish_shopping")
 	if route == "heat": act(g,"install",{"uid":1})
-	var service_ms = 0
+	for id in (["moon_stew"] if route == "heat" else ["floating_pie","ember_soup"]): act(g,"price",{"item_id":id,"tier":tier})
+	var service_ms = 0; var wave_records = []
 	for wave in range(3):
 		if route == "heat": cook(g,"moon_stew",[6,3,3][wave])
 		else:
@@ -82,12 +84,23 @@ func normal_night(seed_value: int, route: String, explore: bool = false):
 		if wave == 0: act(g,"open_shop")
 		else: act(g,"start_wave",{"wave_id":g.snapshot().service.next_wave_id})
 		advance_wave(g); service_ms += g.snapshot().service.elapsed_ms
+		var sales = g.snapshot().sales.filter(func(row): return row.get("wave_id") == "n1-w%d" % (wave+1))
+		var revenue = 0; var cost = 0; var served = 0; var left_reasons = {}
+		for sale in sales:
+			revenue += int(sale.revenue); cost += int(sale.cost)
+			if sale.revenue > 0: served += 1
+			else:
+				for reason in sale.reasons: left_reasons[reason] = left_reasons.get(reason,0)+1
+		wave_records.append({"wave_id":g.snapshot().service.wave_id,"served":served,"left":sales.size()-served,"left_reasons":left_reasons,"revenue":revenue,"sold_cost":cost,"gross_profit":revenue-cost,"cash":g.view().cash,"elapsed_ms":g.snapshot().service.elapsed_ms,"remaining_items":g.snapshot().items,"held_uids":g.snapshot().service.held_uids,"sales":sales})
 		if route == "heat" and wave == 0: expect(g.snapshot().service.held_uids.size() == 3,"normal hot route carries three actual held meals into patrol wave")
 	act(g,"settle")
-	expect(g.view().cash >= 60+(60 if route == "heat" else 64),"normal route can invest and fully restock without emergency work")
+	last_settled = g.snapshot()
+	var upgrade_cost = g.view().upgrades.filter(func(u): return u.upgrade_id == "field_kit")[0].cost
+	expect(g.view().cash >= upgrade_cost+(60 if route == "heat" else 64),"normal route can invest and fully restock without emergency work")
 	expect(g.snapshot().ledger.all(func(row): return row.kind != "recover"),"normal route never depends on emergency income")
-	var summary = {"seed":seed_value,"strategy":route,"explored":explore,"cash_before_upgrade":g.view().cash,"summary":g.view().summary,"service_ms":service_ms,"ledger":g.snapshot().ledger}
+	var summary = {"seed":seed_value,"strategy":route,"tier":tier,"explored":explore,"cash_before_upgrade":g.view().cash,"summary":g.view().summary,"service_ms":service_ms,"waves":wave_records,"remaining_items":g.snapshot().items,"ledger":g.snapshot().ledger,"upgrade_spending":upgrade_cost}
 	act(g,"upgrade",{"upgrade_id":"field_kit"},"earned-kit")
+	summary.cash_after_upgrade = g.view().cash
 	expect(g.snapshot().progression.pending_unlocks == ["fan_wand"] and "fan_wand" not in g.snapshot().progression.owned_weapons,"paid kit is pending until normal next day")
 	var paid = roundtrip(g,"paid-upgrade")
 	act(g,"next_day"); act(paid,"next_day"); expect(g.snapshot() == paid.snapshot(),"next day after purchased upgrade matches saved branch")
@@ -125,22 +138,52 @@ func test_growth_case():
 func test_correctness_case():
 	for seed_value in seeds:
 		for route in ["quick","heat"]:
-			var g = normal_night(int(seed_value),route,true)
-			act(g,"start_expedition"); clear_input(g); var restored = roundtrip(g,"five-seed-start")
-			act(g,"expedition_input",{"move_y":-1.0,"cast":true,"aim_x":1.0}); act(restored,"expedition_input",{"move_y":-1.0,"cast":true,"aim_x":1.0})
-			act(g,"advance",{"delta_ms":1237})
-			for ms in [13,41,89,7,1087]: act(restored,"advance",{"delta_ms":ms})
-			expect(g.snapshot() == restored.snapshot(),"five-seed complete Session is invariant to frame partition and restore")
-			act(g,"leave_expedition"); reject(g,"start_expedition")
-			var no_expedition = normal_night(int(seed_value),route,false)
-			expect(no_expedition.snapshot().expedition_attempts.is_empty(),"explicit no-expedition branch can invest and continue")
-			act(no_expedition,"finish_shopping")
-			if route == "heat": cook(no_expedition,"moon_stew",3)
-			else: cook(no_expedition,"floating_pie",5); cook(no_expedition,"ember_soup",3)
-			act(no_expedition,"open_shop"); advance_wave(no_expedition)
-			expect(no_expedition.view().day == 2 and no_expedition.view().phase == "intermission","no-expedition branch actually continues second-night service")
+			for tier in ["standard","premium"]:
+				var g = normal_night(int(seed_value),route,true,tier)
+				test_actual_double_investment(last_settled,route,tier,true)
+				act(g,"start_expedition"); clear_input(g); var restored = roundtrip(g,"five-seed-start")
+				act(g,"expedition_input",{"move_y":-1.0,"cast":true,"aim_x":1.0}); act(restored,"expedition_input",{"move_y":-1.0,"cast":true,"aim_x":1.0})
+				act(g,"advance",{"delta_ms":1237})
+				for ms in [13,41,89,7,1087]: act(restored,"advance",{"delta_ms":ms})
+				expect(g.snapshot() == restored.snapshot(),"five-seed complete Session is invariant to frame partition and restore")
+				act(g,"leave_expedition"); reject(g,"start_expedition")
+				var no_expedition = normal_night(int(seed_value),route,false,tier)
+				test_actual_double_investment(last_settled,route,tier,false)
+				expect(no_expedition.snapshot().expedition_attempts.is_empty(),"explicit no-expedition branch can invest and continue")
+				act(no_expedition,"finish_shopping")
+				if route == "heat": cook(no_expedition,"moon_stew",3)
+				else: cook(no_expedition,"floating_pie",5); cook(no_expedition,"ember_soup",3)
+				act(no_expedition,"open_shop"); advance_wave(no_expedition)
+				expect(no_expedition.view().day == 2 and no_expedition.view().phase == "intermission","no-expedition branch actually continues second-night service")
 	# Real separate OS processes and their user:// directories are checked below.
 	test_profile_processes()
+
+func test_actual_double_investment(settled: Dictionary, route: String, tier: String, explored: bool):
+	var g = fixture(settled,"actual-double-investment")
+	act(g,"upgrade",{"upgrade_id":"field_kit"})
+	var second_cost = g.view().upgrades.filter(func(u): return u.upgrade_id == "shelf")[0].cost
+	if g.view().cash < second_cost:
+		var refused = reject(g,"upgrade",{"upgrade_id":"shelf"})
+		expect(refused.code == "insufficient_cash","quick route cannot buy both without sufficient real cash")
+		traces.append({"scenario":"second-investment-unaffordable","seed":settled.seed,"strategy":route,"tier":tier,"explored":explored,"cash_after_one":g.view().cash,"result":refused,"ledger":g.snapshot().ledger})
+		return
+	act(g,"upgrade",{"upgrade_id":"shelf"}); act(g,"next_day")
+	var cash_after_two = g.view().cash; var refused: Dictionary
+	if g.view().cash < 36: refused = reject(g,"buy",{"item_id":"pumpkin","quantity":12},"over-budget-full-restock")
+	else:
+		act(g,"buy",{"item_id":"pumpkin","quantity":12})
+		refused = reject(g,"buy",{"item_id":"cream","quantity":12},"over-budget-full-restock")
+	expect(refused.code == "insufficient_cash","two paid upgrades make original full basket unaffordable without partial charge")
+	var pumpkins = g.snapshot().items.filter(func(i): return i.item_id == "pumpkin" and i.location == "bag").size()
+	var reduced = mini(pumpkins,int(g.view().cash/2)) if pumpkins > 0 else mini(12,int(g.view().cash/5))
+	expect(reduced > 0 and reduced < 12,"a deliberately reduced basket remains available")
+	if pumpkins == 0: act(g,"buy",{"item_id":"pumpkin","quantity":reduced})
+	act(g,"buy",{"item_id":"cream","quantity":reduced}); act(g,"finish_shopping")
+	cook(g,"moon_stew",reduced); act(g,"open_shop"); advance_wave(g)
+	act(g,"start_wave",{"wave_id":"n2-w2"}); act(g,"decline",{"order_id":"n2-hagrid-patrol"}); advance_wave(g)
+	act(g,"start_wave",{"wave_id":"n2-w3"}); advance_wave(g); act(g,"settle")
+	expect(g.view().cash >= 0 and g.snapshot().ledger.all(func(row): return row.kind != "recover"),"compressed next-night stock completes without negative cash or emergency income")
+	traces.append({"scenario":"actual-double-investment-restock-choice","seed":settled.seed,"strategy":route,"tier":tier,"explored":explored,"cash_after_two":cash_after_two,"full_basket_refusal":refused,"reduced_meals":reduced,"remaining_items":g.snapshot().items,"ledger":g.snapshot().ledger,"sales":g.snapshot().sales,"summary":g.view().summary})
 
 func copy_tree(source: String, destination: String):
 	DirAccess.make_dir_recursive_absolute(destination)
