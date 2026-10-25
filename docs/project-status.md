@@ -64,13 +64,13 @@ P01 保存须覆盖已获得/装备武器、技能、成长资源、敌人/掉�
 - **最新核心集成复验**：核心更新到 `1432d84` 后，PR #7 已合入该基线，最新 head `75fee3b` 的 `output/h01-harness-core1432.json` 为 122 checks，`output/h01-prototype-core1432.json` 为 12 个必需 case、49,065 条旧契约断言；两命令 exit 0、dirty=false，Godot 4.7.2，stderr 为空。该 head [harness CI](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40189784664/job/121158124088) 与 [prototype CI](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40189784664/job/121158124318) 均 SUCCESS；仍只证明通用底座，不证明料理/动作成长完成。
 - **启动器验证**：`zsh -n` exit 0；`output/launcher-validation.json` 记录 6 项临时夹具验证，覆盖缺项目/引擎/场景、错版本、多主场景，以及含空格路径和参数原样传递。真实引擎自动定位已验证，当前核心候选缺 P02 主场景，明确 exit 1；真实游戏窗口仍待 P02 集成。启动器依赖本地引擎和源码，不是独立导出的 `.app`。
 - **公开与保护**：仓库 API 实际为 `visibility=public`。新 head 真实 prototype CI 成功后，已 PATCH 并 GET 回查 main：`strict=true`，required contexts=`[harness,prototype]`，`enforce_admins=true`，PR 必需、required reviews=0，禁止 force push/delete，conversation resolution=true，linear history=false。未引入第二账号审批要求，未购买服务。这替换早期私有仓库保护 HTTP 403 的过时状态。
-- **检查启用顺序与权限阻碍**：总协调要求代码前 main 仅 require 已存在的 harness，待首个 source PR 携带无条件 prototype 且真实 head 绿后再启用双检查。工程尝试将 main 暂调为 harness 的请求被自动审批拒绝，理由为缺少可信用户对该项持久保护变更的明确授权；未执行该 PATCH、未尝试绕过，实际仍双检查。H03 文档 PR 的 scope 登记因此仍受 main 缺 prototype workflow 阻挡，需总协调处理可信授权或其他合规集成顺序，不能伪造成功状态或使用 admin 绕过。
+- **检查启用顺序与权限阻碍**：总协调要求代码前 main 仅 require 已存在的 harness，待首个 source PR 携带无条件 prototype 且真实 head 绿后再启用双检查。工程尝试将 main 暂调为 harness 的请求被自动审批拒绝，理由为缺少可信用户对该项持久保护变更的明确授权；未执行该 PATCH、未尝试绕过，实际仍双检查。总协调随后取消该配置路线，明确保持保护且不再重试，选择 PR #7 → 通用核心独立评审/真实双 CI → PR #5 底座入 main → PR #8 → 新 H02 契约；不伪造状态或使用 admin 绕过。
 - **评审状态**：初始 harness 的一次独立评审与定向修复证据仍有效；本轮工程候选已自查，等待总负责人独立验收。未创建或派遣 sub-agent，未把自查称为独立评审。
 
 ## 未完成、风险与下一步
 
 - **料理三日原型：未完成。** 先等 H02 冻结实际动作采集、三日武器/技能/精英/高级素材料理成长、食用能力、最小菜谱、魔法行为、两路线、雨天需求与一位熟客短委托的契约，再由 P01/E01/P02 按权限接入。核心与工程候选尚待合并，饭店像素素材与真实窗口待验；旧 catalog 自动用例不能代替新料理行为、实际三日、暂停、保存退出和恢复。
-- **集成依赖**：总负责人先验收纯工程 PR #7；H03 文档 [PR #8](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/8) 需先完成 scope 登记，供 H02/E01 接续。总协调已要求修正检查启用顺序，但当前设置变更被自动审批拒绝，main 实际仍需尚未出现的 prototype；该项阻碍保持可见，不要求先合旧杂货核心冒充新产品，也不绕过保护。权限阻碍解决后由总协调验收 H03，再按新冻结契约推进 source PR，届时启用双检查；UI/美术只推进授权路径，不猜接口。
+- **集成依赖**：总负责人先验收纯工程 PR #7；H03 文档 [PR #8](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/8) 需先完成 scope 登记，供 H02/E01 接续。移除检查的操作已被自动审批拒绝并由总协调取消；现保持双检查，按 PR #7 入 core feature → 可见独立 reviewer 审查通用底座 → PR #5 在真实双 CI 与评审完成后入 main → PR #8 获得真实 prototype job 后验收合并 → 新 H02 料理动作契约的顺序推进。旧 catalog 仅作通用底座，不代表新产品完成；不重试削弱保护，不绕过 gate。UI/美术只推进授权路径，不猜接口。
 - **趣味：待人类试玩。** 实际轻动作体验、两条料理路线、食用/出售、厨房设备留用/出售、雨天预告与熟客委托先通过功能与经济验证，再收集真实选择、困惑与续玩意愿；未反馈前不自动扩七日切片。
 - **平台与输入：待验证。** Mac 可运行原型优先；Windows、iOS、触屏和实体手柄分别验收。本机缺完整 Xcode 和 `simctl`，iOS 构建/设备测试存在明确工具链缺口。
 - **发布：未进行。** 当前仅公开托管源码，未购买资源或服务，未对外部署/发布游戏。源码公开不等于游戏发布，发布不是三日原型的完成条件。
