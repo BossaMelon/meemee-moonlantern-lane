@@ -13,6 +13,10 @@ python3 -m unittest discover -s tests/runtime -p 'test_quality_support.py' -v
 
 `snapshot_differences()` 比较所有对象字段与数组顺序/长度，不删除 requests、时钟、温度、UID、危险区或成长；只容许 JSON 整数的等值数值表示，拒绝 bool/number 混同与非有限数。单元夹具明确仅用于工具正反例，不是游戏存档或运行通过证明。旧三日运行说明如下。
 
+`quality_controls.gd` 消费 P05 `d2adf16` 已发布的公开控件定位协议，记录六类组件的实际 Label/Button、禁用状态和对应世界入口；按真实 view 枚举订单、在途 UID 与菜单动作，预留标签须指向同一 UID/订单。它只观察，不发命令、不选择内部页面、不安装输入绑定。最终主场景仍须通过真实世界入口和 InputEvent 打开页面，再用观察器核对。
+
+`quality_components_probe.gd` 是单独的 headless 准备诊断：`Godot --headless --path SNAPSHOT --script tests/runtime/quality_components_probe.gd -- ABS_OUTPUT mouse`（也接受 touch/pad）。SNAPSHOT 必须已组合正式 P04 新 Session 与 P05 组件；缺依赖明确失败，不回退旧 UI。它只用实际默认 Session 的初始 view，无经济推进/探险/存档；以真实设备事件切换料理身份明细、保留稀有料，验证零经济意图并保存完整初末快照。独立组件没有主场景的初始焦点链和绑定，报告保留这些信息，不能用测试 `grab_focus` 或补绑定令手柄通过。无论组件检查结果如何，报告固定 `runtime_verified=false`、`passed=false`；不能作为 Q06。下面继续说明旧三日驱动。
+
 使用已有 Godot 4.7.2，通过引擎真实渲染主场景并注入 `InputEvent`。不使用 Computer Use，不直接提交核心命令、发按钮信号、修改经济状态或调用测试专用战斗模拟。沿用 UI owner 的场景预加载、帧等待、库存和数量辅助；P03 自己编排新世界入口与采购/备餐，覆盖旧 helper 的导航。战斗决策复用 E01 `tests/expedition/action_driver.gd`，只读取实际 session 的位置并转成设备事件。
 
 ```sh
