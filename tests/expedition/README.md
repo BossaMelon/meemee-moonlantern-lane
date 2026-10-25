@@ -23,3 +23,5 @@
 `input_boundary_regressions.gd` 是请求精确性和事件传播的定向入口：默认检查绑定/重复清零不追加 requests、必要清零恰好一次、playing 摇杆/A 与方向键/Space 不触发工具，以及暂停后鼠标/触屏/手柄的保存/保存退出/返店均可用。`--stage write` 经真实按钮保存后退出实际进程，在 tree_exiting 对比完整磁盘/内存；另起进程 `--stage restore` 装载并绑定后继续比完整快照，**包含 requests，不排除字段**。可用 `--source ABS_JSON` 只读复用 P03 失败存档；`--active-exit` 额外验证未暂停且按住动作时退出。`--output DIR` 指定独立证据目录，write/restore 使用同一目录。独立红色对照保留于 /tmp/e01-boundaries-red，修复检查不覆盖它。
 
 HUD改版后 `--active-exit` 走「实际按住动作→真实Esc暂停→浮层保存退出」，不点击隐藏工具。`hud_runtime.gd` 使用 `--fullscreen` 启动，原生窗口覆盖screen或精确macOS usable rect且稳定500ms后才创建场景，绝不强制缩为1280/960测试框；记录Window/DisplayServer模式、screen/usable/window/viewport/PNG尺寸、Retina比例、焦点事件和每次真实输入的焦点状态，PNG直接取viewport。键鼠/手柄/触屏、实际预警、暂停纸面分别截图。可用 `--source ABS_JSON` 复用正常获得的P03探险快照；截图证明实际运行，不替代完整餐厅流程或设备验证。渲染应遵循协调者分配的独占slot，别并发启动原生窗口。
+
+`--headless --script tests/expedition/touch_emulation.gd` 是叠加触控HUD的输入回归，不开原生窗口：开启实际引擎双向鼠标/触屏模拟，确认只移动不自动施法、不注入鼠标瞄准，显式触屏施法仍工作并能松开；真实鼠标不会控制隐藏虚拟摇杆。报告写到 `/tmp/e01-hud-touch-emulation.json`，红色对照保留为同目录 `e01-hud-touch-emulation-red.json`。它不替代原生全屏/设备证据。

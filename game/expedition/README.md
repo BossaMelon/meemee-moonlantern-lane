@@ -26,7 +26,7 @@
 
 场地仍是960×540逻辑空间，`field:Rect2` 是 viewport 内的最大等比绘制区域，不再限制为1倍或为触控预留大块底栏；世界位置、瞄准和预警均使用该同一变换。若整数源像素缩放能保留至少97%的最大边长则吸附，否则以nearest取样最大铺开。HUD文字按viewport尺寸缩放，Retina全屏时最多2倍字号。消费 `mushroom-garden` 及可用的 `ui_paper_panel/ui_button_plain/ui_button_plain_focus`，不写资产。
 
-`input_mode:String` 为 `keyboard/gamepad/touch`，仅保存在面板。真实按键/鼠标、手柄、触屏事件自动切换；忽略系统生成的device=-1模拟事件，避免触屏被模拟鼠标抢回模式。`set_input_mode(mode)->bool`、`input_mode_changed(mode)` 可供P02/P03表现与检查使用，**不提交核心命令或存档字段**。键鼠/手柄只显示一行键位提示；touch显示完整移动/瞄准/施法/闪避/风咒触区和常驻暂停按钮。`_centers()` 继续提供当前局部触区中心，新增 `touch_radius(kind)` 提供随尺寸变化的半径，测试/宿主不要硬编码55像素拖动。
+`input_mode:String` 为 `keyboard/gamepad/touch`，仅保存在面板。真实按键/鼠标、手柄、触屏事件自动切换；忽略系统生成的device=-1模拟事件，避免触屏被模拟鼠标抢回模式。playing战斗层也跳过这类重复鼠标/触屏事件，防止覆盖场地的移动触区隐式施法或真实鼠标激活隐藏摇杆；GUI本身仍可接收这些系统事件，暂停工具不被禁用。`set_input_mode(mode)->bool`、`input_mode_changed(mode)` 可供P02/P03表现与检查使用，**不提交核心命令或存档字段**。键鼠/手柄只显示一行键位提示；touch显示完整移动/瞄准/施法/闪避/风咒触区和常驻暂停按钮。`_centers()` 继续提供当前局部触区中心，新增 `touch_radius(kind)` 提供随尺寸变化的半径，测试/宿主不要硬编码55像素拖动。
 
 playing 时只常驻 `pause_button`；**先通过暂停按钮、Esc或Start打开真实暂停浮层**，`save_button/save_quit_button/return_button` 此时才可见且可操作，公开对象及原信号保留。不要在playing时直接定位隐藏的保存按钮；P02/P03应先走暂停路径。浮层四按钮支持左右/上下/Tab循环。新HUD不改变退出冻结、清零幂等和cancel_save_quit协议，不调用OS退出，也不变更模型、经济、存档或数值。
 

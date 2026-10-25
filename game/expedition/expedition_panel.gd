@@ -310,6 +310,9 @@ func _input(event: InputEvent):
 		return
 	# Paused controls belong to the GUI, never to the combat held-input buffer.
 	if view.get("paused",false): return
+	# OS-generated mouse/touch duplicates may still serve native GUI buttons,
+	# but must not turn an overlaid movement stick into an implicit cast/aim.
+	if event.device == -1 and (event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag): return
 	if event is InputEventKey:
 		var code = event.physical_keycode if event.physical_keycode != 0 else event.keycode
 		if code in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_J,KEY_SPACE,KEY_K,KEY_SHIFT,KEY_L,KEY_E]:
