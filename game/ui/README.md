@@ -2,6 +2,8 @@
 
 主场景 `scenes/main.tscn` 使用 `main.gd`。经营与持久状态由 P01 `GameSession` 负责，动作模拟及动作控件由 E01 负责；UI 不写回 `view()`，每次提交意图使用新 request ID。料理/成长规则来源是冻结契约 `4d06f59` 的 docs05。
 
+新雨夜切片的组件、控件定位与导航协议见 [雨夜呈现接口](rain_night/README.md)。P04/E02 正式依赖到齐前只做 typed-view 组件，不用旧 v2 Session 或 fixture 画面冒充新游戏。
+
 ## 场景交互接口
 
 恢复点为 `codex/p02-before-scene-ui-996d3f4`。本轮将常驻侧栏与 tabbar 移除，默认仅显示全屏餐厅、日程/天气/金币和暂停入口。世界物件是实际 Button 热点，鼠标/触屏命中物件、手柄方向聚焦后确认；悬停/聚焦显示物件名称与边缘反馈。
