@@ -498,6 +498,9 @@ func _refresh():
 	_sync_battle_route()
 	_wire_focus()
 	refresh_serial+=1
+	# A newly shown wrapping caption still has its old 1px width until containers
+	# sort. Reapply bounds after that sort so its temporary height cannot persist.
+	call_deferred("_layout_sheet")
 	call_deferred("_restore_focus",focus_id,old_scroll,refresh_serial)
 
 func _build_counter():

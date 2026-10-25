@@ -46,7 +46,7 @@ func click(id: String):
 		event.button_index=MOUSE_BUTTON_LEFT
 		event.pressed=down
 		event.button_mask=MOUSE_BUTTON_MASK_LEFT if down else 0
-		root.push_input(event,true)
+		ui.get_viewport().push_input(event,true)
 		await process_frame
 	await frames()
 	trace.append({"id":id,"rect_virtual":str(rect),"sheet":ui.get_open_sheet(),"world":ui.get_world_view(),"phase":ui.game.view().phase})
@@ -62,17 +62,22 @@ func screenshot(name: String):
 	image.save_png(folder+"/"+name+".png")
 	trace.append({"screenshot":name,"png_size":str(image.get_size()),"window_size":str(root.size),"virtual_ui_size":str(ui.size),"window_mode":root.mode,"display_mode":DisplayServer.window_get_mode(root.get_window_id()),"screen_size":str(DisplayServer.screen_get_size(root.current_screen)),"content_scale_size":str(root.content_scale_size),"viewport_visible_rect":str(root.get_visible_rect()),"viewport_texture_size":str(root.get_texture().get_size()),"display_server":DisplayServer.get_name(),"renderer_setting":ProjectSettings.get_setting("rendering/renderer/rendering_method"),"adapter":RenderingServer.get_video_adapter_name()})
 	write_report()
+	if ui.get_open_sheet()!="":
+		expect(Rect2(Vector2.ZERO,ui.size).encloses(ui.sheet_surface.get_global_rect()),"entire rendered sheet fits actual viewport at "+name)
 
-func run():
-	await frames(30)
+func mount_ui():
 	ui=load("res://scenes/main.tscn").instantiate()
 	ui.save_path=folder+"/preview-save.json"
 	root.add_child(ui)
+
+func run():
+	await frames(30)
+	mount_ui()
 	await frames(15)
 	var art=load("res://game/ui/pixel_assets.gd")
 	for id in ["world_recipe_book","world_menu_board","world_order_note","world_ledger","ui_paper_panel","ui_button_plain","ui_button_plain_focus","ui_day","ui_coin","ui_pause"]:
 		expect(art.sprite(id)!=null,"published A01 asset actually loaded: "+id)
-	if "--windowed" not in OS.get_cmdline_args():
+	if DisplayServer.get_name()!="headless" and "--windowed-check" not in OS.get_cmdline_user_args():
 		expect(root.mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN],"official fullscreen flag produced actual fullscreen Window mode")
 	expect(ui.get_open_sheet()=="","world is the default screen")
 	await screenshot("01-room-world")
@@ -92,7 +97,7 @@ func run():
 	await click("craft_floating_pie")
 	await screenshot("04-recipe-book")
 	await click("sheet_close")
-	expect(root.gui_get_focus_owner()==ui.get_action_control("world_craft"),"close returns focus to actual prep table")
+	expect(ui.get_viewport().gui_get_focus_owner()==ui.get_action_control("world_craft"),"close returns focus to actual prep table")
 	await screenshot("05-cooking-world-focus")
 	await click("world_menu")
 	await click("display_floating_pie")
