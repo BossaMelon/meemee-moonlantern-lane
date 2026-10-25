@@ -41,7 +41,7 @@ static func load_state(path: String, validator: Callable) -> Dictionary:
 	var main = _read(path,validator)
 	if main.ok: return main
 	# Unsupported versions do not silently roll back across a potentially newer game.
-	if main.code == "invalid_state" and main.message == "不支持的存档版本": return main
+	if main.code == "invalid_state" and main.message in ["不支持的存档版本","不支持的存档规则"]: return main
 	var backup = _read(path+".bak",validator)
 	if backup.ok:
 		backup.code = "recovered_backup"
