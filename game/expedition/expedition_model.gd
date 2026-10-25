@@ -1,4 +1,5 @@
 extends RefCounted
+const Rain = preload("res://game/expedition/rain_garden_model.gd")
 ## Pure fixed-step simulation. The owning session commits pickups with its inventory.
 const STEP = 50
 const WIDTH = 960.0
@@ -13,7 +14,9 @@ static func _result(ok: bool = true, code: String = "ok", message: String = "") 
 static func _input() -> Dictionary:
 	return {"move_x":0.0,"move_y":0.0,"aim_x":0.0,"aim_y":0.0,"cast":false,"dodge":false,"skill":false}
 
-static func create(day: int, run_id: String, seed_value: int = 1, weapon_id: String = "bolt_wand", skills: Array = [], shield: bool = false) -> Dictionary:
+static func create(day: int, run_id: String, seed_value: int = 1, weapon_id: String = "bolt_wand", skills: Array = [], shield: bool = false, options: Variant = {}) -> Dictionary:
+	if not options is Dictionary: return {}
+	if not options.is_empty(): return Rain.create(day,run_id,seed_value,weapon_id,skills,shield,options)
 	var rng = RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var s = {"version":1,"status":"active","day":day,"run_id":run_id,"remaining_ms":LIMIT,"remainder_ms":0,"tick":0,
@@ -76,6 +79,7 @@ static func _event(s: Dictionary, result: Dictionary, type: String, data: Dictio
 	result.events.append(event)
 
 static func leave(s: Dictionary, reason: String = "retreat") -> Dictionary:
+	if s.get("version") == 2: return Rain.leave(s,reason)
 	var result = _result()
 	if s.status == "returned": return result
 	s.status = "returned"
@@ -90,6 +94,7 @@ static func leave(s: Dictionary, reason: String = "retreat") -> Dictionary:
 	return result
 
 static func advance(s: Dictionary, delta_ms: int, free_capacity: int = 80, paused: bool = false) -> Dictionary:
+	if s.get("version") == 2: return Rain.advance(s,delta_ms,free_capacity,paused)
 	if delta_ms < 0 or delta_ms > 60000 or free_capacity < 0: return _result(false,"invalid_delta","推进时间或容量非法")
 	var result = _result()
 	if paused or s.status not in ["active","cleared"]: return result
@@ -327,6 +332,7 @@ static func _coordinates(e: Dictionary) -> bool:
 	return e.has_all(["x","y"]) and _number(e.x,0,WIDTH) and _number(e.y,0,HEIGHT)
 
 static func validate(value: Variant) -> String:
+	if value is Dictionary and value.get("version") == 2: return Rain.validate(value)
 	if not value is Dictionary: return "动作状态须为对象"
 	var s: Dictionary = value
 	if not s.has_all(["version","status","day","run_id","remaining_ms","remainder_ms","tick","rng_state","weapon_id","skills","input","next_projectile","next_cast","entrance_armed","return_reason","player","enemies","projectiles","drops"]): return "动作状态缺少字段"
