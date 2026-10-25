@@ -84,13 +84,14 @@ func key(index: int, down: bool):
 	await frames(1)
 
 func scroll_gesture_origin(clip: Rect2) -> Vector2:
-	# Begin on visible text/gap, not a Button that consumes the pointer gesture.
-	for y in range(int(clip.position.y)+10,int(clip.end.y)-10,12):
+	# Begin on visible text/gap, not a child that consumes the pointer gesture.
+	var children=ui.scroll.find_children("*","Control",true,false)
+	for y in range(int(clip.position.y)+4,int(clip.end.y)-4,4):
 		var point=Vector2(clip.get_center().x,y)
-		var over_button=false
-		for control in ui.action_controls.values():
-			if is_instance_valid(control) and control.is_visible_in_tree() and control.get_global_rect().has_point(point): over_button=true; break
-		if not over_button: return point
+		var blocked=false
+		for control in children:
+			if control.mouse_filter==Control.MOUSE_FILTER_STOP and control.is_visible_in_tree() and control.get_global_rect().has_point(point): blocked=true; break
+		if not blocked: return point
 	return clip.get_center()
 
 func scroll_to(button: Button):
