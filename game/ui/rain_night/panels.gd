@@ -254,7 +254,7 @@ func _menu():
 		if item.get("prepared_wave_id")==null: continue
 		var locked=reserved.has(int(item.uid)) or item.location=="reserved"
 		if not details_open and not locked: continue
-		var label=_text("%s #%d · %s备好 · %s%s" % [_name(item.item_id),item.uid,_batch_name(item.prepared_wave_id),{"hot":"新热","held":"保温","cooled":"已凉"}.get(item.get("temperature"),"新做的饼才会浮送")," · 正在送餐，暂不能取用" if locked else ""],"dish_uid_%d"%item.uid,MUTED,16)
+		var label=_text("%s #%d · %s备好 · %s%s" % [_name(item.item_id),item.uid,_batch_name(item.prepared_wave_id),{"hot":"新热","held":"保温","cooled":"已凉"}.get(item.get("temperature"),"已备好")," · 正在送餐，暂不能取用" if locked else ""],"dish_uid_%d"%item.uid,MUTED,16)
 		label.set_meta("item_uid",item.uid)
 		label.set_meta("prepared_wave_id",item.prepared_wave_id)
 	_text("供餐优先序（先选到的匹配菜先出餐）","menu_priority_title",ACCENT)
@@ -350,6 +350,7 @@ func _growth():
 		choices.add_child(column)
 		var title=_text("%s · %d金" % [upgrade.name,upgrade.cost],"growth_"+str(upgrade.upgrade_id),ACCENT,18)
 		var effect=_text(str(upgrade.description),"growth_effect_"+str(upgrade.upgrade_id),INK,16)
+		effect.custom_minimum_size.y=48
 		var remaining=int(state.get("cash",0))-int(upgrade.cost)
 		var balance=_text("已投资" if upgrade.owned else ("买后剩%d金"%remaining if remaining>=0 else "还差%d金"%(-remaining)),"growth_balance_"+str(upgrade.upgrade_id),MUTED,16)
 		var button=_button("upgrade_"+str(upgrade.upgrade_id),"已购买" if upgrade.owned else "投资明天",_request.bind("upgrade",{"upgrade_id":upgrade.upgrade_id}),not upgrade.owned and upgrade.available and _allowed("upgrade",["settled"]))
