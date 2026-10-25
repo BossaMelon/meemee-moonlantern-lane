@@ -20,9 +20,11 @@
 | P06 | runtime_verification（原 P03） | [PR #27](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/27) 已合入 PR #31（`8c15ef4`）；正式验收候选 `13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29` 的窄屏 touch 553/0、完整全屏 touch 1450/0 已由 root 实读接受，结合原 SHA mouse/pad、F04/history 与三 P2 定向证据接受 Q06 组合覆盖。原始证据与边界见下文；QH/实体硬件/Windows/iOS 未验。 |
 | A02 | pixel_art（原 A01） | 六件必要 sprite 已由 PR #21 交付。后续四件地面/浅渠/连续长桩资产 [PR #30](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/30) 内容 `9d2a3fa`，root 读代码、看 native/scale/layout，核旧 131 tracked 素材路径 blob、全部旧 manifest 记录与 SOURCES 不变；独立审美接受组件。native 更新 `fc08c8b` 资产无差、当前双 CI 绿后原生合 main `06252e00899c77359239fe0beb9cee5aa1688385`。原组件报告不单独代表 Q06；四资产已由 P06 正式场景消费/实际运行核验，人类趣味待验。 |
 | D01 | engineering_delivery（沿用 H05 同 owner/chat/model/tier） | [PR #34](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/34) `4cbcc2e` 的两 P2 已定向闭合并合 main `5b9d252`；[PR #36](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/36) 单行 JSON 数值兼容修复、26 项回归及当前 gate 经 root 接受后合 main `ae174278`。固定 `13e5c50` 的全新 r2 实际包 headless 三阶段通过，root 已独立核验接受；两种实际包原生入口 QA 亦已接受。 |
-| W01 | engineering_delivery | 真实 Windows 源码验证已登记、尚未实现；允许路径与依赖以任务清单为准，待 root 验收合入登记后另派实施。目标是 Windows 2022、固定官方 editor 4.7.2 与 Python UTF-8 下的冷导入、现有双 suite、默认保存/子进程/错误日志证据；当前没有 Windows 游戏包、实机或真人趣味证明。 |
+| W01 | engineering_delivery | 真实 Windows 源码验证已登记、尚未实现；允许路径与依赖以任务清单为准，待 root 验收合入登记后另派实施。目标是 Windows 2022、固定官方 editor 4.7.2 与 Python UTF-8 下的冷导入、现有双 suite、默认保存/子进程/错误日志证据；另仅补 Linux 冷导入准备和失败日志检查，保留原必需 jobs 与直接双 suite 门禁。当前没有 Windows 游戏包、实机或真人趣味证明。 |
+| P07 | ui_implementation | OFL 随包字体已登记、尚未实施；共享 provider `get_font() -> Font` 与主店铺接入由本 owner 完成，panel 留给 E03，依赖与允许路径以任务清单为准。 |
+| E03 | expedition_implementation | panel 字体消费与 PNG ResourceLoader 加载已登记、尚未实施；同一 owner 处理该文件，依赖 P07，不改地形、玩法或 pixel 美术。 |
 
-Windows 后续边界：W01 不替代完整 Windows 原生导出，后者仍须单独交付验收；中文字体与项目内 PNG 的导出加载兼容风险尚待修复，不写为已完成。后续 Windows job 保留既有 Linux required gate，只能上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；真实 Windows 不兼容必须保留失败，不削检查或跳 case，具体修复另由 root 授权。本次仅登记，不改 CI 或实现，Mac r2 与旧档不动，真人玩一晚的 QH 优先级不变。
+Windows 后续边界：W01 不替代完整 Windows 原生导出，后者仍须单独交付验收；中文字体与项目内 PNG 的导出加载兼容风险尚待修复，不写为已完成。后续 Windows 新 job 同样冷导入，只能上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；新增授权不含 `tools/gate.py` 或 `tools/test_gate.py`；真实 Windows 不兼容必须保留失败，不削检查或跳 case，具体修复另由 root 授权。本次三任务仅登记，不改 CI 或实现；D02/P08 未登记，原生导出验证 driver 接口须后续依据真实 CLI 能力冻结，不用 release `--script` 求假绿。Mac r2 与旧档不动，真人玩一晚的 QH 优先级不变。
 
 110 取舍机制已实际闭合：root 复算 20 个热锅双买分支，现金账差额均为 0；标准档双买余 16 后可合法购买 3 份缩小篮，高价档余 52 后可购买正式 10 份篮并继续次晚。40 个正常模拟覆盖两价、两路、五种子和探索/不探索，均未依赖应急恢复。该证据来自真实命令与正式 `512bd72` 报告，替代旧 60/100 数值的缺口声明；不据此宣称全局平衡、人类趣味或 Steam 品质合格。
 
