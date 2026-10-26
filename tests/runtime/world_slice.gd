@@ -562,7 +562,9 @@ func activate_control(control: Variant, id: String, exiting: bool = false):
 			var key = str(focus.get_instance_id()) if focus != null else "none"
 			if not check(not visited.has(key), "pad focus cycle cannot reach " + id): return
 			visited[key] = true
-			var direction = JOY_BUTTON_DPAD_UP if focus != null and control.get_global_rect().get_center().y < focus.get_global_rect().get_center().y else JOY_BUTTON_DPAD_DOWN
+			# Books explicitly wire a circular down chain; scrolling moves rectangles.
+			# Only the ordinary pause surface needs geometric up/down selection.
+			var direction = JOY_BUTTON_DPAD_UP if ui.world_controller.book_target.is_empty() and focus != null and control.get_global_rect().get_center().y < focus.get_global_rect().get_center().y else JOY_BUTTON_DPAD_DOWN
 			await dispatch_event(pad_button(direction,true)); await dispatch_event(pad_button(direction,false))
 		if not check(get_window().gui_get_focus_owner() == control, "pad control not focused"): return
 		await dispatch_event(pad_button(JOY_BUTTON_A,true)); send_event(pad_button(JOY_BUTTON_A,false))
