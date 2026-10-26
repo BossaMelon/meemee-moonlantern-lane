@@ -268,6 +268,7 @@
       "outcomes": ["Allowed book transactions change only their authorized state; no cooking/patience/service clock advances. Invalid/blocked actions preserve state and cannot use stopped time to cook or serve."]
     },
     "ingredient_bundle_cases": {
+      "evidence_scope": "Controlled boundary tests with valid cost provenance, unique owned UIDs and unlocked recipes; not normal supply/economy or real exploration evidence. Do not alter supply or require six rare ingredients within two campaign days. Prove actual exploration acquisition and normal economic routes separately.",
       "plan_quantity": 6,
       "carry_capacity": 12,
       "station_capacity": 24,
@@ -301,6 +302,42 @@
         {"id": "nonpreferred_manual", "preferred": false, "channel": "manual", "budget": 23, "expected_tip": 0, "expected_paid_total": 12}
       ],
       "rules": "Use real standard floating_pie pricing. Low budgets11..14 are explicit boundary snapshots, not changes to normal23..30 generation. Call real serve/auto schedule then advance; expected values are not reports. Save before commit and after tip, reload and replay same/new request IDs; amount remains frozen and only one sale/tip can commit per order/wave."
+    },
+    "campaign_expedition_cases": {
+      "outer_save_version": 4,
+      "world_model_version": 1,
+      "action_version": 3,
+      "action_ruleset": "world-slice-v1",
+      "internal_model_version": 2,
+      "internal_ruleset": "rain-night-v1",
+      "day_contexts": [
+        {"day": 1, "encounter_day": 1},
+        {"day": 2, "encounter_day": 2},
+        {"day": 3, "encounter_day": 2},
+        {"day": 6, "encounter_day": 2}
+      ],
+      "required_entry_return_save_days": [3, 6],
+      "save_boundaries": ["combat_in_progress", "drop_available_before_pickup", "drop_collected", "returned_to_saved_lane_pose"],
+      "invalid_contexts": [
+        {"id": "rain_v2_mislabeled_world", "patch": {"version": 2, "ruleset": "rain-night-v1"}},
+        {"id": "world_state_marked_v2", "patch": {"version": 2}},
+        {"id": "rain_ruleset_on_v3", "patch": {"ruleset": "rain-night-v1"}},
+        {"id": "unknown_version", "patch": {"version": 99}},
+        {"id": "wrong_ruleset", "patch": {"ruleset": "prototype-v1"}},
+        {"id": "unknown_ruleset", "patch": {"ruleset": "unknown-world"}},
+        {"id": "missing_day", "remove": ["day"]},
+        {"id": "missing_encounter_day", "remove": ["encounter_day"]},
+        {"id": "zero_day", "patch": {"day": 0}},
+        {"id": "negative_day", "patch": {"day": -1}},
+        {"id": "boolean_day", "patch": {"day": true}},
+        {"id": "fractional_day", "patch": {"day": 3.5}},
+        {"id": "string_day", "patch": {"day": "3"}},
+        {"id": "boolean_encounter_day", "patch": {"encounter_day": true}},
+        {"id": "weak_encounter_fallback", "patch": {"day": 3, "encounter_day": 1}},
+        {"id": "unbounded_encounter_day", "patch": {"day": 3, "encounter_day": 3}},
+        {"id": "world_action_day_mismatch", "world_day": 6, "patch": {"day": 3, "encounter_day": 2}}
+      ],
+      "rules": "Use actual next_day-produced valid day3/day6 preparation states or their valid saved checkpoints, not arbitrary date edits. Exercise production garden-gate/World adapter and real combat input; outer save4/world model1 stay fixed. Public snapshots retain version3/world ruleset/actual day; only internal projection uses Rain v2 encounter_day. Reject invalid contexts atomically against a valid day3 snapshot unless world_day overrides it. Legacy Rain day3/day6 and all existing legacy negative cases still reject under their unchanged schemas; no new creatures or weaker first-day fallback."
     }
   },
   "scenarios": [
@@ -377,6 +414,22 @@
         "Relay reduces repeated dish hauling and creates no food/cash; blocked menu leaves output at station. Fan changes actual combat; no forced double-purchase prohibition."
       ],
       "seed_policy": "all_seeds"
+    },
+    {
+      "id": "campaign-expedition-days",
+      "seed": 1,
+      "route": "campaign_expedition",
+      "acceptance_ids": ["WS05", "WS06"],
+      "steps": [
+        "Execute configuration.campaign_expedition_cases. At actual day3 and day6, reach the lane garden-gate with legal phase/empty hands/no in-flight jobs and unused attempt, then enter via world_interact. Verify action version3/world ruleset, day equals world date and encounter_day=2; public panel data retains actual day.",
+        "Use real movement/cast/dodge/skill and the existing second-day encounter configuration; obtain real drops and return to the saved lane position/facing. Compare different campaign days sharing encounter_day=2: drop identities remain distinct, with each pickup entering bag/ledger once and later-day legitimate drops not suppressed.",
+        "At each configured combat/pickup/return save boundary compare continuous versus save/restart with identical subsequent inputs. Replay same/new request IDs and return/pickup paths; preserve date context, RNG, enemies, cooldowns, drop collection and return pose without duplicate reward.",
+        "Apply each invalid_contexts mutation to independent test copies and exercise actual adapter/Core validation and load rejection. Also retain existing Rain/prototype validation suites and Rain invalid day3/day6 rejection; no state/UID/economy changes on rejection."
+      ],
+      "outcomes": [
+        "Day3/day6 exploration entry, real combat return and save recovery succeed with explicit World v3 context; internal reuse of Rain v2 does not change public campaign day or allow forged context.",
+        "One real drop pays once across reload/replay, distinct campaign days cannot collide through shared encounter_day. Batch6 rare-material boundary snapshots are never used as proof of these acquisitions or normal-route economics."
+      ]
     },
     {
       "id": "save-and-old-player-guards",
