@@ -30,6 +30,13 @@ func _normalize(value: Variant) -> Variant:
 			p.y = int(point.y) if is_finite(point.y) and floor(point.y) == point.y else float(point.y)
 	return result
 
+func _record_economy(s: Dictionary, kind: String, args: Dictionary, events: Array, old_cash: int, old_items: Array):
+	var before = s.ledger.size()
+	super._record_economy(s,kind,args,events,old_cash,old_items)
+	# A successful World day closes once even when there is no cash left for its fee.
+	if kind == "settle" and s.ledger.size() == before:
+		s.ledger.append({"index":before,"kind":kind,"day":s.day,"cash_delta":0,"moves":{},"created":[],"removed":[],"args":args.duplicate(true),"events":events.duplicate(true)})
+
 func _init(seed_value: int = 1):
 	super(seed_value)
 	_s.version = 4; _s.profile_id = WORLD_PROFILE; _s.phase = "preparation"
@@ -238,6 +245,7 @@ func _interact(s: Dictionary, args: Dictionary) -> Dictionary:
 			events.append_array(opened.events)
 		"next_day":
 			if s.phase != "settled": return _fail("wrong_phase","先完成日结")
+			_carry_heat(s)
 			s.commits["next:%d" % s.day] = true; s.day += 1; s.phase = "preparation"; _begin_night(s)
 		"enter":
 			if target.id == "garden-gate":
@@ -360,14 +368,18 @@ func _customer_step(s: Dictionary, events: Array):
 					if c.state == "arriving": c.state = "waiting"; order.status = "waiting"; events.append({"type":"customer_arrived","order_id":order.id})
 					else: c.state = "gone"
 
-func _end_wave(s: Dictionary, events: Array):
+func _carry_heat(s: Dictionary):
 	var keep = []
 	if _count(s,"stirring_cauldron","installed") > 0:
 		for item in _instances(s,"moon_stew","shelf"):
 			if item.temperature in ["hot","held"] and keep.size() < 3: keep.append(item.uid)
 	for item in s.items:
 		if item.item_id == "moon_stew" and item.location != "cooking": item.temperature = "held" if item.uid in keep else "cooled"
-	s.service.held_uids = keep; s.service.remainder_ms = 0
+	s.service.held_uids = keep
+
+func _end_wave(s: Dictionary, events: Array):
+	_carry_heat(s)
+	s.service.remainder_ms = 0
 	s.phase = "intermission" if s.service.wave_index < 3 else "closing"; s.service.status = "intermission" if s.service.wave_index < 3 else "complete"
 	events.append({"type":"wave_completed","wave_id":s.service.wave_id,"next_wave_id":s.service.next_wave_id})
 
