@@ -68,7 +68,7 @@ func basket(g, route: String):
 	for purchase in recipe.buys: act(g,"buy",{"item_id":purchase.item_id,"quantity":int(purchase.quantity)})
 
 func normal_night(seed_value: int, route: String, explore: bool = false, tier: String = "standard"):
-	var g = Session.new(seed_value)
+	var g = Session.new(seed_value,"rain-night-v1")
 	if explore:
 		act(g,"start_expedition"); drive(g,"shelf" if route == "quick" else "canal")
 	if route == "quick": act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
@@ -120,7 +120,7 @@ func test_combat_case():
 func test_growth_case():
 	test_meal_transfer()
 	if battle_origin.is_empty():
-		var acquired = Session.new(1); act(acquired,"start_expedition"); drive(acquired,"shelf",true); battle_origin = acquired.snapshot()
+		var acquired = Session.new(1,"rain-night-v1"); act(acquired,"start_expedition"); drive(acquired,"shelf",true); battle_origin = acquired.snapshot()
 	var origin = fixture(battle_origin,"real-combat-rare-origin")
 	test_rare_four_uses(origin)
 	var heart = fixture(battle_origin,"real-moonheart-sale"); var cash = heart.view().cash
