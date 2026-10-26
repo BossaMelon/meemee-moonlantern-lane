@@ -131,6 +131,7 @@ func inspect_main():
 		return
 	world_ui = find_world(ui)
 	if not check(is_instance_valid(world_ui) and world_ui.is_visible_in_tree(), "actual P11 world projection missing"): return
+	report.geometry = observe_geometry()
 	var size = request.get("window_size", [])
 	if request.get("headless_logical_size") != null:
 		if not check(observe_geometry().viewport == [0.0,0.0,request.headless_logical_size[0],request.headless_logical_size[1]] and observe_geometry().window == report.headless_preparation.before.window,"declared headless logical viewport unavailable or physical size changed"): return
@@ -177,7 +178,7 @@ func send_event(event: InputEvent):
 	if event is InputEventMouseButton: row.merge({"button":event.button_index,"pressed":event.pressed})
 	if row.position != null: row.position = [row.position.x, row.position.y]
 	report.inputs.append(row)
-	input_trace.store_line(JSON.stringify(row)); input_trace.flush()
+	input_trace.store_line(JSON.stringify(row,"",true,true)); input_trace.flush()
 	write_report()
 	Input.parse_input_event(event)
 
