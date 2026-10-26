@@ -568,6 +568,14 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
                             evidence.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
                             if suite not in result['case_reports']:
                                 evidence['text'] = raw.decode('utf-8', errors='replace')
+                        progress_path = case_report.with_name('world-progress.json')
+                        progress = {'present': progress_path.is_file()}
+                        if progress['present']:
+                            require(not progress_path.is_symlink(), 'runner progress diagnostic must not be linked')
+                            raw = progress_path.read_bytes()
+                            progress.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(),
+                                            text=raw.decode('utf-8', errors='replace'))
+                        evidence['world_progress'] = progress
                         result['runner_report_evidence'][suite] = evidence
         result["status"] = "passed"
     except (GateError, OSError, UnicodeError) as exc:
@@ -606,6 +614,10 @@ def main() -> int:
                 if 'text' in evidence:
                     evidence['text_truncated'] = len(evidence['text']) > 8000
                     evidence['text'] = evidence['text'][:8000]
+                progress = evidence.get('world_progress', {})
+                if 'text' in progress:
+                    evidence['world_progress'] = dict(progress, text=progress['text'][:8000],
+                                                     text_truncated=len(progress['text']) > 8000)
                 diagnostic['runner_report_evidence'][suite] = evidence
             print(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         return 0 if result["status"] == "passed" else 1

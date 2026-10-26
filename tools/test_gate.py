@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -129,7 +130,7 @@ def write_context(root: Path, runtime=False) -> None:
 
 def fake_engine(root: Path, *, version="4.7.2.stable.test", exit_code=0, report=None,
                 reports=None, exit_codes=None, stderr="", raw_reports=None, hang_suite=None,
-                errors_by_suite=None) -> str:
+                errors_by_suite=None, progress_texts=None, progress_name="world-progress.json") -> str:
     """Executable protocol fake exclusively for gate tests, never game evidence."""
     engine = root / "fake-engine"
     source = "#!/usr/bin/env python3\nimport json,sys,time\nfrom pathlib import Path\n"
@@ -139,6 +140,8 @@ def fake_engine(root: Path, *, version="4.7.2.stable.test", exit_code=0, report=
     source += "if report is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps(report))\n"
     source += f"raw = ({raw_reports!r} or {{}}).get(suite)\n"
     source += "if raw is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).write_text(raw)\n"
+    source += f"progress = ({progress_texts!r} or {{}}).get(suite)\n"
+    source += f"if progress is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).with_name({progress_name!r}).write_text(progress, encoding='utf-8')\n"
     source += f"if suite == {hang_suite!r}: time.sleep(2)\n"
     source += f"error = ({errors_by_suite!r} or {{}}).get(suite, '')\nif error: print(error, file=sys.stderr)\n"
     source += f"print({stderr!r}, file=sys.stderr) if {bool(stderr)!r} else None\n"
@@ -614,6 +617,40 @@ class TripleSuiteCommandTests(unittest.TestCase):
 
 class WorldGateTests(unittest.TestCase):
     run_fake_prototype = CommandTests.run_fake_prototype
+
+    def test_progress_diagnostic_survives_failed_and_unfinished_runners(self):
+        reports = {'prototype': case_report(), 'quality-slice': quality_report(), 'world-slice': world_report()}
+        raw = '{"case":"WS05", "phase":"经营中断",'
+        failures = [{'exit_codes': {'world-slice': 7}},
+                    {'raw_reports': {'world-slice': '{"cases":'}},
+                    {'reports': {k: v for k, v in reports.items() if k != 'world-slice'}},
+                    {'hang_suite': 'world-slice', '_timeout': 1}]
+        for extra in failures:
+            with self.subTest(extra=extra):
+                result = self.run_fake_prototype(**({'reports': reports, 'progress_texts': {'world-slice': raw}} | extra))
+                self.assertEqual(result['status'], 'failed')
+                self.assertEqual(set(result['case_reports']), {'prototype', 'quality-slice'})
+                progress = result['runner_report_evidence']['world-slice']['world_progress']
+                self.assertEqual(progress, {'present': True, 'bytes': len(raw.encode()),
+                                           'sha256': hashlib.sha256(raw.encode()).hexdigest(), 'text': raw})
+                for command in result['commands'][1:]:
+                    self.assertFalse(Path(command['command'][-1]).parent.exists())
+
+    def test_progress_is_optional_raw_diagnostic_and_cannot_supply_cases(self):
+        absent = self.run_fake_prototype(report=case_report())
+        present = self.run_fake_prototype(report=case_report(), progress_texts={'world-slice': 'not JSON'})
+        for result in (absent, present):
+            self.assertEqual(result['status'], 'passed')
+            self.assertEqual(result['case_reports']['world-slice'], world_report())
+        self.assertEqual(absent['checks_executed'], present['checks_executed'])
+        self.assertEqual(absent['runner_report_evidence']['world-slice']['world_progress'], {'present': False})
+        self.assertEqual(present['runner_report_evidence']['world-slice']['world_progress']['text'], 'not JSON')
+
+    def test_only_fixed_progress_filename_is_collected(self):
+        result = self.run_fake_prototype(report=case_report(), progress_texts={'world-slice': 'unrelated'},
+                                         progress_name='unknown-progress.json')
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual(result['runner_report_evidence']['world-slice']['world_progress'], {'present': False})
 
     def test_published_world_roles_and_profile_cannot_drift(self):
         self.assertEqual(len(gate.validate_contract(world_contract(), 'world-slice')), 8)

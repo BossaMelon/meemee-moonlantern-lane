@@ -109,6 +109,8 @@ gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存
 命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；`runner_report_evidence` 另存每个实际报告是否存在、长度/原字节 SHA256 与文本诊断，包含 malformed、非零、完整写出后超时的失败，不把这些原件当自动 pass；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。原 gate JSON 在失败时也由现有 pinned artifact 上传，控制台只输出有界失败诊断，防止旧 suite 的大 trace 截断新错误；不跳过实际 gate 或改变失败状态。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
 
+每套临时报告目录内固定的 `world-progress.json` 可作为可选原始诊断，在 `runner_report_evidence[suite].world_progress` 保留是否存在、字节数、SHA256 和文本，包括超时、非零退出或坏 case 报告。缺失不影响验收，不解析为 case 或计入通过；只读取这个已知文件，随后临时目录正常清理，不扫描源码 `output/**`。Windows 的源码完整性守卫仍拒绝未知生成文件。
+
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，
 例如 `Task-IDs: P01,H01`。CI 直接读取 GitHub 事件 JSON 的 base/head/body，
 不执行正文。diff 用合并基点到 PR head 计算；重命名源/目标、删除路径均要被认领。
