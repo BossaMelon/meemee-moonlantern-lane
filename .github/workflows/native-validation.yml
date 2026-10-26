@@ -1,0 +1,111 @@
+name: Native paired release validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-native:
+    name: windows-native-release
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: "false"
+    steps:
+      - name: Check out explicit candidate head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.6"
+          architecture: x64
+      - name: Exercise builder input guards
+        shell: pwsh
+        run: |
+          python -m unittest tools/test_build_native_demo.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Fetch authorized pinned engine inputs into this job only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $owned=Join-Path $env:RUNNER_TEMP 'd02-inputs'
+          if (Test-Path -LiteralPath $owned) { throw 'Inputs must be fresh.' }
+          New-Item -ItemType Directory -Path $owned | Out-Null
+          $base='https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/'
+          $zip=Join-Path $owned 'Godot.zip'
+          $tpz=Join-Path $owned 'Godot_v4.7.2-stable_export_templates.tpz'
+          Invoke-WebRequest -Uri ($base+'Godot_v4.7.2-stable_win64.exe.zip') -OutFile $zip -TimeoutSec 180
+          if ((Get-Item $zip).Length -ne 86013866 -or (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953') { throw 'Editor ZIP pin mismatch.' }
+          Invoke-WebRequest -Uri ($base+'Godot_v4.7.2-stable_export_templates.tpz') -OutFile $tpz -TimeoutSec 420
+          if ((Get-Item $tpz).Length -ne 1281349702 -or (Get-FileHash $tpz -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011') { throw 'TPZ pin mismatch.' }
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $owned 'engine')
+          # Godot's documented self-contained marker keeps editor settings job local.
+          New-Item -ItemType File -Path (Join-Path $owned 'engine/_sc_') | Out-Null
+      - name: Build committed paired stock releases
+        shell: pwsh
+        run: |
+          $candidate=(& git rev-parse HEAD).Trim()
+          $engine=Join-Path $env:RUNNER_TEMP 'd02-inputs/engine/Godot_v4.7.2-stable_win64_console.exe'
+          $tpz=Join-Path $env:RUNNER_TEMP 'd02-inputs/Godot_v4.7.2-stable_export_templates.tpz'
+          $output=Join-Path $env:RUNNER_TEMP 'd02-packages'
+          # This disposable runner has no former delivery. Guard actual expected
+          # absence in the legacy namespace and the job-local old-package slot.
+          $oldSave=Join-Path $env:APPDATA 'MeeMeeMoonlanternLane/rain-night-v1/profiles/rain-night-v1/moonlantern.json'
+          $oldPackage=Join-Path $env:RUNNER_TEMP 'd02-old-package/manifest.json'
+          python tools/build_native_demo.py --repo "$pwd" --candidate $candidate --builder-revision $candidate --editor $engine --templates $tpz --target windows --output $output --old-save $oldSave --old-save ($oldSave+'.bak') --old-package $oldPackage
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run actual Windows release headlessly through frozen H06
+        shell: pwsh
+        run: |
+          python tests/native/run_native.py native --manifest "$env:RUNNER_TEMP/d02-packages/manifest.json" --profile release_headless --output "$env:RUNNER_TEMP/d02-native-evidence"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve build failure metadata without package contents
+        if: always()
+        shell: pwsh
+        run: |
+          $evidence=Join-Path $env:RUNNER_TEMP 'd02-native-evidence'
+          $built=Join-Path $env:RUNNER_TEMP 'd02-packages/build-metadata.json'
+          if (-not (Test-Path $evidence)) { New-Item -ItemType Directory -Path $evidence | Out-Null }
+          if ((Test-Path $built) -and -not (Test-Path (Join-Path $evidence 'build-metadata.json'))) { Copy-Item -LiteralPath $built -Destination (Join-Path $evidence 'build-metadata.json') }
+      - name: Upload only the eighteen exact H06 report names
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-native-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/d02-native-evidence/native-result.json
+            ${{ runner.temp }}/d02-native-evidence/build-metadata.json
+            ${{ runner.temp }}/d02-native-evidence/fixture-report.json
+            ${{ runner.temp }}/d02-native-evidence/capability-version.log
+            ${{ runner.temp }}/d02-native-evidence/capability-help.log
+            ${{ runner.temp }}/d02-native-evidence/player-process.json
+            ${{ runner.temp }}/d02-native-evidence/player-process.log
+            ${{ runner.temp }}/d02-native-evidence/player-engine.log
+            ${{ runner.temp }}/d02-native-evidence/purchase_save-observation.json
+            ${{ runner.temp }}/d02-native-evidence/purchase_save-inputs.jsonl
+            ${{ runner.temp }}/d02-native-evidence/purchase_save-process.json
+            ${{ runner.temp }}/d02-native-evidence/purchase_save-process.log
+            ${{ runner.temp }}/d02-native-evidence/purchase_save-engine.log
+            ${{ runner.temp }}/d02-native-evidence/restore_exit-observation.json
+            ${{ runner.temp }}/d02-native-evidence/restore_exit-inputs.jsonl
+            ${{ runner.temp }}/d02-native-evidence/restore_exit-process.json
+            ${{ runner.temp }}/d02-native-evidence/restore_exit-process.log
+            ${{ runner.temp }}/d02-native-evidence/restore_exit-engine.log

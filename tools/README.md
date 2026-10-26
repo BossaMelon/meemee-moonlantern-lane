@@ -270,5 +270,60 @@ ZIP、EXE、PCK、源码克隆和测试主备档都不在上传清单。既有 g
 不是上传存档文件。Windows 失败时同样上传这些诊断；确有 Windows 不兼容先报告，具体越界修复由 root 另行授权。
 
 这是 Windows **source editor** 及文件系统/核心协议证据，不证明导出的游戏 EXE、原生窗口、中文排版、
-实体手柄/触屏或人类趣味。完整 Windows 原生导出仍是后续单独验收；不把标准 release 的 `--script`
+实体手柄/触屏或人类趣味。Windows 原生 release 另由下述 D02/H06 单独验证；不把标准 release 的 `--script`
 或 `--main-pack` 当作可用的诊断入口，不上传游戏构建或发布 Steam。
+
+## D02：离线标准 release 配对包
+
+`build_native_demo.py` 不联网或安装模板。传入本地已获授权的官方标准 TPZ、完整产品 SHA、
+完整 builder SHA、本地 editor 与全新输出目录；先提交 builder 和其 `.gd` / Windows Job 依赖。
+当前只在真实目标主机构建 `macos`（universal）或 `windows`（x86_64），不猜跨 OS userdata 路径。
+模板固定为 4.7.2 standard TPZ，1,281,349,702 bytes / SHA256
+`f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011`。
+
+```sh
+python3 tools/build_native_demo.py --repo /ABS/checkout \
+  --candidate FULL_PRODUCT_SHA --builder-revision FULL_COMMITTED_BUILDER_SHA \
+  --editor /ABS/self-contained-editor --templates /ABS/authorized-templates.tpz \
+  --target macos --output /ABS/FRESH_OUTPUT \
+  --old-save /ABS/actual-legacy-save.json --old-save /ABS/actual-legacy-save.json.bak \
+  --old-package /ABS/existing-delivery/manifest.json
+python3 tests/native/run_native.py native --manifest /ABS/FRESH_OUTPUT/manifest.json \
+  --profile release_headless --output /ABS/FRESH_EVIDENCE
+```
+
+`--old-save` / `--old-package` 可重复，绑定真实文件或明确的预期缺席路径，绝不写入/删除这些路径。
+本机应包含实际旧 r2 与旧档；一次性 CI 主机报告其实际缺席，不能冒充已有交付保护。
+默认生成 32 hex build ID；`--build-id` 仅用于有意的可复现比较。运行后 namespace 已消耗，
+失败也不得删除或复用，改用新 build ID 和输出。构建失败保留本次日志/目录。
+
+Git archive 逐 blob/模式核对，冷导入仅在私有 staging；文本脚本 mode 0、文本 scene policy false。
+编辑器启动会创建 `objectdb_snapshots`，因此 staging/audit 使用独立构建 namespace。
+公共 `load_resource_pack` / `FileAccess` / `ResourceLoader` 审计实际导出 seed 全量载荷、两场景、
+字体数据/OFL/NOTICE 与导入目标；无场景实例化。公共 `ProjectSettings.save_custom(.binary)`
+序列化最终 player/verification 配置，`PCKPacker` 逐字节复制其余载荷；不私造 PCK 或 Variant。
+player 不含 QA；verification 只多固定 QA `.gd`/`.uid` 和声明 autoload。
+最终由冻结 H06 对实际 PCK 全量 inventory/imports、project.binary 每键和原 Git source 核对，
+不豁免整个 `.godot` 或 `project.binary`。
+
+Windows 为 EXE 同名 PCK；Mac 为正常 `.app/Contents/MacOS` 与 `Contents/Resources` PCK。
+官方 release 可执行成员原样复制，两个角色和 TPZ leaf 的最终长度/哈希/字节必须相等，无签名或变换。
+包外附带 Godot MIT 和第三方版权/许可数据；产品来源、素材清单、字体许可同时包含在 PCK。
+完整 manifest、source staging、seed、请求、许可证和导出日志均本地保留。
+
+`windows_process.ps1` 复用原 W01 C# Job 边界；W01 原案例和错误策略不变。
+H06 适配器在暂停创建/加入 Job 后启动、kill-on-close、等待 ActiveProcesses=0，并提供固定
+`h06-owned-process-v1` 结果；超时只处理该 Job。POSIX 复用既有有界 session/group 清理。
+stdout/stderr 及引擎日志的 exit-zero ERROR 仍失败，不根据进程名处理未知 Godot。
+
+`native-validation.yml` 在本仓库 Windows 2022 实际构建和运行 standard release；输入下载固定 pin，
+editor self-contained，精确 PR head 与 builder revision 绑定，不借其它主机/项目。
+上传列表逐项等于 H06 的 18 个精确报告文件名，无通配符或整个目录；EXE/PCK/TPZ、完整 manifest、
+源码、请求和真实存档永不上传。早期构建失败只补存本次 build-metadata，原生失败保留原报告。
+无 GUI 窗口、设备或人类趣味的结论必须由各自实际证据补足；当前进展与失败只记项目状态。
+
+```sh
+python3 -m unittest tools/test_build_native_demo.py
+```
+
+上述 5 项是有限输入信任边界 fixture，不能当作 release 运行或 H06 native pass。
