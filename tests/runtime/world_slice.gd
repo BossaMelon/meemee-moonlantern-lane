@@ -634,16 +634,22 @@ func configure_menu() -> bool:
 	for id in view().service.menu_priority.duplicate():
 		if id in desired: continue
 		var items = view().service.menu_priority.duplicate(); items.erase(id)
-		if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+		if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":menu_tiers(items)}): return false
 	for id in desired:
 		if id not in view().service.menu_priority:
 			var items = view().service.menu_priority.duplicate(); items.append(id)
-			if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+			if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":menu_tiers(items)}): return false
 		if view().tiers.get(id,"standard") != request.tier:
-			var tiers = view().tiers.duplicate(); tiers[id] = request.tier
+			var tiers = menu_tiers(view().service.menu_priority); tiers[id] = request.tier
 			if not await book_action("menu_price_"+id+"_"+request.tier,"menu",{"item_ids":view().service.menu_priority.duplicate(),"tiers":tiers}): return false
 	if not check(same(view().service.menu_priority,desired),"actual menu differs from route"): return false
 	return await close_book()
+
+func menu_tiers(items: Array) -> Dictionary:
+	# UI emits only selected items, including each implicit standard price.
+	var tiers: Dictionary = {}
+	for id in items: tiers[id] = view().tiers.get(id,"standard")
+	return tiers
 
 func travel(region: String) -> bool:
 	if view().world.region_id == region: return true
