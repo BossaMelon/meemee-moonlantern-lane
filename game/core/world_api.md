@@ -27,6 +27,8 @@ game.command("world_interact", {
 
 存档使用独立 `moonlantern-world-slice-v1` 用户目录及 `user://profiles/world-slice-v1/moonlantern.json`。禁止访问旧默认路径；明确指定的其他规则文件也不迁移或覆盖。validator 核对世界几何、归属、任务、订单、报价、日结、现金与 UID 来源；损坏主档可读同规则备份，保留原文件。位置按引擎 Vector2 精度恢复，精确状态比较只允许清除保持输入。
 
-E02 仍用 `ruleset=rain-night-v1` / model v2 / `rain-garden-two-routes` revision 1。出发时保存巷道返回位姿；世界钟在探索期间冻结。当前依赖的 E02 仅接受 day1/day2；第 3 天之后探索返回明确创建失败且不扣次数或餐前效果。此边界不改变本次冻结的一晚与次晨验收，扩展需 E02 owner 处理。
+World 显式使用 `res://game/expedition/world_rain_model.gd`：公开动作快照 version3 / ruleset `world-slice-v1`，day 为真实 campaign 日，encounter_day=min(day,2)。create 的 options 恰为 ruleset、map_id、map_revision、meal_effect 四项；run_id 为 `n{day}-expedition`。适配器内部投影到不变的 Rain v2 与既有第二日配置，未改变旧 rain/prototype 的日期契约。Core 仅在创建和完整校验成功后登记当日次数并转移餐效。出发保存巷道返回位姿，探索期间冻结世界钟；拾取继续使用 `run_id|drop_id` 去重，drop_id 保留适配器原值，跨 campaign 日可合法再采同一资源。 按新契约，含原 Rain v2 动作快照的旧 world 临时档会明确拒绝载入；不静默迁移或回退，也不修改其原文件。无探索快照的先前 world 档不受此身份边界影响。
 
 自动入口：`tests/run.gd -- --suite world-slice --report ABS_REPORT`，支持 `--case WS01` 至 `WS06`。三材料压力夹具与正常经营分别记录：彗星批量 3/6 使用明示的受控历史库存边界，不能作为真实获取六份精英素材的证据。正常五 seed×两路线×两价格档及实际 E02 采集均不注入库存或现金。WS07 的镜头/真实输入/渲染和 WSH 的人类反馈由对应 owner 验收。
+
+`tests/core/run_world_adapter.gd -- --report ABS_REPORT` 定向覆盖新增 WS05 探索补充与完整 WS06；它不冒充完整 WS05 的20组经济报告。实际 next_day 至第3/6日，保存动作/领取前后/返程，与相同输入连续分支逐状态比较，且验证冻结17种非法上下文及创建失败餐效/次数/RNG回滚。
