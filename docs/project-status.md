@@ -8,7 +8,7 @@
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
-| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | [PR #52](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/52) 当前候选 `16b9232b37b78ac717e1b46fae2c8c1b6e280618`，root 已收敛接口，作者已同步当前 main、最终 CI 进行中；尚未验收合入。 |
+| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | [PR #52](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/52) 当前候选 `16b9232b37b78ac717e1b46fae2c8c1b6e280618`，root 已收敛接口，作者已同步当前 main；暂停白名单/三原料 batch6 两趟完整束另由 H02 收尾，最终 head/门禁待补，尚未验收合入。 |
 | P02 有限运动/拿放 probe | 月灯巷｜像素界面与交互；9807 工作树 `codex/p02-walk-world-probe`；Sol high / Standard | [PR #51](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/51) 候选 `1370a419f116b99b696cb1ecbf0ec72f59439d04`；不含经济或保存，不冒充新经营实现，仍待验收合入。 |
 | A01 行走动画 | 月灯巷｜像素魔法世界与资产；`codex/a01-meemee-walk-cycle`；Astra high / Standard | [PR #53](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/53) 固定候选 `d521d04cb9c610421f00ac8c227274f5d08261b1`；四向动画待验收合入，P11 可消费固定候选，不争写 pixel。 |
 
@@ -17,7 +17,7 @@
 | 新任务 | 依赖 | 实施与交付边界 |
 |---|---|---|
 | P10 world 核心 | H02、H03 | core_implementation / Astra xhigh：权威移动碰撞、world 状态、料理 UID/唯一成交与保存；统一 GameSession 默认 `world-slice-v1` 和 WS01–06 runner。可在 `tests/core/**` 将旧 suite 显式绑定旧 profile，断言与原 prototype/quality 回归不降。 |
-| P11 world 场景 | P10、H02 | ui_implementation / Sol high：新默认 Main/world 场景与实际输入，只消费 Core geometry/state，不复制 probe 的物理/经济权威；仅消费 A01 固定动画资源。 |
+| P11 world 场景 | P10、H02 | ui_implementation / Sol high：新默认 Main/world 场景与实际输入，只消费 Core geometry/state，不复制 probe 的物理/经济权威；仅消费 A01 固定动画资源。另仅允许旧 `game/ui/checks/startup_save.gd` 显式绑定 rain-night profile，不降低断言、不扩整个 checks 目录。 |
 | H07 world 门禁/启动 | H02、H03、P10 | engineering_delivery / Sol high：增加 world 六个 required 自动 case/suite，保留两个旧 suite；Main/launcher/profile 与独立 namespace 一致。真实文件为 `tools/gate.py`、`tools/test_gate.py`、`tools/build_local_demo.py`、`tools/test_build_local_demo.py`、`tools/README.md`、`.github/workflows/gate.yml`、`.github/workflows/windows-validation.yml`、`tools/run_windows_gate.ps1`；不新增不存在的 macos 文件名，不接入旧 D02/native RED 链，三个 required context 名不变。 |
 | V02 world 运行验收 | P10、P11、H07 | runtime_verification / Astra xhigh：限定新增 `world_slice.py`、`world_slice.gd(.uid)`、`test_world_slice.py` 与现有 runtime README；真实 InputEvent 三输入首循环、完整夜/次晨成长、全屏/窄屏和双进程恢复，具体 QA 入口由 owner 按冻结契约建议。保护旧 profile/原包，活动 human 档不作静态 hash 守卫。 |
 

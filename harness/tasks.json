@@ -479,7 +479,8 @@
         "game/ui/checks/world_play.gd",
         "game/ui/checks/world_play.gd.uid",
         "game/ui/rain_night/README.md",
-        "assets/SOURCES.md"
+        "assets/SOURCES.md",
+        "game/ui/checks/startup_save.gd"
       ],
       "depends_on": [
         "P10",
