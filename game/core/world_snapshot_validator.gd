@@ -255,11 +255,11 @@ static func validate(data: Dictionary, owner) -> String:
 		if not s.expedition_meals.has(s.expedition_attempts[day]): return "餐前效果转移记录缺失"
 	if s.expedition_meals.size() != s.expedition_attempts.size(): return "游离餐前效果记录"
 	if not s.expedition.is_empty():
-		if s.expedition.get("version") != 2 or s.expedition.get("ruleset") != "rain-night-v1" or s.expedition.get("map_id") != "rain-garden-two-routes" or s.expedition.get("map_revision") != 1: return "不支持的存档规则"
+		if s.expedition.get("version") != 3 or s.expedition.get("ruleset") != "world-slice-v1" or s.expedition.get("map_id") != "rain-garden-two-routes" or s.expedition.get("map_revision") != 1: return "不支持的存档规则"
 		var model = owner._expedition_model()
 		if model == null or model.validate(s.expedition) != "": return "探索模型存档非法"
 		if (s.expedition.status in ["active","cleared"]) != (s.phase == "expedition"): return "探索阶段不一致"
-		if s.expedition.day != s.day or s.expedition_attempts.get(str(int(s.day)),"") != s.expedition.run_id: return "探索日期或次数不一致"
+		if s.expedition.day != s.day or s.expedition.run_id != "n%d-expedition" % s.day or s.expedition_attempts.get(str(int(s.day)),"") != s.expedition.run_id: return "探索日期或次数不一致"
 		if s.phase == "expedition" and (s.expedition.weapon_id != s.progression.equipped_weapon or s.expedition.skills != s.progression.skills): return "探索与成长不一致"
 		var meal = s.expedition_meals[s.expedition.run_id]
 		if (meal == null) != (s.expedition.meal_effect == null): return "探索餐前效果转移不一致"

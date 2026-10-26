@@ -6,6 +6,10 @@ WASD/方向键、左摇杆与触摸摇杆发送 held 轴；F、手柄 A 和屏�
 
 输入与首单检查：`Godot --headless --path PROJECT --script game/ui/checks/world_play.gd -- --input-only ABS_EMPTY_DIR`；真实 Main 首单：`-- --first-income keyboard|pad|touch manual|automatic ABS_EMPTY_DIR [--save-roundtrip]`。它们使用真实 InputEvent 和 Core，不写玩家位置、UID 或伪造 Core view。可选保存恢复使用报告目录中的临时存档，证明同进程 GUI 往返；不代替默认路径、独立进程、原生窗口或实体设备验收。运行日志出现脚本/解析错误时，即使进程 exit0 或断言报告无失败，也不能计为通过。
 
+整晚驱动入口为 `-- --night keyboard|pad|touch quick|hot ABS_EMPTY_DIR`，通过实际册页按钮配置菜单、采购、三波营业、日结投资、次晨基础批量制作与 GUI 保存恢复。它不加速 Core 或注入存档；各输入是否完成以实际报告为准。检查导航只读 Core 几何规划路径，所有位移仍由真实 InputEvent 驱动。桌面合成触屏会在挂载 Controls 前开启 Godot touch emulation，不能据此声明实体触屏验收。`service.held_uids` 只表示跨波保温身份；自动接力验收应追踪真实料理 UID 的 `shelf` 位置，不能把两者混用。
+
+世界入口失焦会清空世界与动作面板输入并暂停真实 Session；回来后从暂停菜单继续。首单检查覆盖实际 Main 的失焦通知、时钟与位置冻结，以及恢复后轴为零。
+
 以下 `panels.gd` 与 `world_*` 定位协议仅适用于明确注入 `rain-night-v1` 的旧雨夜入口。
 
 随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。

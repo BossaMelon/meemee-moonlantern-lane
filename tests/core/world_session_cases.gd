@@ -10,6 +10,7 @@ var cases: Array = []
 var simulations: Array = []
 var seeds: Array = []
 var fixture_data: Dictionary = {}
+var campaign_evidence: Dictionary = {}
 
 func expect(condition: bool, message: String):
 	checks += 1
@@ -112,7 +113,7 @@ func roundtrip(g, label: String):
 	request_serial += 1; var path = output_dir+"/save-%s-%d.json" % [label,request_serial]
 	var expected = g.snapshot(); expected.world.input = {"move_x":0,"move_y":0}
 	if not expected.expedition.is_empty():
-		var model = preload("res://game/expedition/expedition_model.gd"); model.set_input(expected.expedition,{})
+		var model = preload("res://game/expedition/world_rain_model.gd"); model.set_input(expected.expedition,{})
 		expected = g._game._normalize(expected)
 	expect(g.save_to(path).ok,"real world save "+label)
 	var restored = Session.new(99); var loaded = restored.load_from(path)
@@ -316,7 +317,7 @@ func farm_rares(g = null):
 
 func test_recipe_matrix():
 	# Controlled boundary snapshot, explicitly not obtainable-route evidence:
-	# E02 currently supports days1..2 and one elite unit/run. Extend an isolated
+	# E02 supplies one elite unit/run. Extend an isolated
 	# previous-day pickup's quantity and its UID/cost ledger consistently so the
 	# frozen batch6 boundary can exercise actual save/load and public commands.
 	var origin = farm_rares()
@@ -339,7 +340,7 @@ func test_recipe_matrix():
 			pickup.quantity += 5; record.quantity += 5; row.moves.moonheart += 5
 	boundary.items.reverse() # Inventory order must not affect lowest-UID selection.
 	origin = fixture(boundary,"controlled-elite-batch-boundary")
-	traces.append({"scenario":"controlled-elite-batch-boundary","not_normal_economy":true,"reason":"frozen ingredient_bundle_cases; E02 only days1..2, one elite unit per run"})
+	traces.append({"scenario":"controlled-elite-batch-boundary","not_normal_economy":true,"reason":"frozen ingredient_bundle_cases; one elite unit per run; normal campaign acquisition is proved separately"})
 	for recipe in preload("res://game/core/catalog.gd").RECIPES:
 		for quantity in [1,3,6]:
 			var g = fixture(origin.snapshot(),"controlled-batch-"+recipe+str(quantity))
@@ -435,6 +436,7 @@ func test_nights_and_growth():
 	reject(poor,"world_interact",{"target_id":"vendor","action":"recover","payload":{}})
 	var resale = Session.new(1); walk_to(resale,"prep"); act(resale,"prep","uninstall",{"uid":1}); travel(resale,"lane"); walk_to(resale,"vendor"); act(resale,"vendor","recycle",{"item_id":"stirring_cauldron","quantity":1})
 	expect(resale.snapshot().cash == 78 and resale.view().dish_income == 0,"selling inherited cauldron has real18 opportunity cost without dish income")
+	test_campaign_progression()
 
 func test_save_and_expedition():
 	var g = manual_origin(); var original = g.snapshot(); var path = output_dir+"/corrupt-world.json"; expect(g.save_to(path).ok,"world backup created")
@@ -470,7 +472,7 @@ func test_save_and_expedition():
 		expect(not g.load_from(old_path).ok and not g.save_to(old_path).ok,"world rejects explicit old-profile test copies")
 		expect(hashes == [FileAccess.get_sha256(old_path),FileAccess.get_sha256(old_path+".bak")],"old controlled primary/backup untouched")
 	var explorer = Session.new(23); travel(explorer,"lane"); walk_to(explorer,"garden-gate"); act(explorer,"garden-gate","enter")
-	expect(explorer.snapshot().expedition.ruleset == "rain-night-v1","world reuses the actual E02 ruleset")
+	expect(explorer.snapshot().expedition.version == 3 and explorer.snapshot().expedition.ruleset == "world-slice-v1","world uses the dedicated E02 campaign adapter")
 	reject(explorer,"world_input",{"move_x":1,"move_y":0}); var world_before = explorer.snapshot().world.duplicate(true)
 	var driver = preload("res://tests/expedition/rain_driver.gd").new("shelf",false)
 	for n in range(2400):
@@ -483,6 +485,8 @@ func test_save_and_expedition():
 	expect(not explorer.snapshot().collected_drops.is_empty(),"real E02 resource acquisition creates actual pantry UID")
 	audit(explorer,"actual E return"); roundtrip(explorer,"expedition-return")
 	test_isolated_processes()
+	if campaign_evidence.is_empty(): test_campaign_progression()
+	preload("res://tests/core/world_campaign_cases.gd").new().contexts(self,campaign_evidence)
 
 func copy_scripts(source: String, target: String):
 	DirAccess.make_dir_recursive_absolute(target)
@@ -525,3 +529,17 @@ func run(folder: String, selected: String = "") -> Dictionary:
 		cases.append({"id":id,"status":"passed" if failures.is_empty() and checks > 0 else "failed","checks":checks,"failures":failures.duplicate(),"traces":traces.duplicate(true)})
 		print("%s: %s (%d checks)" % [id,cases.back().status,checks])
 	return {"schema_version":1,"suite":"world-slice","cases":cases,"simulations":simulations}
+
+func test_campaign_progression():
+	var economic_cases = simulations.size()
+	campaign_evidence = preload("res://tests/core/world_campaign_cases.gd").new().campaign(self)
+	expect(simulations.size() == economic_cases,"campaign funding evidence does not duplicate the original twenty-route matrix")
+
+func run_adapter(folder: String) -> Dictionary:
+	output_dir = folder+"/adapter-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
+	fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/world-slice-scenarios.json")); seeds = fixture_data.seeds
+	for entry in [["WS05-adapter-supplement",test_campaign_progression],["WS06",test_save_and_expedition]]:
+		checks = 0; failures = []; traces = []; entry[1].call()
+		cases.append({"id":entry[0],"status":"passed" if failures.is_empty() and checks > 0 else "failed","checks":checks,"failures":failures.duplicate(),"traces":traces.duplicate(true)})
+		print("%s: %s (%d checks)" % [entry[0],cases.back().status,checks])
+	return {"schema_version":1,"suite":"world-adapter-targeted","scope":"Changed expedition paths only; existing20-route WS05 evidence remains separately preserved, not relabeled.","cases":cases}
