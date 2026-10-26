@@ -8,7 +8,7 @@
 
 ## Mac 源码启动（main）
 
-main 已包含完整三日技术原型，可使用[源码启动器](tools/启动月灯巷.command)。在项目源码目录中运行：
+main 默认运行 `rain-night-v1` 雨夜备餐品质切片；三日技术基线保留为独立历史恢复点。可使用[源码启动器](tools/启动月灯巷.command)，在项目源码目录中运行：
 
 ```sh
 ./tools/启动月灯巷.command
@@ -24,27 +24,36 @@ GODOT="/Applications/Godot.app/Contents/MacOS/Godot" ./tools/启动月灯巷.com
 
 ## Mac 本地试玩包
 
-已交付候选 `32e704a` 的本机试玩包，自带 Godot，无需搭场景或安装引擎。在 Finder 的“前往文件夹”打开下列目录，双击 `月灯巷试玩.app` 或 `开始试玩.command`：
+本机试玩入口为雨夜备餐 r2 包，自带 Godot，无需搭场景或安装引擎。在 Finder 的“前往文件夹”打开下列目录，双击 `月灯巷质量试玩.app` 或 `开始试玩.command`：
 
 ```text
-/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-20261025-32e704a/
+/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-rain-night-20261026-13e5c50-r2/
 ```
 
 也可直接启动：
 
 ```sh
-open "/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-20261025-32e704a/月灯巷试玩.app"
+open "/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-rain-night-20261026-13e5c50-r2/月灯巷质量试玩.app"
 ```
 
-这是已交付本机的离线包，未上传到源码仓库或提供公开下载；换机器需另行交付。它是未签名的源码运行包装 `.app`，不是 Godot 原生导出或已公证的发行包。包内 `manifest.json` 记录产品 SHA、引擎及覆盖项。入口与包内资源加载的 headless 检查已通过，包本身的可见窗口验收与源码渲染证据分开记录。
+**该 r2 包固定使用 `13e5c50`，并非本轮 `8b92283` 产品集成后的重新打包。** 包内 `manifest.json` 记录产品 SHA、引擎和隔离配置。它是未签名的离线源码运行包装 `.app`，不是 Godot 原生导出或已公证发行包；未提供公开下载，换机器需另行交付。包与源码的具体运行/验收证据统一见[项目状态](docs/project-status.md)。
 
-试玩包独立存档在：
+r2 的独立玩家存档位置由实际 manifest/override 指定：
 
 ```text
+~/Library/Application Support/MoonlanternDemo/quality-13e5c50cc78a-de2764415c8e436784556f415e7a955c/player/profiles/rain-night-v1/moonlantern.json
+```
+
+同目录 `.bak` 为备份；r2、源码与验证档相互隔离，不覆盖已有主档或备份。操作见[操作与保存](#操作与保存)。
+
+旧三日 `32e704a` 包仅作[历史技术基线](#三日技术基线)恢复点，原目录与存档保留：
+
+```text
+/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-20261025-32e704a/
 ~/Library/Application Support/MoonlanternDemo/demo-20261025-32e704a/player/moonlantern.json
 ```
 
-同目录 `.bak` 为备份；与源码/验证档隔离，验证时不覆盖玩家主档或备份。操作见[操作与保存](#操作与保存)，完整证据见[项目状态](docs/project-status.md)。
+该旧包使用原 `user://moonlantern.json`，同目录 `.bak` 备份保留；它与当前源码及 r2 的 profile 路径分别独立。
 
 ## 操作与保存
 
@@ -61,15 +70,15 @@ open "/Users/yuehao.wang/code/meemee-moonlantern-lane/output/demo-20261025-32e70
 | 已解锁技能 | L / E | X | 风咒按钮 |
 | 暂停/继续 | Escape 或画面按钮 | Start；暂停后可焦点操作工具按钮 | 画面按钮 |
 
-默认存档为 Godot 用户数据目录下的 `user://moonlantern.json`，备份为同名 `.bak`。启动时自动恢复有效主档，按 SaveStore 规则回退有效备份；主档与备份都不存在才新开。恢复失败或版本被拒绝时显示错误、暂停并保护原文件，重新恢复成功前不允许保存；此时保存退出或关闭窗口也不覆盖旧档。
+源码默认存档为 `user://profiles/rain-night-v1/moonlantern.json`，备份为同名 `.bak`。源码的 `user://` 由 `project.godot` 指向自定义用户目录 `MeeMeeMoonlanternLane/rain-night-v1`，与上面的 r2 和旧三日包位置不同。启动时自动恢复有效主档，按 SaveStore 规则回退有效备份；主档与备份都不存在才新开。恢复失败或版本被拒绝时显示错误、暂停并保护原文件，重新恢复成功前不允许保存；此时保存退出或关闭窗口也不覆盖旧档。
 
-正常使用“保存退出”或关闭窗口会先保存，保存失败则保留窗口并给出反馈。动作层的“返回饭店”会结束当前探险，与“保存退出”不同。完整三日、恢复与各输入的实际验收结果仍以项目状态为准；操作映射不代表 Windows/iOS 或实体手柄已经验证。
+正常使用“保存退出”或关闭窗口会先保存，保存失败则保留窗口并给出反馈。动作层的“返回饭店”会结束当前探险，与“保存退出”不同。当前品质切片与旧三日基线的恢复、各输入实际验收分别见项目状态；操作映射不代表 Windows/iOS 或实体手柄已经验证。
 
 ## 三日技术基线
 
 三日循环包含采购、魔法烹饪、菜单出餐、结算升级、探险与存档恢复。快餐小食与热食炖锅采用不同经营选择；厨房奇物可留用或出售，雨天有可提前准备的暖身/保温需求，海格有可选带餐委托。已知菜谱默认批量，基础食材稳定供货。
 
-料理可出售，也可自己吃来影响下一次探险；营业收益参与取得新武器/技能，再挑战行为不同的精英、取得高级素材制作新菜。旧三日基线只做一个可换配置的小场地，不扩完整技能树或大地图；新阶段品质切片待 H02 建议与总协调收敛，不以内容数量代替趣味验证；不靠签到、退出惩罚或强制等待制造续玩。规则与验收由 H02 冻结契约及 `docs/05-restaurant-prototype.md` 说明，是否完成见项目状态。
+料理可出售，也可自己吃来影响下一次探险；营业收益参与取得新武器/技能，再挑战行为不同的精英、取得高级素材制作新菜。旧三日基线只做一个可换配置的小场地，不扩完整技能树或大地图；当前雨夜备餐品质切片规格已冻结，见[品质切片说明](docs/06-quality-slice.md)；不以内容数量代替趣味验证；不靠签到、退出惩罚或强制等待制造续玩。旧基线规则见[三日原型说明](docs/05-restaurant-prototype.md)，当前交付与待验边界见[项目状态](docs/project-status.md)。
 
 ## 开发与检查
 
