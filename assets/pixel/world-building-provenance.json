@@ -1,0 +1,34 @@
+{
+  "task_id": "A01",
+  "base_revision": "639ea819565434114df26b950a672186e197c6b2",
+  "generation": "OpenAI built-in image_gen; originals preserved verbatim; no CLI/API fallback or external art download",
+  "sources": [
+    {
+      "file": "source/world-building-kit-v1.png",
+      "generation_id": "1901aed2-d5d8-4d38-8376-496eeed1c415",
+      "role": "seven-module original sheet; six wall/front/post/foot exports; original tabletop retained but superseded",
+      "sha256": "f1519976035217121af98df33913d73a9c1f527da9130035bd8adeddf22ea4a7"
+    },
+    {
+      "file": "source/world-wood-top-v2.png",
+      "generation_id": "6dbb8862-2725-4c97-b4cc-bcd686e4a3d1",
+      "role": "quieter generated tabletop; crop and nearest export to32x16",
+      "sha256": "1dc706a9961b645b8bb85f6cf30b3f934e3c16db648d38a4d476420ca43fd30f"
+    }
+  ],
+  "prompts": [
+    {
+      "source": "world-building-kit-v1.png",
+      "brief": "ONE coherent modular construction spritesheet, transparent, 4 columns by2 rows with seventh module and last cell empty. Orthogonal RPG ground x right/y down, elevated view, rectangular top planes, never diamond/isometric projection. Quiet chestnut wood and cool blue-grey stone, upper-left light. H wall96x88 with cap96x24 and face96x64; V wall24x160 with cap24x96 and face24x64; corner24x88 with cap24x24 and face24x64. Wood surface32x16, low cabinet front32x24, end post8x24, shelf leg8x24. No labels, no scenery, no characters, no exterior cast shadows; sparse detail."
+    },
+    {
+      "source": "world-wood-top-v2.png",
+      "brief": "ONE seamless rectangular chestnut tabletop surface, transparent padding, direct overhead, ships32x16. Large flat medium brown #a5714f regions, two broad horizontal planks, one long subtle joint #70483c, tiny #d2a06d highlight. No noise, speckles, dithering, knots, circles, checker pattern, border, bevel, sides, props or labels. Quiet consistent edge colors."
+    }
+  ],
+  "export": "Plane-specific crops in build_world_building.py; nearest resizing, fixed10-color subset of original32, alpha threshold128, zero transparentRGB, two-pixel transparent padding. No hand-painted or procedural replacement artwork. Original generated top superseded by separate calmer generation; no mirroring in final export.",
+  "coordinates": "Orthographic x-right/y-down;64px wall elevation and24px cabinet elevation independent of rectangle width/depth. No gameplay geometry or anchor changes.",
+  "qa": "Static contact/assembly images in ignored evidence/world-building-kit; not game input, runtime rendering, real fullscreen or human play evidence.",
+  "preservation": "Legacy files, old manifest records, animations, source records and both SOURCES.md files remain unchanged. Only new records appended to manifest.",
+  "integration": "WORLD_BUILDING_KIT.md describes content_region, cap/face assembly, pivots and actual geometry examples; old reader schema unchanged."
+}
