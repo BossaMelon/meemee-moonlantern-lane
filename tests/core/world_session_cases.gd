@@ -319,7 +319,12 @@ func test_recipe_matrix():
 	# E02 currently supports days1..2 and one elite unit/run. Extend an isolated
 	# previous-day pickup's quantity and its UID/cost ledger consistently so the
 	# frozen batch6 boundary can exercise actual save/load and public commands.
-	var origin = farm_rares(); travel(origin,"shop")
+	var origin = farm_rares()
+	var real_advanced = fixture(origin.snapshot(),"real-single-elite-origin")
+	travel(real_advanced,"shop"); cook_batch(real_advanced,"comet_pie",1,false)
+	expect(real_advanced.snapshot().items.filter(func(i): return i.item_id == "comet_pie" and i.location == "ready").size() == 1 and not real_advanced.snapshot().items.any(func(i): return i.item_id == "moonheart"),"actual single elite drop becomes one advanced dish and is consumed once")
+	traces.append({"scenario":"real-single-elite-dish","controlled_inventory":false,"snapshot":real_advanced.snapshot()})
+	travel(origin,"shop")
 	for wave in range(3): open_wave(origin); complete_wave(origin)
 	walk_to(origin,"ledger"); act(origin,"ledger","settle"); act(origin,"ledger","next_day")
 	var boundary = origin.snapshot()
