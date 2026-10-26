@@ -243,7 +243,7 @@ Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub
 `731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953`，再解压并核有效 4.7.2。
 不安装全局引擎或导出模板。首次缓存必须缺席，实际 headless import 后要求纹理资源存在；
 stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` 也拒收。
-冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，分别检查1440×904与844×390的 headless SubViewport（不冒充原生窗口像素），输出 leaf 为尚不存在的 `RUNNER_TEMP/w01-font` 与 `w01-font-small`，由探针自行创建并执行路径正负例。缺探针/字体、非零退出、缺字、空绑定、OS fallback、四本实际 World 册页缺失或尺寸不符、字体数据及九项 World/Main/provider 源码哈希与本次 Git blob 不符均失败。保留实际 Label/Button/Canvas 字体实例核对。
+冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，分别检查1440×904与844×390的 headless SubViewport（不冒充原生窗口像素），输出 leaf 为尚不存在的 `RUNNER_TEMP/w01-font` 与 `w01-font-small`，由探针自行创建并执行路径正负例。缺探针/字体、非零退出、缺字、空绑定、OS fallback、四本实际 World 册页缺失或尺寸不符、字体数据及十项 World/Main/provider 源码哈希（含 `item_group.gd`；其 UID 另由完整源码守卫覆盖）与本次 Git blob 不符均失败。保留实际 Label/Button/Canvas 字体实例核对。
 
 Main 默认档另复用现有 H07 `PROBE`：从同一 Git archive 核验每个 blob，在额外临时源码测试输入中精确排除 `tests/fixtures/`，声明唯一 `MoonlanternH07Source/UUID/verify` override；不创建 app、EXE/PCK、引擎副本或原生窗口。先独立进程确认新 namespace 无档，再由真实默认 Main 保存暂停标记，第三进程自动恢复；默认 `save_path` 不注入，完整快照、主备哈希与所有源码字节前后核对，PID 必须在本次 Windows Job 观察集合内。生产源码副本不写 override、不删除生成文件求过关，原 source-after 守卫仍拒绝未知文件。
 只白名单上传两份字体报告、Main探针/绑定 JSON及日志，不上传测试输入源码/引擎/用户存档目录；报告中的状态仅为测试产生的隔离状态。
