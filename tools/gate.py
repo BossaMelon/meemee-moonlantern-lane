@@ -403,7 +403,9 @@ def validate_runtime_workflow(root: Path) -> int:
             else:
                 paths = [path.group(1).strip()]
         diagnostic_paths = {'output/gate-report.json', 'output/linux-cold-import/result.json',
-                            'output/linux-cold-import/process.log', 'output/linux-cold-import/engine.log'}
+                            'output/linux-cold-import/process.log', 'output/linux-cold-import/engine.log',
+                            'output/world-viewport/report.json', 'output/world-viewport/process.log',
+                            'output/world-viewport/frame-1.png', 'output/world-viewport/frame-2.png'}
         if (uses == ['actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02']
                 and paths and set(paths) <= diagnostic_paths and not re.search(r'^\s*(?:- )?run:', step, re.M)):
             step = re.sub(r'^        if: always\(\)\s*\n', '', step, flags=re.M)
