@@ -5,6 +5,7 @@ const PortableFont = preload("res://game/ui/portable_font.gd")
 const Walk = preload("res://game/ui/world/walk_animation.gd")
 const InputRelay = preload("res://game/ui/world/world_input.gd")
 const ItemGroup = preload("res://game/ui/world/item_group.gd")
+const Structure = preload("res://game/ui/world/world_structure.gd")
 const REFERENCE_SIZE = Vector2i(640, 360)
 signal movement_requested(axis)
 signal interaction_requested(interaction)
@@ -47,6 +48,7 @@ var _canvas_text_bindings: Array = []
 var _touch_text_bindings: Array = []
 var _context: Dictionary = {}
 var _carry_plate: Sprite2D
+var _walls: Dictionary = {}
 
 func _ready():
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -149,6 +151,7 @@ func present(view: Dictionary) -> bool:
 		_region = str(world.region_id); geometry = world.geometry; _rebuild_geometry()
 	var pose = walk.observe(_region, world.player, bool(view.get("paused", false)))
 	actor.position = pose.foot; actor.texture = pose.texture; actor.offset = -pose.pivot; actor.visible = true
+	for node in _walls.values(): node.observe_foot(pose.foot)
 	camera.position = pose.foot; camera.force_update_scroll()
 	_sync_customers(world.get("customers", [])); _sync_carried(world.get("carried_uids", []), pose.foot); _sync_projected_items(view); _sync_flights(view)
 	_primary = {}
@@ -222,22 +225,27 @@ func _clear_nodes(nodes: Dictionary):
 
 func _rebuild_geometry():
 	_clear_nodes(_props); _clear_nodes(_customers); _clear_nodes(_carried); _clear_nodes(_flights)
+	_clear_nodes(_walls)
 	_clear_nodes(_station_items); _clear_nodes(_jobs); _clear_nodes(_station_labels)
 	_customer_bubbles.clear()
 	_object_specs.clear()
 	for object in geometry.objects: _object_specs[str(object.id)] = object
 	camera.limit_left = 0; camera.limit_top = 0; camera.limit_right = int(geometry.width); camera.limit_bottom = int(geometry.height)
-	var assets = {"storage-body": "herb_shelf", "prep-body": "prep_table", "stove-body": "stove", "pass-body": "serving_counter", "recipe-body": "world_recipe_book", "menu-body": "world_menu_board", "ledger-body": "world_ledger", "vendor-body": "prep_table", "lane-bench": "dining_table"}
+	var captions = {"storage-body":"食材柜", "prep-body":"料理台", "stove-body":"设备台", "pass-body":"出餐台", "vendor-body":"巷口食材摊", "lane-bench":"长凳"}
+	var books = {"recipe-body":"world_recipe_book", "menu-body":"world_menu_board", "ledger-body":"world_ledger"}
 	for collider in geometry.colliders:
-		var id = str(collider.id); var asset = str(assets.get(id, "dining_table" if id.begins_with("table-") else ""))
-		if asset.is_empty(): continue
-		var node = _sprite(asset); var rect = _rect(collider); node.position = Vector2(rect.get_center().x, rect.end.y)
-		var bounds: Array = Art.entry(asset).get("opaque_bounds", [0, 0, 48, 64])
-		var scale_factor = clampf(rect.size.x/maxf(1, float(bounds[2])-float(bounds[0])), 0.5, 2.5)
-		node.scale = Vector2.ONE*scale_factor; objects.add_child(node); _props[id] = node
+		var id = str(collider.id)
+		if int(collider.width) == 24 or int(collider.height) == 24: continue
+		var node = Structure.new(); objects.add_child(node); node.configure(_rect(collider),[id],"",str(captions.get(id,""))); _props[id] = node
+		if books.has(id): node.place_book(str(books[id]))
+	for piece in Structure.wall_pieces(geometry):
+		var node = Structure.new(); objects.add_child(node); node.configure(piece.rect,piece.ids,piece.module); _walls[str(_walls.size())] = node
 	for object in geometry.objects:
 		if str(object.kind) == "portal":
-			var door = _sprite("door"); door.position = _point(object.anchor); objects.add_child(door); _props[str(object.id)] = door
+			# The shop's real 120px opening stays open. Lane leaves attach to
+			# existing solid walls; their Core interaction anchors do not move.
+			if str(object.id) != "shop-exit":
+				var door = _sprite("door"); door.position = Vector2(24 if str(object.id) == "lane-home" else float(geometry.width)-24,float(object.anchor.y)); objects.add_child(door); _props[str(object.id)] = door
 		if str(object.kind) in ["portal", "bell"]:
 			var label = _label(12); label.position = _point(object.anchor)+Vector2(-48, 10); label.size = Vector2(96, 24); label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.text = {"door-bell": "门铃", "shop-exit": "月灯巷 →", "lane-home": "← 回小店", "garden-gate": "菇圃门"}.get(str(object.id), "")
@@ -303,6 +311,7 @@ func _sync_carried(uids: Array, foot: Vector2):
 func _work_surface(target: String, collider_id = "") -> Vector2:
 	var object: Dictionary = _object_specs.get(target, {})
 	var body = str(object.get("collider_id", "")) if collider_id == "" else collider_id
+	if _props.has(body) and _props[body].has_method("surface_anchor"): return _props[body].surface_anchor()
 	for collider in geometry.colliders:
 		if str(collider.id) == body: return _rect(collider).get_center()-Vector2(0,24)
 	return _point(object.get("anchor", {"x":0,"y":0}))
@@ -413,6 +422,12 @@ func visual_uid_bindings() -> Array:
 	for node in objects.get_children():
 		if node.has_meta("item_uid"): rows.append({"uid": int(node.get_meta("item_uid")), "node": str(node.get_path())})
 		for uid in node.get_meta("item_uids", []): rows.append({"uid":int(uid), "node":str(node.get_path())})
+	return rows
+
+func construction_bindings() -> Array:
+	var rows: Array = []
+	for node in _props.values()+_walls.values():
+		if node.has_method("construction_bindings"): rows.append(node.construction_bindings())
 	return rows
 
 func show_feedback(text: String):
