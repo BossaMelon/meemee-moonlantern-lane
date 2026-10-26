@@ -49,4 +49,6 @@ fixture revision1 的店铺东墙分为 `shop-e-n` 和 `shop-e-s`，真实开口
 
 这些是 Pillow 素材组装检查，不能作为 Godot 全屏、真实输入、碰撞运行或趣味验收。生产接入后的遮挡、门提示与同机全屏比例由 P11/V02 验证；本包不启动前台游戏，不改 UI/Core/契约。
 
+上述原生/3倍contact、比例/footprint页、3倍墙体页、原生整店及640×360镜头页同时保留在 `preview/world-building-kit/`，随PR提交；`.gdignore` 防止Godot把QA图作为运行资源导入。比例页人物脚点在地面南沿之外13px，足以容纳现有半径12px，不靠把人物放进碰撞体来改善比例。
+
 定向验证：`python3 assets/pixel/verify_world_building.py` 检查台面边缘重复、实际fixture尺寸、固定高度、所有地面覆盖，以及相对639ea819全部旧像素文件和记录的保留。再以七个ID调用既有 `verify.py` 检查编码、atlas与来源。旧全包未变化部分无需为本包重跑玩法测试。

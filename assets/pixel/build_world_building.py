@@ -6,6 +6,7 @@ nearest resizing, repeat, palette reduction and assembly are mechanical.
 This script does not re-export any legacy asset or modify gameplay geometry.
 """
 import json
+import shutil
 from PIL import Image, ImageDraw
 from build import ROOT, hard_alpha, palette_export, sha
 
@@ -238,6 +239,14 @@ def previews(m):
     room.paste(char,(spawn["x"]-24,spawn["y"]+64-61),char)
     room.save(EVIDENCE/"shop-layout-native.png")
     room.crop((0,264,640,624)).save(EVIDENCE/"shop-spawn-640x360.png")
+    # Keep the reviewable artifact with the PR; raw logs remain ignored evidence.
+    retained=ROOT/"preview/world-building-kit"
+    retained.mkdir(parents=True,exist_ok=True)
+    (retained/".gdignore").write_text("")
+    for name in ["contact-native.png","contact-3x.png","scale-native.png","scale-2x.png",
+                 "scale-footprints.png","walls-join-3x.png","walls-shop-3x.png","walls-lane-3x.png",
+                 "shop-layout-native.png","shop-spawn-640x360.png"]:
+        shutil.copyfile(EVIDENCE/name,retained/name)
 
 
 if __name__=="__main__": build()
