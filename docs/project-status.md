@@ -4,7 +4,7 @@
 
 **Steam 可售品质目标仍 active、未完成，玩法改进为第一优先级。** 用户本次实际打开 r2（human PID `46285`）后原话：“不好玩，空间太小，主角都不能动，交互也很无聊”。这证明首屏/店内空间交互评价失败；未测整晚经营或当前新战斗，不能据此补造那些范围的结论。旧三日/雨夜代码与 gate 保留，不删不降；源码 CI、runtime、人类反馈、商业 IP 与发布分别记录，自动检查通过不能推导为好玩。
 
-**当前主线：P10/P11/H07/V02 已由 root 正式派发并行实施，新完整 demo 未完成。** H03 登记 [PR #54](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/54) 已合 main `d907ff46939c2e7e93668e1348107c5888362a68`；各 owner 按既定依赖推进。H07 仅工具实现/单元检查，生产组合与完整三-suite/runtime 尚待 P10/P11 和固定候选，不因合同或工具绿灯宣称玩法已运行或好玩。
+**当前主线：P10/P11/H07/V02 已由 root 正式派发并行实施，新完整 demo 未完成。** H03 登记 [PR #54](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/54) 已合 main `d907ff46939c2e7e93668e1348107c5888362a68`；各 owner 按既定依赖推进。H07 仅工具实现/单元检查，生产组合与完整三-suite/runtime 尚待 P10/P11 和固定候选，不因合同或工具绿灯宣称玩法已运行或好玩。 Root 已在原 E02/chat959c 与原允许路径重启 world-only 第3日薄适配，Core hook 仍归 P10；旧 rain/prototype 不改，不新增地图/敌人或宣称成长完成。
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
