@@ -66,7 +66,7 @@
     "commands": {
       "world_input": {
         "args": {"move_x": "finite number [-1,1]", "move_y": "finite number [-1,1]"},
-        "effect": "Set held movement only; advance is sole time progression. Clear on focus loss/modal/load/region transition."
+        "effect": "Set held movement only; advance is sole time progression. Do not append to persistent requests/economic ledger or allocate per-frame request IDs; a supplied generic request_id is not stored for this setter. Snapshot holds current axes only. Clear on focus loss/modal/load/region transition."
       },
       "world_interact": {
         "args": {"target_id": "string", "action": "enum below", "payload": "object, empty when unused"},
@@ -92,7 +92,7 @@
       "serve": {
         "targets": ["seat-1", "seat-2", "seat-3", "seat-4"],
         "payload": {"order_id": "live seated order id", "uid": "one carried dish UID"},
-        "rule": "Match that exact instance to that seat/customer budget and demand; reserve same UID/price/cost for ordinary3000ms delivery; stop patience. Only completion removes UID/credits cash; repeat cannot pay twice."
+        "rule": "Match exact carried UID to live seat/customer demand and base budget; create exclusive channel=manual reservation with remaining_ms=50. Freeze base_price/tip/paid_total from core quote, stop patience. Next nonpaused fixed service step uses the same _deliver commit; do not take the ordinary3000ms channel. Commit once removes UID, pays total and records any wave tip; UI never pays."
       },
       "plan": {
         "targets": ["recipe-book"],
@@ -210,15 +210,38 @@
       "world": "deep-copy authoritative world incl positions/carry/job/customer state",
       "interactions": "array<{target_id,action,payload,label,enabled,reason,anchor}> recomputed from real range/LOS/state",
       "events": "world_moved/region_changed/item_taken/item_put/cooking_started/cooking_ready/customer_arrived/served/customer_left with entity/UID/order IDs and tick",
-      "world.geometry": "active region {width,height,colliders,objects,portals} matching fixture revision; view-only enrichment, not duplicated mutable save data. Runtime may bake exact checked layout into core; UI reads core geometry, never its own collision copy."
+      "world.geometry": "active region {width,height,colliders,objects,portals} matching fixture revision; view-only enrichment, not duplicated mutable save data. Runtime may bake exact checked layout into core; UI reads core geometry, never its own collision copy. Production player code must use packaged/baked core layout and run with tests/fixtures absent; fixtures are verification input only.",
+      "serve_quotes": "For each suggested carried UID/order: {order_id,uid,base_price,tip,paid_total,tip_reason}; reason=eligible|budget_no_room|not_preferred|already_paid|automatic|base_unaffordable. Show the hand preference and all amounts before F; caller cannot supply monetary fields."
     },
     "invariants": [
       "An item UID is in exactly one location; every carried/station/job/reservation reference resolves uniquely and contributes to capacity80; consumed ingredients leave items once, cooking outputs preserve exact cost basis.",
       "No new wallet or parallel simulated orders. service.orders/reservations/sales are existing economic facts extended by spatial customer links. No visual sale before authoritative event.",
       "Invalid action, stale target, wrong UID, remote distance, duplicate/conflicting request or interrupted save cannot duplicate cooking output, pickup or income.",
       "Save full region/position/facing/carry/stations/jobs/customer paths/orders/patience/delivery/RNG/held food/return anchor and once-only flags. Load clears held input, not progress; pause/offline time never advances.",
-      "Manual serve and automatic floating/pot scheduling create reservations only; reuse/extract the existing _deliver atomic commit as the sole UID removal/cash/order-completion entry. Never add cash in world_interact or UI."
-    ]
+      "Manual serve and automatic floating/pot scheduling create reservations only; reuse/extract the existing _deliver atomic commit as the sole UID removal/cash/order-completion entry. Never add cash in world_interact or UI.",
+      "Manual and auto reserve the same order/UID exclusively. Every paid sale has revenue=cash_delta=paid_total=base_price+tip<=budget; tip_paid_by_wave and terminal order/UID/cost/sale commit together. Persist frozen amounts and remaining_ms; no re-quote/re-tip after pause/load. New request ID does not reopen a terminal/reserved order.",
+      "Validate saved prefers_hand_delivery against first ordinary queue order, not caller data; tip2 is legal only for its manual sale with budget room and matching wave marker. Other channels/orders tip0, including after restore."
+    ],
+    "service_extensions": {
+      "tip_paid_by_wave": "dictionary current-night wave_id → preferred order_id, positive tips only; keep across waves, reset only real next_day to a new night id; historical sales/commits remain. Reconcile each entry with exactly one current-night tip sale."
+    },
+    "order_extensions": {"prefers_hand_delivery": "boolean, true only for first ordinary order in each generated wave, saved with queue"},
+    "reservation_extensions": {
+      "channel": "manual|ordinary|floating|pot",
+      "remaining_ms": "manual starts50; other channels unchanged",
+      "base_price": "integer>=0, existing recipe/tier/weather quote",
+      "tip": "integer0 or2, frozen by core",
+      "paid_total": "integer=base_price+tip<=order.budget",
+      "price": "if retained from existing reservation schema, alias of paid_total"
+    },
+    "sale_extensions": {
+      "base_price": "integer>=0",
+      "tip": "integer0 or2",
+      "paid_total": "integer=base_price+tip",
+      "revenue": "integer=paid_total",
+      "cost": "unchanged consumed item cost",
+      "channel": "manual|ordinary|floating|pot"
+    }
   },
   "loop": {
     "phases": ["preparation", "trading", "intermission", "closing", "settled", "expedition"],
@@ -250,7 +273,14 @@
       "ordinary_ms": 3000,
       "floating": {"capacity": 2, "delivery_ms": 1500, "fresh_only": true},
       "pot": {"batch_capacity": 3, "delivery_ms": 4500, "heat_capacity": 3},
-      "rule": "Customer walks to its assigned seat before patience starts; actual waiting/reserved order owns bubble and reaction. Channels reserve only arrived customers. Shelf dispatch auto; direct carried handover ordinary. No elapsed minimum wave; finish after orders processed and reservations empty. Floating flights/held pot portions visibly correspond to actual UIDs."
+      "rule": "Customer walks to its assigned seat before patience starts; actual waiting/reserved order owns bubble and reaction. Channels reserve only arrived customers. Shelf dispatch auto; direct carried handover manual50ms at next service step, ordinary auto remains3000ms. No elapsed minimum wave; finish after orders processed and reservations empty. Floating flights/held pot portions visibly correspond to actual UIDs.",
+      "manual_ms": 50,
+      "hand_tip": {
+        "amount": 2,
+        "preferred_order_index": 0,
+        "max_paid_per_wave": 1,
+        "rule": "Only manual delivery to the saved first ordinary order may tip, if that wave has no paid tip and base_price+2<=budget. If base alone fits but +2 does not, deliver at base with tip0; if base exceeds budget reject without reservation. Auto and nonpreferred orders tip0. No mandatory hand service."
+      }
     },
     "routes": [
       "quick_service: take a recipe bundle, batch bake, carry to pass once; fresh pies fly two at a time. Carryover loses speed, encourages a small fresh batch at next break.",
@@ -264,7 +294,7 @@
       },
       "relay": "Automatic transfer checks free pass menu capacity/UID ownership; batches at next fixed step, blocked output stays ready. Pause/save never repeats. Compare same inputs before/after upgrade: fewer manual dish carry trips, same recipe/UID/cost integrity."
     },
-    "economy": "Reuse existing five recipes/catalog/base prices/rain25%/rare resale/recovery/atomic ledger. Stable four-ingredient supply12..14 per night, buy in preparation/intermission. New wave counts/starter/relay are world-only initial values and must be simulated; old Q05 balance claims do not transfer. First night each normal route can afford at least one choice and basic next-night cooking without recovery; investigate domination/softlocks before expansion.",
+    "economy": "Reuse existing five recipes/catalog/base prices/rain25%/rare resale/recovery/atomic ledger. Stable four-ingredient supply12..14 per night, buy in preparation/intermission. New wave counts/starter/relay are world-only initial values and must be simulated; old Q05 balance claims do not transfer. First night each normal route can afford at least one choice and basic next-night cooking without recovery; investigate domination/softlocks before expansion. Normal quick/hot route feasibility must also pass with automatic service and zero tips; the optional tip cannot rescue a required economic route.",
     "expedition": {
       "options": {"ruleset": "rain-night-v1", "map_id": "rain-garden-two-routes", "map_revision": 1, "meal_effect": null},
       "model_version": 2,
@@ -332,7 +362,12 @@
       "required": true,
       "claim": "一位真实客人的到店、需求、菜与收入相连。",
       "evidence_kinds": ["automated_case_report", "action_trace"],
-      "pass_conditions": ["从正常初始档经世界动作给首客实际交付；到达→等待→预留→进食反应→离开与order绑定。", "先放柜台不收钱；交付才有账本收入，同UID/订单至多一次；错菜/预算不足/未到达/超时/在途保存有反例。"]
+      "pass_conditions": [
+        "从正常初始档经世界动作给首客实际交付；到达→等待→预留→进食反应→离开与order绑定。",
+        "先放柜台不收钱；交付才有账本收入，同UID/订单至多一次；错菜/预算不足/未到达/超时/在途保存有反例。",
+        "手递创建独占manual reservation后下一非暂停50ms服务步成交；普通自动仍3000ms、浮空/锅不变。每波首客偏好可见且报价由核心给base_price/tip/paid_total，客户端不能自报金额。",
+        "首客亲递且base+2<=budget才tip2；预算仅够base时tip0正常成交、自动/非首客tip0，base不够原子拒绝。每波最多一次，same/new request、预留前后保存/重启均不能重复付。单一成交提交的收入/现金/小费标记与UID守恒。"
+      ]
     },
     {
       "id": "WS05",
@@ -342,7 +377,7 @@
       "claim": "完整一晚与次晨成长保留可玩的选择。",
       "evidence_kinds": ["automated_case_report", "action_trace"],
       "pass_conditions": [
-        "五seed×两路线×standard/premium走正常经营三波到次晨，不靠恢复/作弊、无负现金与软锁；首晚能买至少一个选择并做下一晚基础料理。",
+        "五seed×两路线×standard/premium走正常经营三波到次晨，不靠恢复/作弊、无负现金与软锁；首晚能买至少一个选择并做下一晚基础料理。 正常两路线必须有不依赖小费的实际自动服务经济证据。",
         "shelf升级后同批次完成更少手搬趟数且UID/成本不变；field_kit次晨真实装备入菇圃改变打法；两项不得靠强制互斥造取舍。",
         "从店门步行到巷道供应商/菇圃，真实战斗掉落回库一次；不探索分支也可经营，地点切换不刷新天/次数。"
       ]
@@ -355,9 +390,9 @@
       "claim": "新世界完整保存且旧r2与旧profile均不受影响。",
       "evidence_kinds": ["automated_case_report", "action_trace"],
       "pass_conditions": [
-        "在携料、台内、烹饪、成菜、预留、客人途中、门口/巷道、战斗返程、升级后分别保存重启，与同输入连续分支等价。",
+        "在携料、台内、烹饪、成菜、预留、客人途中、门口/巷道、战斗返程、升级后分别保存重启，与同输入连续分支等价。 包含manual50ms预留、冻结报价与每波小费已付标记。",
         "旧r2活跃档与备份、rain-night/三日档及旧包前后哈希不变；新Main默认新profile，错版本/地图/坏档边界有实际读写证据。",
-        "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。"
+        "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。 高频world_input仅更新保持轴，不使持久requests/经济流水随输入帧数增长。"
       ]
     },
     {

@@ -136,29 +136,29 @@
         "index": 1,
         "id": "n1-w1",
         "orders": [
-          {"id": "n1-w1-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
-          {"id": "n1-w1-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
-          {"id": "n1-w1-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "quick"]}
+          {"id": "n1-w1-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"], "prefers_hand_delivery": true},
+          {"id": "n1-w1-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"], "prefers_hand_delivery": false},
+          {"id": "n1-w1-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "quick"], "prefers_hand_delivery": false}
         ]
       },
       {
         "index": 2,
         "id": "n1-w2",
         "orders": [
-          {"id": "n1-w2-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
-          {"id": "n1-w2-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
-          {"id": "n1-w2-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "hearty"]},
-          {"id": "n1-w2-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "hearty"]}
+          {"id": "n1-w2-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"], "prefers_hand_delivery": true},
+          {"id": "n1-w2-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"], "prefers_hand_delivery": false},
+          {"id": "n1-w2-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "hearty"], "prefers_hand_delivery": false},
+          {"id": "n1-w2-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "hearty"], "prefers_hand_delivery": false}
         ]
       },
       {
         "index": 3,
         "id": "n1-w3",
         "orders": [
-          {"id": "n1-w3-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
-          {"id": "n1-w3-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
-          {"id": "n1-w3-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "warming", "heat_hold"]},
-          {"id": "n1-w3-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "warming", "heat_hold"]}
+          {"id": "n1-w3-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"], "prefers_hand_delivery": true},
+          {"id": "n1-w3-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"], "prefers_hand_delivery": false},
+          {"id": "n1-w3-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "warming", "heat_hold"], "prefers_hand_delivery": false},
+          {"id": "n1-w3-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "warming", "heat_hold"], "prefers_hand_delivery": false}
         ]
       }
     ],
@@ -231,7 +231,9 @@
       "reserved_delivery",
       "lane_portal",
       "expedition_return",
-      "upgrade_activated"
+      "upgrade_activated",
+      "manual_reserved_50ms",
+      "manual_tip_committed"
     ],
     "negative_interactions": [
       "distance=56 vs56.01",
@@ -245,8 +247,25 @@
       "paused cook",
       "direct legacy craft/fulfill",
       "unknown target",
-      "old save into new default"
-    ]
+      "old save into new default",
+      "2000 world_input setters leave persisted requests/economic ledger unchanged",
+      "client supplied serve amounts rejected/ignored, never used for payment"
+    ],
+    "manual_delivery_cases": {
+      "item_id": "floating_pie",
+      "price_tier": "standard",
+      "base_price": 12,
+      "reservation_remaining_ms": 50,
+      "cases": [
+        {"id": "preferred_budget_exact_tip", "preferred": true, "channel": "manual", "budget": 14, "expected_tip": 2, "expected_paid_total": 14},
+        {"id": "preferred_budget_no_room", "preferred": true, "channel": "manual", "budget": 13, "expected_tip": 0, "expected_paid_total": 12},
+        {"id": "preferred_base_only", "preferred": true, "channel": "manual", "budget": 12, "expected_tip": 0, "expected_paid_total": 12},
+        {"id": "base_unaffordable", "preferred": true, "channel": "manual", "budget": 11, "expected_rejection": true},
+        {"id": "preferred_automatic", "preferred": true, "channel": "floating", "budget": 23, "expected_tip": 0, "expected_paid_total": 12},
+        {"id": "nonpreferred_manual", "preferred": false, "channel": "manual", "budget": 23, "expected_tip": 0, "expected_paid_total": 12}
+      ],
+      "rules": "Use real standard floating_pie pricing. Low budgets11..14 are explicit boundary snapshots, not changes to normal23..30 generation. Call real serve/auto schedule then advance; expected values are not reports. Save before commit and after tip, reload and replay same/new request IDs; amount remains frozen and only one sale/tip can commit per order/wave."
+    }
   },
   "scenarios": [
     {
@@ -269,7 +288,8 @@
       "acceptance_ids": ["WS02", "WS03", "WS04"],
       "steps": [
         "Run configuration.first_loop from untouched starter state through spatial commands; no free money, fake stock or direct craft shortcut.",
-        "Track each ingredient/output UID, cost, job timer, seat/order, reservation and paid ledger event."
+        "Track each ingredient/output UID, cost, job timer, seat/order, reservation and paid ledger event.",
+        "For hand serve inspect core quote/preference, verify no cash at reservation then exactly next50ms step commits base/tip/total and customer reaction; automatic branch remains valid and receives no tip."
       ],
       "outcomes": [
         "First actual sale has matching customer reaction; world take/put/cook/serve are required and observable. Merely opening books or drawing a walking actor cannot pass."
@@ -281,11 +301,11 @@
       "route": "quick_and_hot",
       "acceptance_ids": ["WS03", "WS04", "WS05"],
       "steps": [
-        "For all seeds and both price_tiers, run quick_service fresh batches through pass and hot_meals batches with cauldron/held leftovers from normal startup.",
+        "For all seeds and both price_tiers, run quick_service fresh batches through pass and hot_meals batches with cauldron/held leftovers from normal startup. Use automatic service/no tips for the required normal economy branches.",
         "Finish three waves and next_day; choose affordable growth with actual dish revenue and next-night basic supplies. Also run without expedition."
       ],
       "outcomes": [
-        "Both routes behave differently, no softlock/recovery dependence. Record cash/ingredients/manual trips/service outcomes; old quality economic projections are not reused as proof."
+        "Both routes behave differently, no softlock/recovery dependence. Record cash/ingredients/manual trips/service outcomes; old quality economic projections are not reused as proof. Neither normal route relies on optional tips to pass."
       ],
       "seed_policy": "all_seeds"
     },
@@ -296,10 +316,14 @@
       "acceptance_ids": ["WS02", "WS03", "WS04", "WS06"],
       "steps": [
         "Run all configuration.negative_interactions including cold stew/wrong budget, full carry/station/output, raw/dish mix and stale order.",
-        "Save during cooking and delivery, replay request IDs and first-loaded held key; cross-check exact UID/cost/reservation/customer state."
+        "Save during cooking and delivery, replay request IDs and first-loaded held key; cross-check exact UID/cost/reservation/customer state.",
+        "Execute configuration.manual_delivery_cases; compare quoted/reserved/committed base_price, tip, paid_total and actual cash delta.",
+        "Replay served order with same and new request IDs, including pre50ms and postcommit reload; ensure auto scheduler cannot double-reserve manual UID/order and no second tip per wave.",
+        "Send2000 world_input setters without interactions; saved requests and economic ledger remain byte-equivalent while only held axes may change."
       ],
       "outcomes": [
-        "Failures preserve complete state; no duplicated items or income. Paused/loaded state does not complete jobs/delivery from wall time."
+        "Failures preserve complete state; no duplicated items or income. Paused/loaded state does not complete jobs/delivery from wall time.",
+        "Manual next-step payment is exclusive; budget-fallback/auto/nonpreferred tips0, eligible tip2 once, base-unaffordable no state change. Frozen quote survives save and ledger total balances."
       ]
     },
     {
@@ -336,7 +360,8 @@
       "acceptance_ids": ["WS07"],
       "steps": [
         "With render lock and Godot real Main, inject mouse/keyboard, touch, pad InputEvents to play first loop and a full night plus growth; save/quit/restart process.",
-        "Capture movement, camera boundary, hands/table, cooking, real customer/flight/income, narrow/fullscreen; record times without enforcing waiting."
+        "Capture movement, camera boundary, hands/table, cooking, real customer/flight/income, narrow/fullscreen; record times without enforcing waiting.",
+        "In player package with tests/fixtures absent, render geometry from Core and show hand-preference/quote before F, immediate paid response after service step; no runtime fixture reads."
       ],
       "outcomes": [
         "Actual UI path reaches complete business loop; no core.command or Button.pressed bypass. Motion probe is labeled separate and cannot satisfy sale case."

@@ -21,7 +21,7 @@ r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交�
 | 镜头 | 参考视野640×360；跟随核心脚点并夹在区域边界，最近邻像素显示，缩放/窄屏不能改物理速度或位置。画面可插值，不能另算位置。 |
 | 运动/交互 | 50ms固定步，步速160，脚底圆半径12，斜向归一；扫掠碰撞并沿墙滑动。距离到对象可操作锚点≤56、同区且无遮挡才允许交互；矩形一律中心坐标。 |
 
-精确墙体、桌柜 footprint、操作锚点、四席、门口到达位姿只在 fixture.configuration.layout 定义，revision=1；图像与核心共同消费，不能各画一套。朝向保留最近非零方向，以已有 `meemee_walk_nw/ne/sw/se` 表现，停步不瞬移。对象实墙挡脚，NPC不阻挡玩家；客人沿固定可达路径到座位，不引入通用寻路框架。
+精确墙体、桌柜 footprint、操作锚点、四席、门口到达位姿只在 fixture.configuration.layout 定义，revision=1；生产核心可内置与fixture校验一致的布局，UI只读Core geometry；运行包不读取tests/fixtures，不能各画一套。朝向保留最近非零方向，以已有 `meemee_walk_nw/ne/sw/se` 表现，停步不瞬移。对象实墙挡脚，NPC不阻挡玩家；客人沿固定可达路径到座位，不引入通用寻路框架。
 
 店巷 WASD/方向键、左摇杆或触屏摇杆都转同一 `world_input`；F、手柄A、触屏F是同一上升沿交互，长按不重复制作/收钱。Esc/Start/触屏暂停；册页打开清移动并停时，B/Esc关闭。战斗保留既有WASD、方向键瞄准、J/Space施法、K/Shift闪避、**E/L风咒**与手柄A/B/X；F不抢E。失焦、触摸取消、读档、模态/区域切换均清保持输入。
 
@@ -33,7 +33,7 @@ r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交�
 |---|---|
 | 食材柜F | 按当前配方/批量提示取完整材料束，移动真实UID到手上；托盘最多12个单位，可多种原料，不混原料与成菜。默认批量3，计划可选1–6；不逐个搬单位。携物时可放回柜内。 |
 | 工作台F | 携料时放入台内；空手且材料齐时启动当前批次；成菜就绪时取走。同一台至多一个2秒魔法料理任务，期间可以走动。开工前可取回台内原料；开工后不取消/退款，可暂停保存。投入消耗一次，产出UID先为cooking再ready，成本随实例保存；没有全局即时craft按钮。 |
-| 客人F | 携成菜且靠近其座位，按真实需求/预算匹配这一UID，进入3秒交付；交付完成才扣物并收款。客人到达、等候、收到菜的反应、离开由实际订单状态驱动。 |
+| 客人F | 携成菜且靠近其座位，按真实需求/预算匹配这一UID，创建独占manual预留，在下一固定50ms服务步经统一成交入口扣物并收款；玩家感知为即时回应。客人到达、等候、收到菜的反应、离开由实际订单状态驱动。 |
 | 出餐台F | 成菜放到可售台面，不立即收钱。新制浮空饼两份并行1.5秒飞向已到客人；已装锅炖锅最多三份同批4.5秒供应，最多三份热余菜跨波保温。飞行/锅内份数必须对应真实预留UID。 |
 | 门铃/账本 | 门铃直接开首波或下一波，客人实际走入；日结账本显示结果/升级、进入次晨。不用全局下一阶段按钮替代靠近动作。 |
 
@@ -43,7 +43,9 @@ r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交�
 
 首夜客流是3/4/4人，分别quick×3、quick×2+hearty×2、quick×2+暖身×2，波内每4秒出现一人，到座才开始60秒耐心，预算23–30一次生成并保存。最多四席、客人不堵路；派送预留后停耐心，全部处理且无在途单即停在波间，无最低波长。次夜少量稀有需求替换与所有数值见fixture，基础料路线仍能继续。
 
-**一次成交入口：**手递、漂浮与锅批次都只创建同一服务系统的reservation，沿现 `_deliver` 的同一原子提交点完成UID扣除/收入/订单完成；world动作和UI不得另加钱，自动派送也不能再次选择手递已预留的UID/客人。
+每波首位普通客有可见“亲送”偏好：亲递且基础报价+2不超过其预算，才有2金币小费；预算只够基础价则照常成交无小费，提示同时显示基础价/小费/合计。自动渠道照常服务、无小费，不锁进度；日常不强制逐盘跑堂。每波最多一次，订单终态与小费已付标记保存，换request或读档均不再付。普通自动仍3秒、浮空/锅时长不变；正常两路线的经济通过不得依赖小费。
+
+**一次成交入口：**手递、漂浮与锅批次都只创建同一服务系统的reservation，沿现 `_deliver` 的同一原子提交点完成UID扣除/收入/订单完成及小费标记，原子记base_price、tip与paid_total（合计≤预算，现金/销售收入增量=合计）；world动作和UI不得另加钱，自动派送也不能再次选择手递已预留的UID/客人。
 
 ## 4. 成长减少搬运，旧战斗接真实门口
 
@@ -55,11 +57,11 @@ r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交�
 
 ## 5. 最小生产接口与保存
 
-Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_paused/save_to/load_from`。新增仅两个入口：`world_input {move_x,move_y}`；`world_interact {target_id,action,payload}`，action及类型由新contract列出。取放/料理/上菜、开波、册页命令都走后者的同区/距离/遮挡/阶段/UID/请求防重校验；失败完整原子。旧直接craft/display/fulfill/start_expedition等在world profile拒绝绕过，内部复用帮助函数不等于公开后门。
+Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_paused/save_to/load_from`。新增仅两个入口：`world_input {move_x,move_y}`只设保持轴，不写持久requests/经济流水、也不按每帧生成请求记录；`world_interact {target_id,action,payload}`，action及类型由新contract列出。取放/料理/上菜、开波、册页命令都走后者的同区/距离/遮挡/阶段/UID/请求防重校验；失败完整原子。旧直接craft/display/fulfill/start_expedition等在world profile拒绝绕过，内部复用帮助函数不等于公开后门。
 
 核心持有 `world.region_id/player/input/carried_uids/plan/stations/customers/intro_flags/remainder_ms`，位置/碰撞、制作与经济是同一事实源；`view.interactions`提供可选动作/建议UID/短提示/禁用理由。UI只画Camera、角色/托盘、魔法料理、真实客人与flight，不能维护第二份库存或销售状态。独立运动probe只验证手感，生产接入须换成这些真实接口。
 
-新增 `world-slice-v1`，save v4、world model v1，嵌入战斗model v2不改其规则。新默认Session/Main/launcher一致，独立用户数据目录 `moonlantern-world-slice-v1` 下再用 `user://profiles/world-slice-v1/moonlantern.json` 与 `.bak`。保存区域/脚点/朝向、携带UID、台内/烹饪/成菜、客人路径与订单/耐心/预留、门口返回位姿、RNG/事务/成长。暂停、离线不推进；重启清保持输入而不清进度。
+新增 `world-slice-v1`，save v4、world model v1，嵌入战斗model v2不改其规则。新默认Session/Main/launcher一致，独立用户数据目录 `moonlantern-world-slice-v1` 下再用 `user://profiles/world-slice-v1/moonlantern.json` 与 `.bak`。保存区域/脚点/朝向、携带UID、台内/烹饪/成菜、客人路径与订单/耐心/冻结报价预留、每波小费已付标记、门口返回位姿、RNG/事务/成长。暂停、离线不推进；重启清保持输入而不清进度。
 
 旧r2活跃档、rain-night、三日主/备档及包不得扫描、读写、迁移、覆盖；错误profile/version/map明确拒绝，不静默开新档。实际隔离验收对旧文件前后哈希，而非只比较路径字符串。坏JSON可恢复同profile有效备份，保留坏档。
 
@@ -72,7 +74,7 @@ Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_pause
 | WS01 | 店铺/巷道走通，镜头跟随，桌柜/墙碰撞，三输入同速且释放停；不是主角静止背景滚动。 |
 | WS02 | 近身取放同UID、隔墙/远处/错区/重复F/错误UID拒绝；面板与旧命令不能绕过。 |
 | WS03 | 真批量投入→2秒料理→成菜，两种出餐行为/热余菜差异；暂停/读档不复制。 |
-| WS04 | 真实客人、需求、同UID交付与唯一收入相连；错菜/预算/在途恢复/双卖反例。 |
+| WS04 | 亲递下一服务步成交，首客可选小费报价/合计/账本守恒；自动无tip、预算不足只付基础价、错菜/在途保存/换请求与读档重复交付反例。 |
 | WS05 | 五seed两路线两价格档，一晚→成长→次晨/菇圃；接力减少手搬而不免费出菜。 |
 | WS06 | 携物/料理/客人途中/交付/门口等完整恢复；旧r2/旧profile哈希不变。 |
 | WS07 | 三种真实InputEvent首段及一晚，3–5分钟首收入观察、全屏/窄屏与独立进程恢复；不可用probe或直接core替代。 |
