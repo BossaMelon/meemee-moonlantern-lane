@@ -8,7 +8,9 @@
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
 控件或地图几何，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
-world view、P11 world_play/world_input。已消费固定 P11 `9d928a1e3d9a9f92b5f2248087a36b2c4833be2b`；
+world view、P11 world_play/world_input。已消费固定 P11 `8347bcaeff7d8cd8593d71911072a8efc688da5e`
+及其 A01 `8b1983e6b15590bc6080b5e769bf67aafb144aea` 建筑素材；新增 Structure 源码和 UID
+自动纳入实际候选集合。该依赖消费不等于建筑视觉或完整夜渲染已经验收；
 headless 产品路线已获总协调授权；原生窗口仍须另获有界时段。
 后续候选必须包含 Core `6b5ac7909d08643140ca78c8efcabe098109ac10`（或其后继），入口
 检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。

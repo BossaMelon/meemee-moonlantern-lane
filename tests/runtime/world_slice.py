@@ -34,7 +34,7 @@ from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
 CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
-UI_CHECKPOINT = "9d928a1e3d9a9f92b5f2248087a36b2c4833be2b"
+UI_CHECKPOINT = "8347bcaeff7d8cd8593d71911072a8efc688da5e"
 UI_REQUIRED = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
