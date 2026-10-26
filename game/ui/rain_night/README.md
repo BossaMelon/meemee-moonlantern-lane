@@ -1,4 +1,16 @@
-# 雨夜呈现组件与定位协议
+# 世界经营入口与旧雨夜呈现组件
+
+主场景默认挂载真实 `world-slice-v1` Session，使用 `world_play.tscn`、`world/world_controller.gd` 与 `world/world_books.gd`。世界采用 640×360 独立视口、nearest 放大与留边，角色脚底、家具、顾客、物品 UID、交互候选和价格均读取 Core；UI 不持有碰撞、经营时钟、库存或订单权威。非战斗只有 Main 推进 Session；探险阶段由既有 EPanel 推进。
+
+WASD/方向键、左摇杆与触摸摇杆发送 held 轴；F、手柄 A 和屏幕 F 只在按下沿提交 Core 当前首个可用交互。触摸合成的鼠标事件不重复提交世界交互。菜谱、菜单、巷口摊与账本是就近打开的短册；册页暂停世界、清空 held 轴，通过真实按钮提交 `world_interact`，关闭后恢复原暂停状态。暂停菜单提供保存、恢复与保存退出。默认存档只读写 `user://profiles/world-slice-v1/moonlantern.json`，不扫描或迁移旧 profile。
+
+输入与首单检查：`Godot --headless --path PROJECT --script game/ui/checks/world_play.gd -- --input-only ABS_EMPTY_DIR`；真实 Main 首单：`-- --first-income keyboard|pad|touch manual|automatic ABS_EMPTY_DIR [--save-roundtrip]`。它们使用真实 InputEvent 和 Core，不写玩家位置、UID 或伪造 Core view。可选保存恢复使用报告目录中的临时存档，证明同进程 GUI 往返；不代替默认路径、独立进程、原生窗口或实体设备验收。运行日志出现脚本/解析错误时，即使进程 exit0 或断言报告无失败，也不能计为通过。
+
+整晚驱动入口为 `-- --night keyboard|pad|touch quick|hot ABS_EMPTY_DIR`，通过实际册页按钮配置菜单、采购、三波营业、日结投资、次晨基础批量制作与 GUI 保存恢复。它不加速 Core 或注入存档；各输入是否完成以实际报告为准。检查导航只读 Core 几何规划路径，所有位移仍由真实 InputEvent 驱动。桌面合成触屏会在挂载 Controls 前开启 Godot touch emulation，不能据此声明实体触屏验收。`service.held_uids` 只表示跨波保温身份；自动接力验收应追踪真实料理 UID 的 `shelf` 位置，不能把两者混用。
+
+世界入口失焦会清空世界与动作面板输入并暂停真实 Session；回来后从暂停菜单继续。首单检查覆盖实际 Main 的失焦通知、时钟与位置冻结，以及恢复后轴为零。
+
+以下 `panels.gd` 与 `world_*` 定位协议仅适用于明确注入 `rain-night-v1` 的旧雨夜入口。
 
 随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。
 
@@ -8,7 +20,7 @@
 
 CLI输出协议v1：exit0表示全部字体/绑定/几何检查通过；exit1表示字体/资源/字形断言失败；exit2表示CLI/输出目录或报告写入错误。正常完成写 `ABS_FRESH_DIR/font-report.json`，stdout另有一行 `PORTABLE_FONT_RESULT {JSON}`，含protocol/report/checks/failures/exit_code。目录在加载字体/UI前被拒时，不在请求位置写报告，stderr为 `PORTABLE_FONT_PATH_ERROR {JSON}`，含error/requested_output/font_probe_ran=false。报告保留原有fonts/missing/bindings/source_sha256，并记录fresh输出策略和可选path_cases。这是headless源码/资源字体与实际Main绑定协议，不是原生导出声明。
 
-默认检查1440×904虚拟视口，输出目录后加 `--small` 检查844×390；记录账本/菜谱/菜单/装备实际浮层与滚动区域几何，不能据此声称原生全屏。字形度量影响输入时沿用 `card_touch_scroll.gd` 等真实输入定向检查，不要求重跑无关经营链。
+默认检查1440×904虚拟视口，输出目录后加 `--small` 检查844×390；记录真实世界账本/菜谱/菜单/巷口摊四种短册与滚动区域几何，不能据此声称原生全屏。账本字体检查使用合法 Core 指令预先准备 closing fixture，再挂载 Main 并由真实输入打开；该预置不充当 UI 整晚经营证据。字形度量影响输入时沿用真实输入定向检查，不要求重跑无关经营链。
 
 原 OTF 可能在包内重映射；检查用 ResourceLoader 与 FontFile.data，而不是以 FileAccess 原 OTF 存在推断导出成功。W01 只负责 Windows 源码门禁和冷导入，不生成原生包；E03 的 PCK 仅为资源回归。清单/OFL/NOTICE 属非资源文件，后续 D02 负责将其随真实原生导出产物纳入，并在无源码/原导入缓存的产物检查中验证。此 headless 检查不声称已经过原生导出、全屏/844×390像素或目标设备验收；相关布局沿现有字体影响页面和真实输入定向复验，不默认重跑整晚。
 
