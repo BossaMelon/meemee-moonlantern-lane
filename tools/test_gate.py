@@ -665,6 +665,12 @@ class WorldGateTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 result=self.run_fake_prototype(**({'reports':reports}|extra))
                 self.assertEqual(result['status'],'failed');self.assertEqual(set(result['case_reports']),{'prototype','quality-slice'})
+                evidence=result['runner_report_evidence']['world-slice']
+                self.assertEqual(evidence['present'], 'reports' not in extra)
+                if evidence['present']:
+                    self.assertGreater(evidence['bytes'],0)
+                    self.assertEqual(len(evidence['sha256']),64)
+                    if 'raw_reports' in extra:self.assertEqual(evidence['text'],extra['raw_reports']['world-slice'])
 
 
 def main() -> int:

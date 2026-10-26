@@ -106,7 +106,7 @@ Godot --headless --path REPOSITORY --script tests/run.gd -- --suite world-slice 
 测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
 
 gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
-命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。Linux 失败 step 将原 gate JSON 直接输出到该 step log，保留已完成 suite 与进程退出/错误证据；不跳过失败，也不增加条件运行框架。
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；`runner_report_evidence` 另存每个实际报告是否存在、长度/原字节 SHA256 与文本诊断，包含 malformed、非零、完整写出后超时的失败，不把这些原件当自动 pass；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。Linux 失败 step 将原 gate JSON 直接输出到该 step log，保留已完成 suite 与进程退出/错误证据；不跳过失败，也不增加条件运行框架。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
 
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，

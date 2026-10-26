@@ -518,20 +518,33 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
             require(re.match(r"^4\.7\.2(?:\.|$)", result["engine_version"]) is not None,
                     f"Godot 4.7.2 required, found {result['engine_version']!r}")
             result["case_reports"] = {}
+            result['runner_report_evidence'] = {}
             for suite in SUITES:
                 with tempfile.TemporaryDirectory(prefix=suite + "-", dir=report_dir) as folder:
                     case_report = Path(folder) / "cases.json"
                     command = [str(engine), "--headless", "--path", str(root), "--script", "tests/run.gd",
                                "--", "--suite", suite, "--report", str(case_report)]
-                    execution = run_command(command, root, timeout)
-                    result["commands"].append(execution)
-                    require(execution["exit_code"] == 0, f"{suite} test command exited nonzero")
-                    require(not execution["engine_error_logged"], f"{suite} runner logged an engine/script error")
-                    report = read_json(case_report)
-                    result["checks_executed"] += validate_case_report(report, cases_by_suite[suite], suite)
-                    result["case_reports"][suite] = report
-                    if suite == "prototype":
-                        result["case_report"] = report  # Preserve the original report field for existing consumers.
+                    try:
+                        execution = run_command(command, root, timeout)
+                        result["commands"].append(execution)
+                        require(execution["exit_code"] == 0, f"{suite} test command exited nonzero")
+                        require(not execution["engine_error_logged"], f"{suite} runner logged an engine/script error")
+                        report = read_json(case_report)
+                        result["checks_executed"] += validate_case_report(report, cases_by_suite[suite], suite)
+                        result["case_reports"][suite] = report
+                        if suite == "prototype":
+                            result["case_report"] = report  # Preserve the original report field for existing consumers.
+                    finally:
+                        # Diagnostics are retained even for malformed/partial,
+                        # nonzero or timed-out runners. Only case_reports above
+                        # can contain validated acceptance results.
+                        evidence = {'present': case_report.is_file()}
+                        if evidence['present']:
+                            require(not case_report.is_symlink(), 'runner report must not be linked')
+                            raw = case_report.read_bytes()
+                            evidence.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(),
+                                            text=raw.decode('utf-8', errors='replace'))
+                        result['runner_report_evidence'][suite] = evidence
         result["status"] = "passed"
     except (GateError, OSError, UnicodeError) as exc:
         result["errors"].append(str(exc))
