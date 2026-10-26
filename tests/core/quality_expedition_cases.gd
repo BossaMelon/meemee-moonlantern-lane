@@ -44,7 +44,7 @@ func finish_empty_night(g):
 	act(g,"settle")
 
 func acquire_rare(seed_value: int = 1):
-	var g = Session.new(seed_value)
+	var g = Session.new(seed_value,"rain-night-v1")
 	act(g,"start_expedition")
 	walk(g,Vector2(415,95)); clear_input(g)
 	expect(g.snapshot().collected_drops.has("n1-expedition|resource:shelf-patch"),"real path acquires published resource node")
@@ -53,7 +53,7 @@ func acquire_rare(seed_value: int = 1):
 	return g
 
 func test_meal_transfer():
-	var g = Session.new(7)
+	var g = Session.new(7,"rain-night-v1")
 	act(g,"buy",{"item_id":"flour","quantity":1}); act(g,"buy",{"item_id":"pumpkin","quantity":1})
 	act(g,"craft",{"recipe_id":"floating_pie","quantity":1}); act(g,"consume",{"item_id":"floating_pie","quantity":1})
 	var pending = g.snapshot().pending_meal_effect
@@ -105,7 +105,7 @@ func test_rare_four_uses(origin = null):
 		audit(branch); traces.append({"scenario":"rare-four-uses","rare_uid":rare_uid,"actions":branch.action_trace(),"ledger":branch.snapshot().ledger,"final":branch.snapshot()})
 
 func test_real_routes_and_isolation():
-	var g = Session.new(99); act(g,"start_expedition")
+	var g = Session.new(99,"rain-night-v1"); act(g,"start_expedition")
 	for point in [Vector2(415,95),Vector2(375,395),Vector2(560,440),Vector2(805,225),Vector2(850,380)]:
 		walk(g,point); clear_input(g); g = roundtrip(g,"actual-route")
 	var acquired = g.snapshot().collected_drops.duplicate(true)

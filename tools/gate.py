@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -20,7 +21,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_VERSION = "4.7.2"
 CASE_STATUSES = {"passed", "failed", "skipped"}
-SUITES = ("prototype", "quality-slice")
+SUITES = ("prototype", "quality-slice", "world-slice")
 MODES = {"automated", "runtime", "human"}
 STAGES = {"prototype", "platform", "human"}
 ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
@@ -41,8 +42,21 @@ def integer(value: object, minimum: int = 0) -> bool:
 
 def read_json(path: Path) -> dict:
     require(path.is_file(), f"missing JSON file: {path}")
+    def unique(rows):
+        result = {}
+        for key, value in rows:
+            require(key not in result, f"duplicate JSON key {key}: {path}")
+            result[key] = value
+        return result
+    def nonfinite(value):
+        raise GateError(f"non-finite JSON {value}: {path}")
+    def finite_float(value):
+        number = float(value)
+        require(math.isfinite(number), f"overflow/non-finite JSON number {value}: {path}")
+        return number
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique,
+                          parse_constant=nonfinite, parse_float=finite_float)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise GateError(f"invalid JSON {path}: {exc}") from exc
     require(isinstance(data, dict), f"JSON object required: {path}")
@@ -59,7 +73,7 @@ def validate_contract(data: dict, suite: str = "prototype") -> list[dict]:
     require(suite in SUITES, f"unknown contract suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "contract schema_version must be integer 1")
-    require(data.get("milestone") == ("three-day-prototype" if suite == "prototype" else "quality-slice"),
+    require(data.get("milestone") == ("three-day-prototype" if suite == "prototype" else suite),
             f"unknown {suite} contract milestone")
     if suite == "quality-slice":
         require(data.get("suite") == suite, "quality-slice contract suite must be quality-slice")
@@ -99,18 +113,51 @@ def validate_contract(data: dict, suite: str = "prototype") -> list[dict]:
         require(protocol.get("required_automated_ids") == [f"Q{i:02d}" for i in range(1, 6)]
                 and protocol.get("external_evidence_ids") == ["Q06", "QH"],
                 "quality-slice report evidence IDs mismatch")
+    if suite == 'world-slice':
+        require(data.get('suite') == suite, 'world-slice contract suite must be world-slice')
+        roles = {**{f'WS{i:02d}': ('prototype', 'automated') for i in range(1, 7)},
+                 'WS07': ('prototype', 'runtime'), 'WSH': ('human', 'human')}
+        require(seen == set(roles), 'world-slice requires exactly WS01–WS07 and WSH')
+        for case in cases:
+            require((case['stage'], case['mode']) == roles[case['id']] and case['required'],
+                    'world-slice required evidence role changed: ' + case['id'])
+        protocol = data.get('report_protocol')
+        require(isinstance(protocol, dict) and type(protocol.get('schema_version')) is int
+                and protocol['schema_version'] == 1 and protocol.get('suite') == suite
+                and protocol.get('runner') == 'tests/run.gd'
+                and protocol.get('runner_args') == ['--', '--suite', suite, '--report', 'ABS_REPORT']
+                and protocol.get('required_automated_ids') == [f'WS{i:02d}' for i in range(1, 7)]
+                and protocol.get('external_evidence_ids') == ['WS07', 'WSH'], 'world-slice runner protocol mismatch')
+        profile = data.get('profile')
+        expected = {'id': 'world-slice-v1', 'default': True, 'save_version': 4,
+                    'rules_version': 1, 'world_model_version': 1, 'user_data_name': 'moonlantern-world-slice-v1',
+                    'save_path': 'user://profiles/world-slice-v1/moonlantern.json', 'backup_suffix': '.bak',
+                    'old_profiles': ['rain-night-v1', 'prototype-v1']}
+        require(isinstance(profile, dict) and all(type(profile.get(k)) is type(v) and profile[k] == v
+                for k, v in expected.items()), 'world-slice default/profile/save identity mismatch')
+        movement = data.get('movement')
+        require(isinstance(movement, dict) and movement.get('map_id') == 'moonlantern-shop-lane'
+                and type(movement.get('map_revision')) is int and movement['map_revision'] == 1
+                and movement.get('geometry_source') == 'fixtures.configuration.layout',
+                'world-slice map identity/source mismatch')
     return cases
 
 
-def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype") -> int:
+def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype", contract: dict | None = None) -> int:
     require(suite in SUITES, f"unknown fixture suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "fixtures schema_version must be integer 1")
-    if suite == "quality-slice":
-        require(data.get("suite") == suite, "quality-slice fixtures suite must be quality-slice")
+    if suite in ("quality-slice", 'world-slice'):
+        require(data.get("suite") == suite, f"{suite} fixtures suite must be {suite}")
         require(data.get("seeds") == [1, 7, 23, 99, 20261025]
                 and all(type(seed) is int for seed in data["seeds"]),
-                "quality-slice fixtures require the five frozen seeds")
+                f"{suite} fixtures require the five frozen seeds")
+    if suite == 'world-slice':
+        layout = data.get('configuration', {}).get('layout') if isinstance(data.get('configuration'), dict) else None
+        require(isinstance(contract, dict) and isinstance(layout, dict)
+                and layout.get('id') == contract['movement']['map_id']
+                and type(layout.get('revision')) is int and layout['revision'] == contract['movement']['map_revision'],
+                'world-slice fixture layout identity differs from contract')
     scenarios = data.get("scenarios")
     require(isinstance(scenarios, list) and bool(scenarios), "fixtures scenarios cannot be empty")
     ids = {case["id"] for case in cases}
@@ -123,10 +170,10 @@ def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype") -
         require(scenario_id not in seen, f"duplicate scenario id: {scenario_id}")
         seen.add(scenario_id)
         require(integer(scenario.get("seed")), f"invalid scenario seed: {scenario_id}")
-        if suite == "quality-slice":
-            require(scenario["seed"] in data["seeds"], f"scenario seed outside quality-slice seeds: {scenario_id}")
+        if suite in ("quality-slice", 'world-slice'):
+            require(scenario["seed"] in data["seeds"], f"scenario seed outside {suite} seeds: {scenario_id}")
             require("seed_policy" not in scenario or scenario["seed_policy"] == "all_seeds",
-                    f"unknown quality-slice seed_policy: {scenario_id}")
+                    f"unknown {suite} seed_policy: {scenario_id}")
         require(isinstance(scenario.get("route"), str) and bool(scenario["route"].strip()),
                 f"scenario route missing: {scenario_id}")
         require(nonempty_strings(scenario.get("acceptance_ids")), f"scenario acceptance_ids missing: {scenario_id}")
@@ -344,8 +391,25 @@ def validate_runtime_workflow(root: Path) -> int:
     match = re.search(r"^  prototype:\s*\n((?:[ \t]*\n| {4}.+\n?)*)", source, re.M)
     require(match is not None, "runtime files require unconditional prototype job")
     block = match.group(1)
-    require(not re.search(r"^\s*(?:- )?(?:if|continue-on-error):", block, re.M),
-            "prototype job may not use if or continue-on-error")
+    checked = []
+    for step in re.split(r'(?m)(?=^      - )', block):
+        uses = [row.split('#', 1)[0].strip() for row in re.findall(r'^        uses: (.+)$', step, re.M)]
+        path = re.search(r'^          path: ([^\n]+)', step, re.M)
+        paths = []
+        if path:
+            if path.group(1).strip() == '|':
+                rows = re.search(r'^          path: \|\s*\n((?: {12}[^\n]+\n?)*)', step, re.M)
+                paths = [row.strip() for row in rows.group(1).splitlines()] if rows else []
+            else:
+                paths = [path.group(1).strip()]
+        diagnostic_paths = {'output/gate-report.json', 'output/linux-cold-import/result.json',
+                            'output/linux-cold-import/process.log', 'output/linux-cold-import/engine.log'}
+        if (uses == ['actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02']
+                and paths and set(paths) <= diagnostic_paths and not re.search(r'^\s*(?:- )?run:', step, re.M)):
+            step = re.sub(r'^        if: always\(\)\s*\n', '', step, flags=re.M)
+        checked.append(step)
+    require(not re.search(r"^\s*(?:- )?(?:if|continue-on-error):", ''.join(checked), re.M),
+            "prototype execution may not use if or continue-on-error; only pinned diagnostic upload may use always()")
     require(re.search(r"^\s*(?:- )?run: python3 tools/gate\.py --stage prototype(?: --godot [^\n]+)?\s*$", block, re.M)
             is not None, "prototype job must directly run python3 tools/gate.py --stage prototype")
     require(not re.search(r"(?:\|\||&&|;|\|)", next(
@@ -363,12 +427,12 @@ def run_command(command: list[str], cwd: Path, timeout: float) -> dict:
         raise GateError(f"command timed out after {timeout}s: {command}") from exc
     except OSError as exc:
         raise GateError(f"cannot execute command {command}: {exc}") from exc
+    plain_output = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', completed.stdout + '\n' + completed.stderr)
     result = {"command": command, "exit_code": completed.returncode,
               "elapsed_seconds": round(time.monotonic() - started, 3),
               "stdout_sha256": hashlib.sha256(completed.stdout.encode()).hexdigest(),
               "stdout": completed.stdout[-16000:], "stderr": completed.stderr[-16000:],
-              "engine_error_logged": bool(re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR):",
-                                                     completed.stdout + "\n" + completed.stderr))}
+              "engine_error_logged": bool(re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR|Parse Error):", plain_output))}
     return result
 
 
@@ -434,16 +498,18 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
     result = {"schema_version": 1, "gate": stage, "status": "failed", "checks_executed": 0,
               "candidate": git_candidate(root), "commands": [], "errors": [],
               "claim": "Harness infrastructure only; no game, platform, or fun validation." if stage == "harness"
-              else "Required automated prototype and quality-slice contracts only; runtime/platform/human evidence is separate."}
+              else "Required automated prototype, quality-slice and world-slice contracts only; runtime/platform/human evidence is separate."}
     try:
         cases_by_suite = {}
         for suite, contract_path, fixture_path in (
                 ("prototype", "contracts/prototype-v1.json", "tests/fixtures/prototype-scenarios.json"),
-                ("quality-slice", "contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json")):
-            cases = validate_contract(read_json(root / contract_path), suite)
+                ("quality-slice", "contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json"),
+                ('world-slice', 'contracts/world-slice-v1.json', 'tests/fixtures/world-slice-scenarios.json')):
+            contract = read_json(root / contract_path)
+            cases = validate_contract(contract, suite)
             cases_by_suite[suite] = cases
             result["checks_executed"] += len(cases)
-            result["checks_executed"] += validate_fixtures(read_json(root / fixture_path), cases, suite)
+            result["checks_executed"] += validate_fixtures(read_json(root / fixture_path), cases, suite, contract)
         task_data = read_json(root / "harness/tasks.json")
         result["checks_executed"] += validate_tasks(task_data)
         if scope:
@@ -475,20 +541,42 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
             require(re.match(r"^4\.7\.2(?:\.|$)", result["engine_version"]) is not None,
                     f"Godot 4.7.2 required, found {result['engine_version']!r}")
             result["case_reports"] = {}
+            result['runner_report_evidence'] = {}
             for suite in SUITES:
                 with tempfile.TemporaryDirectory(prefix=suite + "-", dir=report_dir) as folder:
                     case_report = Path(folder) / "cases.json"
                     command = [str(engine), "--headless", "--path", str(root), "--script", "tests/run.gd",
                                "--", "--suite", suite, "--report", str(case_report)]
-                    execution = run_command(command, root, timeout)
-                    result["commands"].append(execution)
-                    require(execution["exit_code"] == 0, f"{suite} test command exited nonzero")
-                    require(not execution["engine_error_logged"], f"{suite} runner logged an engine/script error")
-                    report = read_json(case_report)
-                    result["checks_executed"] += validate_case_report(report, cases_by_suite[suite], suite)
-                    result["case_reports"][suite] = report
-                    if suite == "prototype":
-                        result["case_report"] = report  # Preserve the original report field for existing consumers.
+                    try:
+                        execution = run_command(command, root, timeout)
+                        result["commands"].append(execution)
+                        require(execution["exit_code"] == 0, f"{suite} test command exited nonzero")
+                        require(not execution["engine_error_logged"], f"{suite} runner logged an engine/script error")
+                        report = read_json(case_report)
+                        result["checks_executed"] += validate_case_report(report, cases_by_suite[suite], suite)
+                        result["case_reports"][suite] = report
+                        if suite == "prototype":
+                            result["case_report"] = report  # Preserve the original report field for existing consumers.
+                    finally:
+                        # Diagnostics are retained even for malformed/partial,
+                        # nonzero or timed-out runners. Only case_reports above
+                        # can contain validated acceptance results.
+                        evidence = {'present': case_report.is_file()}
+                        if evidence['present']:
+                            require(not case_report.is_symlink(), 'runner report must not be linked')
+                            raw = case_report.read_bytes()
+                            evidence.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+                            if suite not in result['case_reports']:
+                                evidence['text'] = raw.decode('utf-8', errors='replace')
+                        progress_path = case_report.with_name('world-progress.json')
+                        progress = {'present': progress_path.is_file()}
+                        if progress['present']:
+                            require(not progress_path.is_symlink(), 'runner progress diagnostic must not be linked')
+                            raw = progress_path.read_bytes()
+                            progress.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(),
+                                            text=raw.decode('utf-8', errors='replace'))
+                        evidence['world_progress'] = progress
+                        result['runner_report_evidence'][suite] = evidence
         result["status"] = "passed"
     except (GateError, OSError, UnicodeError) as exc:
         result["errors"].append(str(exc))
@@ -515,6 +603,23 @@ def main() -> int:
                           "candidate": result["candidate"]["sha"], "dirty": result["candidate"]["dirty"],
                           "checks_executed": result["checks_executed"], "errors": result["errors"],
                           "report": str(args.report)}, ensure_ascii=False))
+        if result['status'] != 'passed':
+            # Full reports go to the explicit diagnostic artifact. Keep console
+            # output bounded so a successful large trace cannot hide the failure.
+            diagnostic = {k: result[k] for k in ('candidate', 'errors')}
+            diagnostic['validated_suites'] = list(result.get('case_reports', {}))
+            diagnostic['runner_report_evidence'] = {}
+            for suite, original in result.get('runner_report_evidence', {}).items():
+                evidence = dict(original)
+                if 'text' in evidence:
+                    evidence['text_truncated'] = len(evidence['text']) > 8000
+                    evidence['text'] = evidence['text'][:8000]
+                progress = evidence.get('world_progress', {})
+                if 'text' in progress:
+                    evidence['world_progress'] = dict(progress, text=progress['text'][:8000],
+                                                     text_truncated=len(progress['text']) > 8000)
+                diagnostic['runner_report_evidence'][suite] = evidence
+            print(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         return 0 if result["status"] == "passed" else 1
     except Exception as exc:
         print(f"gate infrastructure failure: {type(exc).__name__}: {exc}", file=sys.stderr)

@@ -64,7 +64,14 @@ jobs:
             ${{ runner.temp }}/w01-source/*-stderr.log
             ${{ runner.temp }}/w01-source/import-engine.log
             ${{ runner.temp }}/w01-source/font-engine.log
+            ${{ runner.temp }}/w01-source/font-small-engine.log
             ${{ runner.temp }}/w01-font/font-report.json
+            ${{ runner.temp }}/w01-font-small/font-report.json
+            ${{ runner.temp }}/w01-source/main-source-binding.json
+            ${{ runner.temp }}/w01-source/main-player-directory.json
+            ${{ runner.temp }}/w01-source/main-save.json
+            ${{ runner.temp }}/w01-source/main-restore.json
+            ${{ runner.temp }}/w01-source/main-*-engine.log
             ${{ runner.temp }}/w01-source/quality-diagnostic-engine.log
             ${{ runner.temp }}/w01-source/quality-diagnostic-cases.json
             ${{ runner.temp }}/w01-source/geometry.log

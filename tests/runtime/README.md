@@ -1,5 +1,214 @@
 # P03 主场景运行验收
 
+## V02 world 切片：真实输入驱动与监督器
+
+`world_slice.py` 提供 **Mac 源码 headless 诊断、原生首环诊断及显式原生完整快餐夜**，单次入口不能通过 WS07。
+它拒绝旧 rain-night 默认值，要求固定完整提交及与该提交一致的监督器/复用 helper；
+在全新目录导出 Git tree，先独立观测 OS user-data 位置，再用 Node autoload 观察自然
+Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
+控件或地图几何，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
+与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
+world view、P11 world_play/world_input。已消费固定 P11 `a1ba3f4a30dbb53a04a9ddc8736651dc48efb8b5`（含8347建筑版与账本利润/余额文案修正）
+及其 A01 `8b1983e6b15590bc6080b5e769bf67aafb144aea` 建筑素材；新增 Structure 源码和 UID
+自动纳入实际候选集合。该依赖消费不等于建筑视觉或完整夜渲染已经验收；
+headless 产品路线已获总协调授权；原生窗口仍须另获有界时段。
+后续候选必须包含 Core `d1d6d5497f62e94c0bc27fdd63ea1c75f8a39f0f`（或其后继），入口
+检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
+Core的WR01/02跨日保存修复按作者原字节消费；旧7054三输入整夜证据保留当时绑定，
+不改标新候选。只在最终合源后补必要的实际InputEvent首收入/保存恢复边界。
+
+```sh
+python3 -m unittest discover -s tests/runtime -p 'test_world_slice.py' -v
+python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolute/path/to/Godot --mode mouse --output /private/tmp/NEW_V02_RUN
+```
+
+在上例增加 `--stage first-manual`（或 `first-auto`）及明确的
+`--headless-logical-size 1280 720`，即可执行 headless 输入路线与第二进程恢复。
+原 `--window-size` 仍只通过官方 `--resolution` 请求物理尺寸并严格核对；Godot 4.7.2
+在本机产品 Main 实测返回64×64，原始失败保留，不能据此声称原生窗口正确。
+Main 会在 ready 时重设缩放基准，因此新选项只在 headless 输入模式、自然 Main ready
+之后且任何输入之前设置 Root Window 的
+`content_scale_mode=CANVAS_ITEMS` 与 `content_scale_size`，记录设置前后物理/逻辑尺寸、
+变换和准备时机。物理 dummy 尺寸必须保持，实际逻辑 viewport 必须等于请求，实际
+world Control 至少640×360。不写 Control/地图几何、产品状态或时钟；原生模式和只读
+inspect 拒绝此选项。它只支持输入诊断，不能产生窗口、截图或WS07证据。
+公开API见 [Godot 4.7 Window](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-property-content-scale-size)。
+
+原生首环使用 `--fullscreen`，或单独 `--windowed --resolution 844,390`（也接受844x390）。
+必须另有 root 明确授权的 `--native-slot SLOT_LABEL`；参数只是记录授权时段，不能自己产生
+授权。原首环角色只接受 `first-manual` / `first-auto` 的 after-sale 边界，不因截图增加
+改称完整夜。每次新 namespace；源码须含固定P11祖先，并从实际候选枚举 `game/ui/**`
+全部 `.gd` / `.gd.uid`（包括新增 helper），连同 world 场景及必需入口绑定；不假定永远18项。
+宿主导出的完整集合与引擎
+实际读到的哈希相同。以下命令仅为待slot模板，准备工作不执行：
+
+```sh
+V02_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage night-quick --growth shelf --tier standard --fullscreen --native-night --native-slot ROOT_ASSIGNED_NIGHT_SLOT --native-timeout 420 --restore-headless-logical-size 1280 720 --output /private/tmp/NEW_V02_NATIVE_NIGHT
+```
+
+`--native-night` 明确选择完整夜角色，仅接受 fullscreen/night-quick/shelf/standard/growth；
+单个自有原生进程默认420秒，可声明360–420秒上限，不能以首环报告或超时结果冒充整夜。
+仍走真实三波、收入、日结、升级与次晨。第二波先把实际两份成菜留在手中，开门后真实步行到
+四张座位锚点的中心，正常计时等待四客全部到座并截图，再真实步行到出餐台放菜；不写相机、
+位置、顾客或时钟。该路径保留原快餐菜单/采购/收入核对，明确记录携带UID及四客状态。
+随后同一命令启动**独立 headless restore-exit**（上限150秒），仅该进程使用显式
+`--restore-headless-logical-size`；保留启动/稳定两个零输入完整快照及原始主备档比较。
+每个进程单独记录 display、argv、PID、上限及退出；原生进程绝不混入 headless 尺寸准备。
+成功角色为 `native-night-observed`，独立恢复仍是 headless 证据；首环保持 `native-first-observed`。
+
+原生命令必须由上例的外层 `tools/with_render_lock.py --` 包住整个supervisor；
+command[0]必须是与消费端 `sys.executable` 相同的绝对路径，不能用PATH别名。
+V02原样消费固定H07/H03 `7890ac6357b9be29f94c66e531e529c2f11898e1` 的工具，绑定其
+源码哈希，使用 `consume_render_lock_handoff([sys.executable,*sys.orig_argv[1:]])`，
+在输出目录或任何子进程之前恰好消费一次真实exec交接。环境变量
+`MOONLANTERN_RENDER_HANDOFF_FD` 只定位一次性只读pipe，不能单独证明wrapper执行。
+PID、锁FD的device/inode/uid、receipt身份和精确command摘要由工具验证；实际schema以
+工具源码为准，V02不复制协议实现。
+
+后续每个native阶段、独立headless恢复阶段及最终报告前，仅用工具
+`verify_render_lock_handoff` 复验保留的proof。工具只检查身份与独立SH冲突，不在
+继承锁FD上取得/转换EX锁；receipt在首次消费后关闭，原锁FD一直保留到整个supervisor退出。
+93c655的旧“SH冲突后再EX”校验存在真实竞争误接受，已删除：foreign holder在两次调用间
+释放时，旧校验会取得新锁，不能证明wrapper继承。跨进程确定性RED用例保留为回归，
+修复后未持真实交接的继承FD先被拒绝，不能通过验证取得EX锁。
+
+V02纯Python夹具执行真实wrapper及消费端，使用工具支持的临时lock_path，不占全局
+渲染锁；核验子进程期间/退出后/最终报告期间仍持锁、supervisor退出后释放。
+H07同一固定源码的9项工具回归另证无wrapper、无锁/共享锁、foreign竞争、命令/PID差异、
+一次性receipt及CLI退出/释放等边界；不得把V02测试数量与该9项混为本次新增执行。
+wrapper争用时等待仍是已知串行行为；总协调仅派一个slot，占用时不派窗口。本轮不要求
+改为即时拒绝，也不以该等待列无条件阻塞。所有新原生运行仍需明确slot。
+
+随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
+`processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/是否保护，留本地原始输出、
+命令和时间。读取失败或前台为受保护46285/80978时不启动/不继续新渲染；运行中只结束自己
+创建的进程组。引擎自然获得焦点后才分发内部 InputEvent，失焦即失败，不重新激活任何app。
+不读取其他app名字或bundle；公开汇总仅保留PID/保护判定及时间，原始stdout/stderr留本地。
+不使用System Events、CUA、系统截图、OS键鼠输入或权限设置。原生首环默认150秒，上限180秒；
+超时/清理不得计为成功，暂停/保存/退出仍走真实控件。
+
+原生启动最多在进程总时限内等待12秒：Window自然焦点连续稳定至少1秒，且现有
+`frontmost-*.json` 审计中连续两次during-window均为自有PID（仍约2秒采样，两次间隔
+1.5–4秒，最新结果不超过3秒）。复用原审计文件，原子发布完整JSON；不新增focus通信
+通道、不改变OS采样频率。外部应用持续前台、失效/缺少样本或自然焦点未恢复则0输入失败。
+Main.ready的 `startup-before-input` 及稳定后的 `native-ready-before-input` 均保留完整
+零输入快照。若后者仍暂停，仅在上述条件满足后通过真实GUI Resume恢复，并只读计数
+一次实际Button.pressed；不发该信号、不调用core暂停setter、不自动激活窗口。
+`startup` PNG在这个屏障及可选真实Resume之后捕获，因此如发生Resume，其input_count
+会大于0；零输入证明来自保留的两份完整快照，不能把该图冒称零输入图。
+
+观察器记录自身实际收到的application/window Focus通知与暂停变化，不推定未采到的
+历史通知。宿主原采样频率、保护PID与最终自有前台证据门槛保留；每次实际输入和截图
+还要求最新自有前台样本有效。启动屏障后失焦仍失败、不重试；正常Quit请求后的
+销毁通知只记录，退出本身仍必须成功。7054唯一失败的1.748秒进程未覆盖下一次约2秒采样，
+不能用未来等待结果补写旧前台瞬间或归咎产品。API依据
+[Node Focus通知](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-constant-notification-application-focus-out) 与
+[Window.has_focus](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-method-has-focus)。
+
+先拍自然入口，再用真实输入打开菜谱；材料行被裁切时通过真实滚轮/触摸拖动/手柄方向键滚动。
+原首环现在要求12张：`startup`、`recipe-book`、`recipe-materials`、`shop-exit`、`lane`、
+`shop-return`、`carrying`、`cooking`、`ready`、`dish-group`、`customer-arriving`、`first-sale`。
+店内出口与回店图来自实际步行/门户动作；不会直接调整镜头或玩家坐标。
+完整夜另要求15张：三波各 `wave-N-service` / `wave-N-complete`，二/三波各
+`wave-N-cooking` / `wave-N-prepared`，以及 `four-customers`、`settled`、`upgrade-purchased`、
+`next-morning`、`growth-demonstrated`，合计27张。四客图要求四名真实已生成、未离场的客人
+同时位于观察到的世界 viewport，不能把未生成订单算成四客。每张另记录订单/预留、料理UID、
+库存、升级、实际相机中心与客人位置；缺图、重复图、场景未出现均失败，不补造成功。
+只从 **Root Window viewport** 调用 `get_texture().get_image()`，
+每张等实际 frame_post_draw（最多5秒），不截640子viewport冒充全屏、不缩放图片。报告保留
+屏幕/系统可用区/窗口矩形与mode、逻辑Root viewport、640世界viewport、纹理代理、原始PNG
+尺寸、DPI/scale、final/stretch transform及当时位置/UID/现金。纹理代理尺寸不冒充rawPNG
+尺寸；rawPNG必须符合实际stretch映射的相邻整数像素。全屏窗口矩形须精确等于屏幕或macOS
+API返回的系统可用区，窄窗须实际为844×390。宿主另读PNG IHDR与哈希核验。
+[Godot 4.7 CLI](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)、
+[DisplayServer读取API](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html)。
+四客范围通过只读 [Viewport canvas transform](https://docs.godotengine.org/en/4.7/classes/class_viewport.html#class-viewport-property-canvas-transform)
+投影实际脚点，并记录 [Camera2D 实际屏幕中心](https://docs.godotengine.org/en/4.7/classes/class_camera2d.html#class-camera2d-method-get-screen-center-position)；不以相机节点坐标假定最终镜头范围。
+
+下一冻结候选的验收需分别绑定同候选 mouse/pad/touch 各一夜、次晨及独立恢复；这些可用
+headless 验证输入但不能充当渲染。另需至少一个完整全屏夜，以及844×390合成touch首环和
+册页；仅有具体需要时补pad原生首段。按实际变更补失效边界，旧证据保持原候选。准备阶段仅
+检查解析、拒绝条件和源绑定；此文档/slot参数均不授权开窗。最终WS07仍需总负责人汇总验收，
+合成输入不等于硬件，WSH未知；不能将计划写成完成。
+
+键鼠使用真实 WASD/F，手柄使用左轴/A，触屏读取实际 P11 relay 的圆盘/动作区域并经
+当前变换映射事件。只读 Core 几何按16格、半径12加容差规划保守路径；途中反复检查真实
+脚点、停滞/总时限与区域。不会直接设置位置、发送 core 命令、按钮信号或抢 UI 焦点。
+F 前必须确认 Core 的首个 enabled interaction 恰为目标动作。记录输入、实际轨迹、
+UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现金与订单/客人反应。
+
+`--save-boundary carrying|cooking|customer|manual-reservation|after-sale` 默认 after-sale。
+可选 `--continue-after-restore` 仅允许 headless `first-manual` 的
+`--mode pad --save-boundary manual-reservation` 或 `--mode touch --save-boundary cooking`。
+沿用第二进程 `restore-exit` 的零输入完整快照/主备档双屏障，再实际 Resume：手递预留
+自然完成一次成交，或制作完成既定3个UID并真实取走。随后实际暂停、Save、Load两次，
+再次Resume并等待至少原剩余时长加200ms（至少1秒），最后保存退出。每阶段核对现金、
+UID/next_uid、冻结报价/小费/订单、账本或原料/成菜成本；加载重试前后另完整比较快照
+与主备档。只读观察各实际按钮的 `pressed` 次数，不能发射该信号。输入、原始任务/预留
+及成本、重试次数和墙钟观察时长均保留。未指定时原有
+恢复后退出语义不变；原生入口拒绝此选项。这不扩大为完整三输入夜间矩阵或WS07通过。
+manual-reservation 在确认/暂停 InputEvent 后各调用一次官方
+[`Input.flush_buffered_events()`](https://docs.godotengine.org/en/4.7/classes/class_input.html#class-input-method-flush-buffered-events)，
+使缓冲输入进入真实游戏输入循环；记录该准备，不改时钟或产品状态。暂停前后均必须
+实际观测同一订单的50ms手递预留，其他路线不改变事件刷新时机。
+每次用新 namespace，从真实新游戏走到边界，实际暂停并确认250ms状态不变，再用真实
+控件保存退出。manual-reservation 必须在下一服务步前实际观测到50ms预留，否则失败；
+不回写时间或构造预留。宿主退出后比较完整主档与pre-quit，再启动独立 restore-exit：
+零输入的 ready/settled 快照和主备各自哈希必须一致，之后才按真实暂停页退出。
+手柄保存控件靠 D-pad 遍历当前焦点链；未知控件/焦点循环都失败，等待实际 P11 集成修正。
+
+整夜阶段为 `--stage night-quick` 或 `night-hot`，`--growth shelf|field_kit` 选择次晨
+成长，`--tier standard|premium` 通过实际菜单控件选择价格。整夜只接受 growth 保存边界
+（省略时自动选择），首段仍默认 after-sale。路线沿用 a060e92 的正常经营方案：首波
+实际自动出餐后，快捷路线采购4面粉/6南瓜/2暖焰草，再做浮空饼2+2和暖焰汤2；热食路线
+采购4南瓜/4奶油，制作炖锅4，核对真实 held 温热余餐跨波。按正常墙钟等待每波结束，
+逐波核对唯一订单、成交/离开、现金、零小费及无在途残留，不跳时钟或调用 Core 推进。
+
+日结须实际资金至少125且未领取补助；点击账本购买110成长并迎接次晨，再采购和制作
+3份基础料理。shelf 分支观察同批真实UID自动进入出餐台、原料/产物成本守恒、无菜品手搬
+和无提前收入；报告列出首批3份曾实际手搬一次，但不把免费继承原料与付费原料称作同成本
+对照。field_kit 分支实际装备散射杖、步行入菇圃，注入各设备施法，要求 E02 实际 cast
+事件给出 fan_wand/3弹，再经暂停页返回真实巷道返回位姿，最后保存并独立重启。该短段
+仅验证获得武器的实际出手，不声称完成探险/击败敌人或取得掉落。
+
+册页选择和购买核对 Main 实际 action_completed 的唯一完整 payload/成功结果。鼠标靠
+真实滚轮，触屏从可见文本区域拖动，手柄依实际焦点链；不设置 scroll_vertical 或焦点。
+触屏入口显式启用并记录 Godot 桌面触摸模拟以走 ScrollContainer，产品状态仍须全量不变。
+整夜子进程有720秒总上限，各步另有导航/交互/100秒波次上限，所有未观测断言失败留证。
+
+输出目录和 namespace 都不可复用，即使之前失败或为空。实际源码默认应用目录须为
+`moonlantern-world-slice-v1`；仅在临时源副本以
+`MeeMeeMoonlanternLane-V02/<unique-id>/<mode>` 隔离 OS 目录，产品默认
+`user://profiles/world-slice-v1/moonlantern.json` 不改。生成的独立目录探针、override、
+源文件/导入副产物、请求、命令/进程记录和原始日志均留存并记录哈希。未完成、异常退出、
+超时、中断、引擎错误、身份不符、证据缺失/篡改或源字节变化均失败；父进程正常退出后也
+检查整个自有进程组，清理发生过便不能声称正常退出。不会按名称查杀其他 Godot。
+
+`--guard ABS_FILE` 只接受显式选择的归档旧档、受控副本和不可变包文件；不自动扫描玩家
+目录，拒绝 live OS user-data 根下的路径及软链接。活动 r2 保存可正常变化，不读取、
+冻结或恢复它；这里的受控副本 guard 不冒充对真人文件的访问审计。
+
+preflight 成功仅为 `status=observed` / exit 0；headless双进程成功仅为
+`status=save-boundary-observed` / exit 0；原生首环成功仅为 `native-first-observed`，且
+`independent_restore_observed=false`。所有路径始终 `ws07_passed=false`、`wsh_observed=false`；
+失败 exit 2 保留原件。入口实现不等于已有截图/实际输入通过。Python 合成观察和受控子进程
+测试仅证明监督器边界；缺少 P10/P11 时
+真实入口在启动产品前失败。WS01–06 继续由 Core 自动 runner 负责，WSH 必须是真人反馈。
+
+后续 WS07 仍需实跑并修正同候选三输入首段、各保存边界、整夜三波与次晨成长驱动；
+授权渲染时段再检查全屏/窄屏/镜头和 viewport PNG。当前仅语法/纯路径计算检查不算输入证据。
+不得通过 headless dummy、运动 probe 或旧 Q/P 套件替代。合成输入不证明实体设备。
+
+Mac 启动设置 `display/window/size/no_focus` 不能承诺保留真人应用焦点：Godot 4.7.2
+显示主窗口时先激活应用，再处理 no_focus。渲染锁只串行测试，不保护未持锁的真人游戏；
+原生验收继续等待总协调明确分配时段，不用此标志绕过保护。
+[公开设置](https://docs.godotengine.org/en/4.7/classes/class_projectsettings.html#class-projectsettings-property-display-window-size-no-focus)、
+[4.7.2 显示主窗口实现](https://github.com/godotengine/godot/blob/4.7.2-stable/platform/macos/display_server_macos.mm#L1590-L1610)、
+[应用激活实现](https://github.com/godotengine/godot/blob/4.7.2-stable/platform/macos/godot_application.mm#L54-L69)。
+
 ## P06 雨夜切片的独立证据准备
 
 旧三日脚本/报告只验证旧技术基线，不满足 [雨夜品质切片](../../docs/06-quality-slice.md) 的 Q06。`quality_support.py` 仅准备新的隔离证据目录和完整快照比较，不启动新产品、不调用核心命令，也不输出 Q06/QH 通过。完整新路线必须消费产品 owner 已发布的真实 UI/input 协议；Q01–Q05 自动套件由核心 runner 负责，人类 QH 不能自动通过。
