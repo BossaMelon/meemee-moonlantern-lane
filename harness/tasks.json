@@ -366,6 +366,86 @@
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "service_tier": "default"
+    },
+    {
+      "id": "H06",
+      "owner": "runtime_verification",
+      "allowed_paths": [
+        "tests/native/contract-v1.json",
+        "tests/native/protocol.schema.json",
+        "tests/native/run_native.py",
+        "tests/native/test_native_harness.py",
+        "tests/native/fixtures/protocol-cases.json",
+        "tests/native/qa_autoload.gd",
+        "tests/native/qa_autoload.gd.uid",
+        "tests/native/README.md"
+      ],
+      "depends_on": [
+        "H03",
+        "W01",
+        "V01"
+      ],
+      "chat_id": "01a17302-168c-7d22-90fd-9633ccf7e434",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
+    },
+    {
+      "id": "P09",
+      "owner": "ui_implementation",
+      "allowed_paths": [
+        "game/ui/main.gd",
+        "game/ui/checks/phase_guidance.gd",
+        "game/ui/checks/phase_guidance.gd.uid",
+        "game/ui/rain_night/README.md"
+      ],
+      "depends_on": [
+        "P07"
+      ],
+      "chat_id": "01a172c8-4c24-7dc1-bb64-307423676621",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "D02",
+      "owner": "engineering_delivery",
+      "allowed_paths": [
+        "tools/build_native_demo.py",
+        "tools/test_build_native_demo.py",
+        "tools/native_pack_audit.gd",
+        "tools/native_pack_audit.gd.uid",
+        "tools/windows_process.ps1",
+        "tools/run_windows_gate.ps1",
+        "tools/README.md",
+        ".github/workflows/native-validation.yml"
+      ],
+      "depends_on": [
+        "H03",
+        "W01",
+        "E03",
+        "V01",
+        "E04",
+        "H06",
+        "P09"
+      ],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "P08",
+      "owner": "runtime_verification",
+      "allowed_paths": [],
+      "depends_on": [
+        "D02",
+        "H06"
+      ],
+      "chat_id": "01a17302-168c-7d22-90fd-9633ccf7e434",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
     }
   ],
   "coordination": {

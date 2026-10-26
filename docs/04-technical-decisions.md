@@ -73,4 +73,16 @@ runner 报告协议：
 
 ## 6. 源码托管与服务器检查
 
-源码仓库现为 public，未发布游戏。main 服务器保护已实际 GET 核验：strict=true，必需检查为 `harness` 与 `prototype`，enforce_admins=true，必须经 PR、required reviews=0，禁止强推和删除，要求解决对话，linear history=false。未引入第二账号审批要求。变更与回查的当前证据维护在项目状态；服务端保护不能代替负责人对产物与未验项的检查。
+源码仓库现为 public，未发布游戏。main 服务器保护已实际 GET 核验：strict=true，必需检查为 `harness`、`prototype`、`windows-source`（均 app_id=15368），enforce_admins=true，必须经 PR、required reviews=0，禁止强推和删除，要求解决对话，linear history=false。未引入第二账号审批要求。变更与回查的当前证据维护在项目状态；服务端保护不能代替负责人对产物与未验项的检查。
+
+## 7. Mac / Windows 原生配对包路线（2026-10-26）
+
+原生阶段按 H06 → D02 → P08 交接，D02 另等待 P09 首次进入阶段指引可见性修复；完整依赖/owner/精确路径只以 [任务清单](../harness/tasks.json) 为准。H06 先交固定 contract/schema、受控协议与子进程 fixtures、宿主校验器和独立 Node QA autoload 源，验收通过后才进入实际包工作。fixture 或 QA 源通过不证明其已在标准 release 编译/运行；缺实际包时真实 native 模式必须失败。 H06 固定 PR 候选经 root 实读与 fixtures 验收达到 harness-ready 后，D02 可从该冻结候选开展，不要求 H06 先合 main。H06/P09/D02 形成最终固定组合候选，做一次 combined 独立主审，再按真实 PR 依赖逐项集成；必要最多一次有具体范围理由的 scoped 复审，不按新 SHA 重置预算。P09 做小范围定向自检与真实全屏/窄屏像素检查，其差异纳入最终组合。
+
+D02 使用匹配的 Godot 4.7.2 标准 release 模板，目标为 Mac 与 Windows；先校验版本/模板归档及成员哈希，再只在本任务临时目录使用公开 `custom_template/release` 路径，不安装或替换全局模板。本次登记不启动模板下载、正式导出、签名或窗口。导出固定脚本文本 mode 0，staging 仅显式设置 `editor/export/convert_text_resources_to_binary=false`，原 Git snapshot/scene/UID 不改，记录原字节及精确配置 delta；同机两 fresh PCK 已能字节相等，跨 OS 及真实 Windows 相等仍须分别实证。此设置保留文本场景，`project.godot` 仍导出为 `project.binary`。[ProjectSettings](https://docs.godotengine.org/en/4.7/classes/class_projectsettings.html#class-projectsettings-property-editor-export-convert-text-resources-to-binary)、[Windows 自定义模板](https://docs.godotengine.org/en/4.7/classes/class_editorexportplatformwindows.html)、[Mac 自定义模板](https://docs.godotengine.org/en/4.7/classes/class_editorexportplatformmacos.html)。
+
+player 不含 QA、tests 或 UI checks；另做无 QA 的有界启动 smoke，只声明实际固定 release/配套包的启动结果。verification 自然启动同一真实 Main，仅增加固定 Node QA autoload 及明确资源/重映射和隔离 userdata 的精确配置差异，player/verification 使用同一最终 release executable 哈希，不以模板来源相同代替实际二进制核对。对实际 PCK 全量列出路径/长度/哈希/导入映射目标，逐字节绑定相同 production 载荷，并核完整有效 settings 差异；不能用同源声明或通配豁免 `project.binary`/整个 `.godot`。资源来源文本、JSON、字体及 OFL/NOTICE 须显式纳入并核对。QA 只观察自然 current_scene/Main，通过正常 InputEvent/UI 操作；不得替换/实例化 Main、改 save_path、调用核心命令或 emit 按钮来造通过。player/verification 与旧 r2 使用相互独立的新 namespace，不触碰原玩家档。
+
+P08 只执行和留证，不争写 H06 源码；固定 `release_headless` 的 10 个基础 case 与 `mac_release_rendered` 额外 1 个 Mac 渲染 case。实际购买一次、UI 保存退出、第一进程由宿主确认退出后启动第二进程；任何新输入前比较完整状态与主档/备份各自原始哈希，再有界观察，最后由真实 UI 退出。主档与 `.bak` 分别对自身比较，不要求二者恒等；第二次合法保存的备份旋转另记。进程真正退出/残留子进程由宿主裁定，QA 退出意图不等于完成。Mac 渲染档须持有现有 canonical render lock，核真实模式/焦点/几何和引擎 PNG；headless 不代替窗口、实体设备、整夜或 QH。
+
+标准 release 不借 editor 的 `--script`、`--main-pack`、`--path` 扩展能力运行 QA；使用正常导出布局及受支持的用户参数分隔符，实际能力绑定具体 release 二进制，不造 `--user-data-dir`。Windows 仅在本仓库 CI 临时环境构建/运行，不借不相关 whisperjav 或 SSH 主机；精确批准的报告/元数据/hash/log 白名单才可上传，不上传游戏 EXE/PCK/ZIP、模板或编码/加密副本。源码公开不等于游戏产物上传授权。[CLI 能力边界](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)。
