@@ -49,7 +49,8 @@ func present(id: String, fresh: Dictionary):
 	var focus_id = str(focused.get_meta("action_id", "")) if focused != null else ""
 	var old_scroll = scroll.scroll_vertical
 	if target_id != id:
-		_recipe = str(fresh.world.plan.recipe_id); _quantity = int(fresh.world.plan.quantity); old_scroll = 0
+		old_scroll = 0
+	_recipe = str(fresh.world.plan.recipe_id); _quantity = int(fresh.world.plan.quantity)
 	target_id = id; view = fresh
 	for child in content.get_children(): content.remove_child(child); child.queue_free()
 	var close = controls.get("book_close"); controls.clear(); controls.book_close = close
@@ -79,15 +80,16 @@ func _wire_focus():
 			if scroll.is_ancestor_of(button): scroll.ensure_control_visible(button))
 
 func _recipes():
-	content.add_child(_label("计划只决定下一篮与下一批。取料、上台、开工和端菜都在物件旁完成。"))
-	for wave in view.get("night", {}).get("waves", []):
-		content.add_child(_label("第%s波 · %s位客人" % [str(wave.get("index", "")), str(wave.get("ordinary_count", ""))], 15))
+	_forecast()
+	content.add_child(_label("下一批 · %s份；选好后，到柜边取料、台边开工。" % _quantity))
+	var row = HFlowContainer.new(); content.add_child(row)
+	for quantity in range(1, 7):
+		row.add_child(_button("plan_quantity_"+str(quantity), ("◆" if quantity == _quantity else "")+str(quantity)+"份", func(): _quantity = quantity; _send("plan", {"recipe_id": _recipe, "quantity": _quantity}), _allowed("plan")))
 	for recipe in view.get("recipes", []):
 		var recipe_id = str(recipe.recipe_id)
 		content.add_child(_button("plan_recipe_"+recipe_id, ("◆ " if recipe_id == _recipe else "")+str(recipe.name), func(): _recipe = recipe_id; _send("plan", {"recipe_id": _recipe, "quantity": _quantity}), _allowed("plan")))
-	var row = HFlowContainer.new(); content.add_child(row)
-	for quantity in range(1, 7):
-		row.add_child(_button("plan_quantity_"+str(quantity), str(quantity)+"份", func(): _quantity = quantity; _send("plan", {"recipe_id": _recipe, "quantity": _quantity}), _allowed("plan")))
+		content.add_child(_label("适合："+_tags(str(recipe.output))+"\n魔法："+_magic(str(recipe.effect_id)), 15))
+		if recipe_id == _recipe: _ingredients(recipe)
 	content.add_child(_label("携带武器与餐前料理", 19))
 	for weapon in view.get("progression", {}).get("owned_weapons", []):
 		var weapon_id = str(weapon)
@@ -99,6 +101,7 @@ func _recipes():
 		content.add_child(_button("meal_"+item_id, "餐前吃一份 · "+str(item.name), func(): _send("consume", {"item_id": item_id, "quantity": 1}), _allowed("consume") and int(item.get("bag", 0)) > 0))
 
 func _menu():
+	_forecast()
 	content.add_child(_label("菜单不搬动物品。成菜要端到出餐台，才会进入真实派送。"))
 	var selected: Array = view.service.menu_priority.duplicate()
 	for recipe in view.get("recipes", []):
@@ -108,10 +111,13 @@ func _menu():
 			if item_id in items: items.erase(item_id)
 			else: items.append(item_id)
 			_send("menu", {"item_ids": items, "tiers": _menu_tiers(items)}), _allowed("menu") and (selected.size() > 1 if active else selected.size() < int(view.shelf_capacity))))
+		content.add_child(_label("适合："+_tags(item_id)+"\n"+_magic(str(recipe.effect_id)), 15))
 		if not active: continue
+		var current_tier = str(view.get("tiers", {}).get(item_id, "standard"))
+		content.add_child(_label("当前售价 %s金 · %s" % [str(view.prices[item_id]), {"friendly":"亲民", "standard":"标准", "premium":"精品"}[current_tier]], 17))
 		var row = HFlowContainer.new(); content.add_child(row)
 		for tier in ["friendly", "standard", "premium"]:
-			row.add_child(_button("menu_price_"+item_id+"_"+tier, {"friendly": "亲民", "standard": "标准", "premium": "精品"}[tier], func():
+			row.add_child(_button("menu_price_"+item_id+"_"+tier, ("◆ " if tier == current_tier else "")+{"friendly": "亲民", "standard": "标准", "premium": "精品"}[tier], func():
 				var tiers = _menu_tiers(selected); tiers[item_id] = tier
 				_send("menu", {"item_ids": selected.duplicate(), "tiers": tiers}), _allowed("menu")))
 		var index = selected.find(item_id)
@@ -119,6 +125,48 @@ func _menu():
 			content.add_child(_button("menu_up_"+item_id, "优先供应 ↑", func():
 				var items = selected.duplicate(); items[index] = items[index-1]; items[index-1] = item_id
 				_send("menu", {"item_ids": items, "tiers": _menu_tiers(items)}), _allowed("menu")))
+
+func _forecast():
+	var forecast: Dictionary = view.get("forecast", {})
+	if str(forecast.get("text", "")) != "": content.add_child(_label(str(forecast.text), 16))
+	var lines: Array[String] = []
+	for wave in forecast.get("waves", []):
+		var types: Array[String] = []
+		for pair in [["quick","快餐"], ["hearty","正餐"], ["warm","暖身保温"]]:
+			if int(wave.get(pair[0], 0)) > 0: types.append(pair[1]+"×"+str(wave[pair[0]]))
+		lines.append("第%s波 · %s位 · %s" % [str(wave.index), str(wave.ordinary_count), " / ".join(types)])
+	if not lines.is_empty(): content.add_child(_label("\n".join(lines), 15))
+
+func _item(id: String) -> Dictionary:
+	for row in view.get("inventory", []):
+		if row.item_id == id: return row
+	return {}
+
+func _tags(id: String) -> String:
+	var names = {"quick":"快餐", "hearty":"正餐", "warming":"暖身", "heat_hold":"保温", "portable":"外带", "trail_light":"照路", "celebration":"庆功"}
+	var words: Array[String] = []
+	for tag in _item(id).get("tags", []):
+		if names.has(tag): words.append(names[tag])
+	return " · ".join(words)
+
+func _magic(id: String) -> String:
+	return {"floating_delivery":"本波新饼可双通道浮空送餐；跨波余饼不再漂浮。", "ember_aura":"暖焰随汤杯保温，回应暖身、保温需求。", "self_stir":"坩埚自行搅拌送餐；跨波最多保温三份炖锅。", "trail_spark":"星火光点照亮返程，回应照路需求。", "comet_orbit":"彗尾环绕馅饼，回应庆功点单。"}.get(id, "")
+
+func _ingredients(recipe: Dictionary):
+	var missing: Array[String] = []
+	for id in recipe.inputs:
+		var item = _item(id)
+		if item.is_empty(): continue
+		var unit = int(recipe.inputs[id]); var required = unit*_quantity
+		var owned = int(item.bag)+int(item.carried)+int(item.station_input)
+		content.add_child(_label("%s · 每份%s；%s份需%s\n柜内%s · 手上%s · 台内%s" % [str(item.name), str(unit), str(_quantity), str(required), str(item.bag), str(item.carried), str(item.station_input)], 15))
+		if owned < required: missing.append(str(item.name)+"×"+str(required-owned))
+	content.add_child(_label("本批缺料："+"、".join(missing) if not missing.is_empty() else "本批材料已够；仍需取料、放上工作台。", 15))
+	var device_id = str(recipe.requires_device)
+	if device_id == "": content.add_child(_label("设备：无需专用设备", 15))
+	else:
+		var device = _item(device_id)
+		content.add_child(_label("设备：%s · %s" % [str(device.get("name", "设备资料待提供")), "已装配" if int(device.get("installed", 0)) > 0 else "未装配，需在工作台旁安装"], 15))
 
 func _menu_tiers(items: Array) -> Dictionary:
 	var tiers: Dictionary = {}

@@ -3,6 +3,8 @@ extends RefCounted
 signal movement_requested(axis)
 signal interact_requested
 signal pause_requested
+signal mode_changed(mode)
+var input_mode = "keyboard"
 var _keys: Dictionary = {}
 var _stick = Vector2.ZERO
 var _touch = Vector2.ZERO
@@ -12,8 +14,17 @@ var _last_axis = Vector2.ZERO
 
 func stick_center(size: Vector2) -> Vector2: return Vector2(84, size.y-90)
 func interact_rect(size: Vector2) -> Rect2: return Rect2(size-Vector2(120, 132), Vector2(96, 88))
-func pause_rect(size: Vector2) -> Rect2: return Rect2(Vector2(size.x-108, 18), Vector2(88, 44))
+func pause_rect(size: Vector2) -> Rect2:
+	return Rect2(Vector2(size.x-108, 18), Vector2(88, 48)) if input_mode == "touch" else Rect2(Vector2(size.x-160, 18), Vector2(142, 36))
 func touch_axis() -> Vector2: return _touch
+
+func observe_device(event: InputEvent):
+	if event.device == -1: return
+	var mode = input_mode
+	if event is InputEventScreenTouch and event.pressed or event is InputEventScreenDrag: mode = "touch"
+	elif event is InputEventJoypadButton and event.pressed or event is InputEventJoypadMotion and absf(event.axis_value) >= 0.2: mode = "pad"
+	elif event is InputEventKey and event.pressed or event is InputEventMouseMotion or event is InputEventMouseButton and event.pressed: mode = "keyboard"
+	if mode != input_mode: input_mode = mode; mode_changed.emit(mode)
 
 func clear():
 	_keys.clear(); _stick = Vector2.ZERO; _touch = Vector2.ZERO; _touch_index = -1; _confirm_down.clear()
@@ -52,7 +63,6 @@ func handle(event: InputEvent, size: Vector2) -> bool:
 		if event.device == -1: return false
 		if not event.pressed: _confirm("mouse:F", false); return false
 		if pause_rect(size).has_point(event.position): pause_requested.emit(); return true
-		if interact_rect(size).has_point(event.position): _confirm("mouse:F", true); return true
 	elif event is InputEventScreenTouch:
 		if not event.pressed or event.canceled:
 			_confirm("touch:"+str(event.index), false)
