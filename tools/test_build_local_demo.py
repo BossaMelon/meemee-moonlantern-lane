@@ -121,6 +121,22 @@ class FixtureCase(unittest.TestCase):
 
 
 class CandidateGuards(FixtureCase):
+    def test_archive_preserves_git_blob_bytes_with_autocrlf_enabled(self):
+        git(self.repo, 'config', 'core.autocrlf', 'true')
+        expected = demo.git(self.repo, 'show', self.sha+':project.godot')
+        _, files, _ = demo.archive_source(self.repo, self.sha)
+        self.assertEqual(files['project.godot'][0], expected)
+        self.assertEqual(git(self.repo, 'config', 'core.autocrlf'), 'true')
+
+    def test_archive_preserves_text_blob_with_crlf_native_config(self):
+        (self.repo/'.gitattributes').write_text('*.gd text\n')
+        self.sha = commit(self.repo)
+        git(self.repo, 'config', 'core.autocrlf', 'false')
+        git(self.repo, 'config', 'core.eol', 'crlf')
+        _, files, _ = demo.archive_source(self.repo, self.sha)
+        self.assertEqual(files['game/main.gd'][0], demo.git(self.repo, 'show', self.sha+':game/main.gd'))
+        self.assertEqual(git(self.repo, 'config', 'core.eol'), 'crlf')
+
     def test_source_probe_projection_binds_bytes_and_never_creates_a_package(self):
         fixture = self.repo/'tests/fixtures/controlled.json'
         fixture.parent.mkdir(parents=True, exist_ok=True); fixture.write_text('{}')
@@ -195,7 +211,7 @@ class CandidateGuards(FixtureCase):
                 member = tarfile.TarInfo(name); member.type = kind; member.size = len(payload); member.linkname = '../../outside'
                 tar.addfile(member, io.BytesIO(payload))
             def replaced(repo, *args):
-                return stream.getvalue() if args[0] == 'archive' else real_git(repo, *args)
+                return stream.getvalue() if 'archive' in args and '--format=tar' in args else real_git(repo, *args)
             with self.subTest(name=name, kind=kind), patch.object(demo, 'git', side_effect=replaced), self.assertRaises(demo.BuildError):
                 demo.archive_source(self.repo, self.sha)
         self.assertFalse((self.root / 'escaped').exists())

@@ -110,7 +110,7 @@ def archive_source(repo, candidate):
         mode, kind, oid = metadata.decode().split()
         require(kind == 'blob' and mode in ('100644', '100755'), 'candidate contains a link/submodule/special file')
         expected[name.decode()] = (mode, oid)
-    archive = git(repo, 'archive', '--format=tar', candidate)
+    archive = git(repo, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'archive', '--format=tar', candidate)
     files = {}
     with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as tar:
         for member in tar.getmembers():
