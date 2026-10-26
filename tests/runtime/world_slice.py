@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import fcntl
 import hashlib
 import io
 import json
@@ -31,10 +30,11 @@ from quality_support import file_states, snapshot_differences, _validate_json
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop_owned_group
+from with_render_lock import consume_render_lock_handoff, verify_render_lock_handoff
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
-CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
-UI_CHECKPOINT = "9d928a1e3d9a9f92b5f2248087a36b2c4833be2b"
+CORE_CHECKPOINT = "d1d6d5497f62e94c0bc27fdd63ea1c75f8a39f0f"
+UI_CHECKPOINT = "a1ba3f4a30dbb53a04a9ddc8736651dc48efb8b5"
 UI_REQUIRED = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
@@ -54,7 +54,7 @@ SAVE_PATH = "user://" + SAVE_RELATIVE
 QA = "tests/runtime/world_slice.gd"
 OWN_SOURCES = ["tests/runtime/world_slice.py", QA, QA + ".uid",
                "tests/runtime/quality_support.py", "tests/runtime/check_source_launch.py",
-               "tools/build_local_demo.py"]
+               "tools/build_local_demo.py", "tools/with_render_lock.py"]
 
 
 def require(condition, message):
@@ -220,17 +220,15 @@ def error_free(path):
 
 @contextmanager
 def render_lock(path=None):
-    """Same lock as tools/with_render_lock.py, but never wait or launch on contention."""
-    path = Path(path) if path is not None else Path(f"/tmp/moonlantern-render-{os.getuid()}.lock")
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise ValueError("render lock occupied; no native launch") from error
-        yield
-    finally:
-        os.close(fd)
+    """Consume the tool owner's one-shot exec receipt before any output/child."""
+    proof = consume_render_lock_handoff([sys.executable, *sys.orig_argv[1:]], lock_path=path)
+    yield proof
+    # The helper consumes/closes only the receipt; the inherited lock FD remains
+    # open until the entire supervisor exits, including restore and reporting.
+
+
+def verify_render_lock(proof, path=None):
+    return verify_render_lock_handoff(proof, [sys.executable, *sys.orig_argv[1:]], lock_path=path)
 
 
 def frontmost_observation(output, label, index):
@@ -246,7 +244,10 @@ def frontmost_observation(output, label, index):
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         row["error"] = str(error)
     row["finished_unix_ns"] = time.time_ns()
-    write_json(output / ("frontmost-%02d-%s.json" % (index,label)), row)
+    path = output / ("frontmost-%02d-%s.json" % (index,label))
+    pending = path.with_suffix(".json.tmp")
+    write_json(pending, row)
+    pending.replace(path)  # Publish the existing audit row whole; no new IPC channel.
     # Public aggregate needs only PID/protection and timing; raw stdout/stderr stay local.
     return {key:row[key] for key in ["label","observed_unix_ns","finished_unix_ns","pid","protected","error"] if key in row}
 
@@ -262,15 +263,42 @@ def run_native(command, cwd, timeout, log, output, observations):
         observations.append(row)
         require_safe_foreground(row)
         return row
-    with render_lock():
-        observe("before-launch")
-        process = run_owned(command,cwd,timeout,log,monitor=lambda _pid: observe("during-window"))
-        try:
-            observe("after-exit")
-            require(any(row.get("pid") == process["pid"] and row["label"] == "during-window" for row in observations), "owned native PID never observed foreground")
-        except (ValueError, OSError) as error:
-            process["frontmost_error"] = str(error)
-        return process
+    # The outer supervisor consumed the receipt exactly once; launch() rechecks
+    # its retained proof before this stage. Never consume again or acquire here.
+    observe("before-launch")
+    process = run_owned(command,cwd,timeout,log,monitor=lambda _pid: observe("during-window"))
+    try:
+        observe("after-exit")
+        require(any(row.get("pid") == process["pid"] and row["label"] == "during-window" for row in observations), "owned native PID never observed foreground")
+    except (ValueError, OSError) as error:
+        process["frontmost_error"] = str(error)
+    return process
+
+
+def validate_native_startup(obs, output, pid):
+    proof = obs.get("native_startup", {})
+    ready = next((r for r in obs.get("checkpoints", []) if r["name"] == "native-ready-before-input"), {})
+    require(proof.get("complete") is True and ready.get("input_count") == 0
+            and proof.get("stable_focus_ms", 0) >= 1000, "native startup lacks stable zero-input barrier")
+    samples = proof.get("host_samples", [])
+    require(len(samples) == 2, "native startup needs two existing host foreground samples")
+    rows = []
+    for sample in samples:
+        path = path_safe(sample["path"])
+        require(path.parent == output and re.fullmatch(r"frontmost-\d+-during-window\.json", path.name), "startup foreground evidence escaped output")
+        require(hashlib.sha256(path.read_bytes()).hexdigest() == sample["sha256"], "startup foreground sample hash differs")
+        row = read_json(path); require_safe_foreground(row)
+        require(row["label"] == "during-window" and row["pid"] == pid, "startup foreground is not the owned process")
+        rows.append(row)
+    gap_ms = (rows[1]["observed_unix_ns"]-rows[0]["observed_unix_ns"])/1e6
+    age_ms = proof["ready_unix_ms"]-rows[1]["finished_unix_ns"]/1e6
+    require(1500 <= gap_ms <= 4000 and 0 <= age_ms <= 3000, "startup foreground evidence stale or not two normal samples")
+    resume = proof.get("resume_required")
+    require(type(resume) is bool and ready.get("snapshot", {}).get("paused") == resume
+            and proof.get("resume_inputs_before") == 0, "startup pause/input provenance missing")
+    require((proof.get("resume_press_count") == 1 and 0 < proof.get("resume_inputs_after", 0) <= len(obs["inputs"])) if resume
+            else proof.get("resume_press_count") == 0 and proof.get("resume_inputs_after") == 0,
+            "startup pause was not resumed through exactly one real GUI press")
 
 
 def validate_native_images(obs, request, output):
@@ -428,6 +456,7 @@ def validate_observation(obs, request, process):
     names = [r["name"] for r in obs.get("checkpoints", [])]
     require(names and len(names) == len(set(names)) and names[0] == "startup-before-input" and names[-1] == "pre-quit", "checkpoint sequence incomplete/duplicate")
     require(obs["checkpoints"][0]["input_count"] == 0, "startup barrier received input")
+    if native: validate_native_startup(obs, Path(request["output"]), process["pid"])
     if stage == "restore-exit":
         if request.get("continue_after_restore"):
             require(not native and names == ["startup-before-input","settled-before-input","continued-effect","continued-complete","continued-saved","continued-reloaded","continued-stable","paused-continued","saved","pre-quit"], "restore continuation checkpoints missing")
@@ -487,6 +516,7 @@ def run_source(args):
     tracked = {}
     guards = {}
     def launch(label, command, timeout=35, native=False):
+        if args.native: verify_render_lock(args.render_lock_proof)
         log = output / (label + "-process.log")
         proc = run_native(command,output,timeout,log,output,result["frontmost"]) if native else run_owned(command, output, timeout, log)
         proc.update(stage=label, display="macOS" if native else "headless", timeout_seconds=timeout)
@@ -600,6 +630,9 @@ def run_source(args):
     finally:
         try:
             check_guards(tracked); check_guards(guards)
+            if args.native:
+                verify_render_lock(args.render_lock_proof)
+                result["render_lock"] = {**args.render_lock_proof,"held_through_supervisor":True}
         except (ValueError, OSError) as error:
             result["status"] = "failed"; result["errors"].append(str(error))
         result["evidence"] = evidence_files(p for p in output.iterdir() if p.is_file() and p.name != "result.json")
@@ -671,6 +704,10 @@ def main():
     if night != (args.save_boundary == "growth"):
         parser.error("night stages require growth boundary; first-loop stages cannot claim growth")
     try:
+        if args.native:
+            with render_lock() as proof:
+                args.render_lock_proof = proof
+                return run_source(args)
         return run_source(args)
     except (ValueError, OSError) as error:
         print(str(error), file=sys.stderr)

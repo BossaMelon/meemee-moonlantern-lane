@@ -18,6 +18,8 @@ var started_ms = 0
 var last_tick = -1
 var previous: Dictionary = {}
 var native_focus_required = false
+var native_application_focused = null
+var native_last_paused = null
 
 func _enter_tree():
 	started_ms = Time.get_ticks_msec()
@@ -37,7 +39,9 @@ func _enter_tree():
 	var native = request.get("native",false)
 	if native and request.get("headless_logical_size") != null:
 		fail("headless logical preparation is forbidden for native evidence"); return
-	if native: report.kind = "world-source-native-night-observation" if request.get("native_night",false) else "world-source-native-first-observation"
+	if native:
+		report.kind = "world-source-native-night-observation" if request.get("native_night",false) else "world-source-native-first-observation"
+		report.native_focus_events = []
 	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != ("macOS" if native else "headless"):
 		fail("unsupported diagnostic stage/display")
 		return
@@ -94,6 +98,69 @@ func main_ready():
 	checkpoint("startup-before-input")
 	if request.stage == "restore-exit" and not restore_barrier(): return
 
+func _notification(what):
+	if not is_inside_tree() or not request.get("native",false) or not report.has("native_focus_events"): return
+	var labels = {NOTIFICATION_APPLICATION_FOCUS_IN:"application_in",NOTIFICATION_APPLICATION_FOCUS_OUT:"application_out",NOTIFICATION_WM_WINDOW_FOCUS_IN:"window_in",NOTIFICATION_WM_WINDOW_FOCUS_OUT:"window_out"}
+	if not labels.has(what): return
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN: native_application_focused = true
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT: native_application_focused = false
+	record_native_focus(labels[what])
+	if native_focus_required and not report.get("quit_input_dispatched",false) and what in [NOTIFICATION_APPLICATION_FOCUS_OUT,NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		fail("native focus notification after startup barrier; no retry")
+
+func record_native_focus(label: String):
+	report.native_focus_events.append({"event":label,"elapsed_ms":Time.get_ticks_msec()-started_ms,"unix_ms":Time.get_unix_time_from_system()*1000,"window_focused":get_window().has_focus(),"application_focused":native_application_focused,"paused":view().paused if ready_seen and is_instance_valid(ui) else null,"input_count":report.inputs.size()})
+	if ready_seen: write_report()
+
+func native_host_samples() -> Array:
+	# Read the existing append-only host audit. No new channel or OS call in Godot.
+	var names = Array(DirAccess.get_files_at(request.output)).filter(func(name): return name.begins_with("frontmost-") and name.ends_with("-during-window.json"))
+	names.sort_custom(func(a,b): return a.get_slice("-",1).to_int() < b.get_slice("-",1).to_int())
+	var rows: Array = []
+	for name in names.slice(maxi(0,names.size()-2)):
+		var path: String = request.output.path_join(name)
+		var row = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if not row is Dictionary: return []
+		row.path = path; row.sha256 = FileAccess.get_sha256(path); rows.append(row)
+	return rows
+
+func native_host_ready(rows: Array, pair: bool) -> bool:
+	if rows.size() < (2 if pair else 1): return false
+	var selected = rows if pair else rows.slice(-1)
+	for row in selected:
+		if row.get("label") != "during-window" or row.get("pid") != OS.get_process_id() or row.has("error") or row.get("protected",true): return false
+	var age = Time.get_unix_time_from_system()*1000-float(rows.back().get("finished_unix_ns",0))/1000000
+	if age < 0 or age > 3000: return false
+	var gap = float(rows.back().get("observed_unix_ns",0)-rows.front().get("observed_unix_ns",0))/1000000
+	return not pair or (gap >= 1500 and gap <= 4000)
+
+func await_native_startup() -> bool:
+	var deadline = Time.get_ticks_msec()+12000; var stable_since = -1; var samples: Array = []
+	while not failed and Time.get_ticks_msec() < deadline:
+		var now = Time.get_ticks_msec()
+		if get_window().has_focus() and native_application_focused != false:
+			if stable_since < 0: stable_since = now
+		else: stable_since = -1
+		samples = native_host_samples()
+		if stable_since >= 0 and now-stable_since >= 1000 and native_host_ready(samples,true): break
+		await get_tree().process_frame
+	if failed or not check(Time.get_ticks_msec() < deadline and stable_since >= 0 and Time.get_ticks_msec()-stable_since >= 1000 and native_host_ready(samples,true),"native startup did not naturally stabilize with two owned foreground samples; no input"): return false
+	checkpoint("native-ready-before-input")
+	report.native_startup = {"complete":false,"stable_focus_ms":Time.get_ticks_msec()-stable_since,"ready_unix_ms":Time.get_unix_time_from_system()*1000,"host_samples":samples.map(func(row): return {"path":row.path,"sha256":row.sha256}),"resume_required":view().paused,"resume_inputs_before":report.inputs.size(),"resume_press_count":0,"resume_inputs_after":report.inputs.size()}
+	native_focus_required = true
+	if view().paused:
+		var control = ui.get_action_control("resume")
+		if not check(is_instance_valid(control) and control is Button,"actual startup Resume control missing"): return false
+		var pressed = func(): report.native_startup.resume_press_count += 1
+		control.pressed.connect(pressed) # Observe real GUI delivery; never emit.
+		await click_control("resume")
+		if is_instance_valid(control) and control.pressed.is_connected(pressed): control.pressed.disconnect(pressed)
+		if not await wait_for(func(): return not view().paused,1000,"actual startup GUI Resume"): return false
+		if not check(report.native_startup.resume_press_count == 1,"startup Resume did not receive exactly one real press"): return false
+	report.native_startup.resume_inputs_after = report.inputs.size()
+	report.native_startup.complete = not failed
+	return not failed
+
 func inspect_main():
 	var deadline = Time.get_ticks_msec() + 15000
 	while not ready_seen or get_tree().current_scene != ui:
@@ -141,8 +208,7 @@ func inspect_main():
 		if not check(size is Array and size.size() == 2 and observe_geometry().window == size, "declared CLI resolution differs from actual window: " + JSON.stringify(observe_geometry())): return
 	if not check(world_ui.size.x >= 640 and world_ui.size.y >= 360, "actual world control too small for declared input route"): return
 	if request.get("native",false):
-		if not await wait_for(func(): return get_window().has_focus(),5000,"native window naturally receives focus"): return
-		native_focus_required = true
+		if not await await_native_startup(): return
 		if not await capture_native("startup") or not await native_visual_tour(): return
 	if request.stage == "restore-exit":
 		checkpoint("settled-before-input")
@@ -166,6 +232,7 @@ func dispatch_event(event: InputEvent):
 func send_event(event: InputEvent):
 	if failed: return
 	if request.get("native",false) and not check(get_window().has_focus(),"native focus lost; no input or focus reacquisition"): return
+	if request.get("native",false) and not check(native_focus_required and native_application_focused != false and native_host_ready(native_host_samples(),false),"native input lacks fresh owned foreground evidence; no input"): return
 	if request.stage == "inspect":
 		fail("read-only inspection cannot inject input")
 		return
@@ -199,6 +266,7 @@ func fail(message: String):
 	if failed: return
 	failed = true
 	if not report.is_empty():
+		if request.get("native",false) and ready_seen and is_instance_valid(ui): report.snapshot = ui.game.snapshot()
 		report.status = "failed"
 		report.failures.append(message)
 		write_report()
@@ -222,6 +290,8 @@ func station() -> Dictionary: return view().world.stations[0]
 
 func _process(_delta):
 	if not ready_seen or failed or request.stage == "inspect": return
+	if request.get("native",false) and native_last_paused != view().paused:
+		native_last_paused = view().paused; record_native_focus("paused_changed")
 	if native_focus_required and not check(get_window().has_focus(),"native window lost focus during diagnostic"): return
 	var v = view()
 	if not v.get("world") is Dictionary: return
@@ -616,9 +686,11 @@ func capture_native(label: String) -> bool:
 	RenderingServer.frame_post_draw.connect(on_draw,CONNECT_ONE_SHOT)
 	var deadline = Time.get_ticks_msec()+5000
 	while not drawn.ready and not failed and Time.get_ticks_msec() < deadline: await get_tree().process_frame
+	if failed: return false
 	if not drawn.ready:
 		if RenderingServer.frame_post_draw.is_connected(on_draw): RenderingServer.frame_post_draw.disconnect(on_draw)
 		return check(false,"root viewport did not draw within five seconds: "+label)
+	if not check(native_host_ready(native_host_samples(),false),"native capture lacks fresh owned foreground evidence"): return false
 	var window = get_window(); var texture = window.get_texture(); var picture = texture.get_image()
 	if not check(picture != null and not picture.is_empty(),"root viewport image unavailable"): return false
 	var screen = DisplayServer.window_get_current_screen()

@@ -8,10 +8,14 @@
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
 控件或地图几何，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
-world view、P11 world_play/world_input。已消费固定 P11 `9d928a1e3d9a9f92b5f2248087a36b2c4833be2b`；
+world view、P11 world_play/world_input。已消费固定 P11 `a1ba3f4a30dbb53a04a9ddc8736651dc48efb8b5`（含8347建筑版与账本利润/余额文案修正）
+及其 A01 `8b1983e6b15590bc6080b5e769bf67aafb144aea` 建筑素材；新增 Structure 源码和 UID
+自动纳入实际候选集合。该依赖消费不等于建筑视觉或完整夜渲染已经验收；
 headless 产品路线已获总协调授权；原生窗口仍须另获有界时段。
-后续候选必须包含 Core `6b5ac7909d08643140ca78c8efcabe098109ac10`（或其后继），入口
+后续候选必须包含 Core `d1d6d5497f62e94c0bc27fdd63ea1c75f8a39f0f`（或其后继），入口
 检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
+Core的WR01/02跨日保存修复按作者原字节消费；旧7054三输入整夜证据保留当时绑定，
+不改标新候选。只在最终合源后补必要的实际InputEvent首收入/保存恢复边界。
 
 ```sh
 python3 -m unittest discover -s tests/runtime -p 'test_world_slice.py' -v
@@ -39,9 +43,10 @@ inspect 拒绝此选项。它只支持输入诊断，不能产生窗口、截图
 实际读到的哈希相同。以下命令仅为待slot模板，准备工作不执行：
 
 ```sh
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage night-quick --growth shelf --tier standard --fullscreen --native-night --native-slot ROOT_ASSIGNED_NIGHT_SLOT --native-timeout 420 --restore-headless-logical-size 1280 720 --output /private/tmp/NEW_V02_NATIVE_NIGHT
+V02_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
+"$V02_PYTHON" tools/with_render_lock.py -- "$V02_PYTHON" tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage night-quick --growth shelf --tier standard --fullscreen --native-night --native-slot ROOT_ASSIGNED_NIGHT_SLOT --native-timeout 420 --restore-headless-logical-size 1280 720 --output /private/tmp/NEW_V02_NATIVE_NIGHT
 ```
 
 `--native-night` 明确选择完整夜角色，仅接受 fullscreen/night-quick/shelf/standard/growth；
@@ -54,14 +59,54 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /abso
 每个进程单独记录 display、argv、PID、上限及退出；原生进程绝不混入 headless 尺寸准备。
 成功角色为 `native-night-observed`，独立恢复仍是 headless 证据；首环保持 `native-first-observed`。
 
-原生监督器非阻塞取得现有 `/tmp/moonlantern-render-UID.lock`；占用时直接退出，不等待后
-擅自启动。随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
+原生命令必须由上例的外层 `tools/with_render_lock.py --` 包住整个supervisor；
+command[0]必须是与消费端 `sys.executable` 相同的绝对路径，不能用PATH别名。
+V02原样消费固定H07/H03 `7890ac6357b9be29f94c66e531e529c2f11898e1` 的工具，绑定其
+源码哈希，使用 `consume_render_lock_handoff([sys.executable,*sys.orig_argv[1:]])`，
+在输出目录或任何子进程之前恰好消费一次真实exec交接。环境变量
+`MOONLANTERN_RENDER_HANDOFF_FD` 只定位一次性只读pipe，不能单独证明wrapper执行。
+PID、锁FD的device/inode/uid、receipt身份和精确command摘要由工具验证；实际schema以
+工具源码为准，V02不复制协议实现。
+
+后续每个native阶段、独立headless恢复阶段及最终报告前，仅用工具
+`verify_render_lock_handoff` 复验保留的proof。工具只检查身份与独立SH冲突，不在
+继承锁FD上取得/转换EX锁；receipt在首次消费后关闭，原锁FD一直保留到整个supervisor退出。
+93c655的旧“SH冲突后再EX”校验存在真实竞争误接受，已删除：foreign holder在两次调用间
+释放时，旧校验会取得新锁，不能证明wrapper继承。跨进程确定性RED用例保留为回归，
+修复后未持真实交接的继承FD先被拒绝，不能通过验证取得EX锁。
+
+V02纯Python夹具执行真实wrapper及消费端，使用工具支持的临时lock_path，不占全局
+渲染锁；核验子进程期间/退出后/最终报告期间仍持锁、supervisor退出后释放。
+H07同一固定源码的9项工具回归另证无wrapper、无锁/共享锁、foreign竞争、命令/PID差异、
+一次性receipt及CLI退出/释放等边界；不得把V02测试数量与该9项混为本次新增执行。
+wrapper争用时等待仍是已知串行行为；总协调仅派一个slot，占用时不派窗口。本轮不要求
+改为即时拒绝，也不以该等待列无条件阻塞。所有新原生运行仍需明确slot。
+
+随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
 `processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/是否保护，留本地原始输出、
 命令和时间。读取失败或前台为受保护46285/80978时不启动/不继续新渲染；运行中只结束自己
 创建的进程组。引擎自然获得焦点后才分发内部 InputEvent，失焦即失败，不重新激活任何app。
 不读取其他app名字或bundle；公开汇总仅保留PID/保护判定及时间，原始stdout/stderr留本地。
 不使用System Events、CUA、系统截图、OS键鼠输入或权限设置。原生首环默认150秒，上限180秒；
 超时/清理不得计为成功，暂停/保存/退出仍走真实控件。
+
+原生启动最多在进程总时限内等待12秒：Window自然焦点连续稳定至少1秒，且现有
+`frontmost-*.json` 审计中连续两次during-window均为自有PID（仍约2秒采样，两次间隔
+1.5–4秒，最新结果不超过3秒）。复用原审计文件，原子发布完整JSON；不新增focus通信
+通道、不改变OS采样频率。外部应用持续前台、失效/缺少样本或自然焦点未恢复则0输入失败。
+Main.ready的 `startup-before-input` 及稳定后的 `native-ready-before-input` 均保留完整
+零输入快照。若后者仍暂停，仅在上述条件满足后通过真实GUI Resume恢复，并只读计数
+一次实际Button.pressed；不发该信号、不调用core暂停setter、不自动激活窗口。
+`startup` PNG在这个屏障及可选真实Resume之后捕获，因此如发生Resume，其input_count
+会大于0；零输入证明来自保留的两份完整快照，不能把该图冒称零输入图。
+
+观察器记录自身实际收到的application/window Focus通知与暂停变化，不推定未采到的
+历史通知。宿主原采样频率、保护PID与最终自有前台证据门槛保留；每次实际输入和截图
+还要求最新自有前台样本有效。启动屏障后失焦仍失败、不重试；正常Quit请求后的
+销毁通知只记录，退出本身仍必须成功。7054唯一失败的1.748秒进程未覆盖下一次约2秒采样，
+不能用未来等待结果补写旧前台瞬间或归咎产品。API依据
+[Node Focus通知](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-constant-notification-application-focus-out) 与
+[Window.has_focus](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-method-has-focus)。
 
 先拍自然入口，再用真实输入打开菜谱；材料行被裁切时通过真实滚轮/触摸拖动/手柄方向键滚动。
 原首环现在要求12张：`startup`、`recipe-book`、`recipe-materials`、`shop-exit`、`lane`、
