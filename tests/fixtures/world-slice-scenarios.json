@@ -1,0 +1,358 @@
+{
+  "schema_version": 1,
+  "suite": "world-slice",
+  "seeds": [1, 7, 23, 99, 20261025],
+  "content_contract": "contracts/world-slice-v1.json; layouts/inputs/expectations only, never execution reports. Normal loops start from real fresh profile; boundary snapshots allowed only for negative tests.",
+  "configuration": {
+    "layout": {
+      "id": "moonlantern-shop-lane",
+      "revision": 1,
+      "coordinate_system": "orthographic ground plane; x right/y down; rect x/y are centers, actor x/y is foot point; visual three-quarter view does not change collision coordinates",
+      "regions": {
+        "shop": {
+          "width": 1280,
+          "height": 768,
+          "spawn": {"x": 220, "y": 380, "facing": "se"},
+          "colliders": [
+            {"id": "shop-n", "shape": "rect", "x": 640, "y": 12, "width": 1280, "height": 24},
+            {"id": "shop-s", "shape": "rect", "x": 640, "y": 756, "width": 1280, "height": 24},
+            {"id": "shop-w", "shape": "rect", "x": 12, "y": 384, "width": 24, "height": 768},
+            {"id": "shop-e-n", "shape": "rect", "x": 1268, "y": 260, "width": 24, "height": 520},
+            {"id": "shop-e-s", "shape": "rect", "x": 1268, "y": 704, "width": 24, "height": 128},
+            {"id": "storage-body", "shape": "rect", "x": 160, "y": 240, "width": 96, "height": 112},
+            {"id": "prep-body", "shape": "rect", "x": 340, "y": 280, "width": 128, "height": 80},
+            {"id": "stove-body", "shape": "rect", "x": 340, "y": 180, "width": 112, "height": 80},
+            {"id": "pass-body", "shape": "rect", "x": 590, "y": 280, "width": 144, "height": 64},
+            {"id": "recipe-body", "shape": "rect", "x": 430, "y": 430, "width": 40, "height": 32},
+            {"id": "menu-body", "shape": "rect", "x": 710, "y": 150, "width": 64, "height": 40},
+            {"id": "ledger-body", "shape": "rect", "x": 580, "y": 560, "width": 60, "height": 48},
+            {"id": "table-1", "shape": "rect", "x": 870, "y": 280, "width": 96, "height": 64},
+            {"id": "table-2", "shape": "rect", "x": 1060, "y": 280, "width": 96, "height": 64},
+            {"id": "table-3", "shape": "rect", "x": 870, "y": 480, "width": 96, "height": 64},
+            {"id": "table-4", "shape": "rect", "x": 1060, "y": 480, "width": 96, "height": 64}
+          ]
+        },
+        "lane": {
+          "width": 1536,
+          "height": 512,
+          "spawn": {"x": 96, "y": 256, "facing": "se"},
+          "colliders": [
+            {"id": "lane-n", "shape": "rect", "x": 768, "y": 12, "width": 1536, "height": 24},
+            {"id": "lane-s", "shape": "rect", "x": 768, "y": 500, "width": 1536, "height": 24},
+            {"id": "lane-w", "shape": "rect", "x": 12, "y": 256, "width": 24, "height": 512},
+            {"id": "lane-e", "shape": "rect", "x": 1524, "y": 256, "width": 24, "height": 512},
+            {"id": "vendor-body", "shape": "rect", "x": 400, "y": 160, "width": 160, "height": 80},
+            {"id": "lane-bench", "shape": "rect", "x": 800, "y": 340, "width": 192, "height": 48}
+          ]
+        }
+      },
+      "objects": [
+        {
+          "id": "pantry",
+          "region_id": "shop",
+          "kind": "storage",
+          "anchor": {"x": 160, "y": 316},
+          "actions": ["take", "put"],
+          "collider_id": "storage-body"
+        },
+        {
+          "id": "prep",
+          "region_id": "shop",
+          "kind": "station",
+          "anchor": {"x": 340, "y": 340},
+          "actions": ["put", "cook", "take", "install", "uninstall"],
+          "collider_id": "prep-body"
+        },
+        {
+          "id": "pass",
+          "region_id": "shop",
+          "kind": "serving",
+          "anchor": {"x": 590, "y": 332},
+          "actions": ["put"],
+          "collider_id": "pass-body"
+        },
+        {
+          "id": "recipe-book",
+          "region_id": "shop",
+          "kind": "book",
+          "anchor": {"x": 430, "y": 466},
+          "actions": ["plan", "equip_weapon", "consume"],
+          "collider_id": "recipe-body"
+        },
+        {
+          "id": "menu-board",
+          "region_id": "shop",
+          "kind": "book",
+          "anchor": {"x": 710, "y": 192},
+          "actions": ["menu"],
+          "collider_id": "menu-body"
+        },
+        {
+          "id": "ledger",
+          "region_id": "shop",
+          "kind": "book",
+          "anchor": {"x": 580, "y": 606},
+          "actions": ["settle", "upgrade", "next_day"],
+          "collider_id": "ledger-body"
+        },
+        {
+          "id": "door-bell",
+          "region_id": "shop",
+          "kind": "bell",
+          "anchor": {"x": 1120, "y": 580},
+          "actions": ["open_shop", "start_wave"]
+        },
+        {"id": "shop-exit", "region_id": "shop", "kind": "portal", "anchor": {"x": 1224, "y": 580}, "actions": ["enter"]},
+        {"id": "lane-home", "region_id": "lane", "kind": "portal", "anchor": {"x": 80, "y": 256}, "actions": ["enter"]},
+        {
+          "id": "vendor",
+          "region_id": "lane",
+          "kind": "book",
+          "anchor": {"x": 400, "y": 224},
+          "actions": ["buy", "recycle", "recover"],
+          "collider_id": "vendor-body"
+        },
+        {"id": "garden-gate", "region_id": "lane", "kind": "portal", "anchor": {"x": 1440, "y": 256}, "actions": ["enter"]},
+        {"id": "seat-1", "region_id": "shop", "kind": "customer_anchor", "anchor": {"x": 870, "y": 338}, "actions": ["serve"]},
+        {"id": "seat-2", "region_id": "shop", "kind": "customer_anchor", "anchor": {"x": 1060, "y": 338}, "actions": ["serve"]},
+        {"id": "seat-3", "region_id": "shop", "kind": "customer_anchor", "anchor": {"x": 870, "y": 538}, "actions": ["serve"]},
+        {"id": "seat-4", "region_id": "shop", "kind": "customer_anchor", "anchor": {"x": 1060, "y": 538}, "actions": ["serve"]}
+      ],
+      "portals": [
+        {"id": "shop-exit", "to_region": "lane", "arrival": {"x": 144, "y": 256, "facing": "se"}},
+        {"id": "lane-home", "to_region": "shop", "arrival": {"x": 1192, "y": 580, "facing": "sw"}},
+        {"id": "garden-gate", "to_region": "expedition", "return": {"region_id": "lane", "x": 1384, "y": 256, "facing": "sw"}}
+      ],
+      "customer_paths": {
+        "entrance": {"x": 1192, "y": 580},
+        "corridor_x": 1160,
+        "seat_ids": ["seat-1", "seat-2", "seat-3", "seat-4"],
+        "rule": "entrance → (1160, seat.y) → seat.anchor, reverse on leaving; NPCs do not block player or one another; visible path uses actual customer state, not decorative sales text."
+      }
+    },
+    "price_tiers": ["standard", "premium"],
+    "waves": [
+      {
+        "index": 1,
+        "id": "n1-w1",
+        "orders": [
+          {"id": "n1-w1-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
+          {"id": "n1-w1-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
+          {"id": "n1-w1-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "quick"]}
+        ]
+      },
+      {
+        "index": 2,
+        "id": "n1-w2",
+        "orders": [
+          {"id": "n1-w2-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
+          {"id": "n1-w2-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
+          {"id": "n1-w2-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "hearty"]},
+          {"id": "n1-w2-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "hearty"]}
+        ]
+      },
+      {
+        "index": 3,
+        "id": "n1-w3",
+        "orders": [
+          {"id": "n1-w3-c01", "seat_id": "seat-1", "arrival_ms": 0, "required": ["meal", "quick"]},
+          {"id": "n1-w3-c02", "seat_id": "seat-2", "arrival_ms": 4000, "required": ["meal", "quick"]},
+          {"id": "n1-w3-c03", "seat_id": "seat-3", "arrival_ms": 8000, "required": ["meal", "warming", "heat_hold"]},
+          {"id": "n1-w3-c04", "seat_id": "seat-4", "arrival_ms": 12000, "required": ["meal", "warming", "heat_hold"]}
+        ]
+      }
+    ],
+    "night_rules": "Generate budgets23..30 once per order in listed wave/order sequence after supply, persist RNG/queues. Day2 retain counts/arrival; replace w1c03 with meal+trail_light and w3c04 with meal+celebration, publicly forecast; rare orders optional, no progress lock.",
+    "first_loop": [
+      "walk to pantry",
+      "take default plan ingredient UIDs",
+      "walk to prep",
+      "put carried UIDs",
+      "cook floating_pie×3",
+      "advance/continue walking until ready",
+      "take actual ready UIDs",
+      "ring door-bell",
+      "walk to waiting seat and serve one OR put at pass for real floating dispatch",
+      "observe paid transaction and customer reaction"
+    ],
+    "frame_partitions_ms": [
+      [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
+      [
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34,
+        16,
+        34
+      ],
+      [250, 250, 250, 250]
+    ],
+    "save_boundaries": [
+      "carried_ingredients",
+      "loaded_station",
+      "cooking_midway",
+      "ready_output",
+      "carried_dish",
+      "customer_arriving",
+      "reserved_delivery",
+      "lane_portal",
+      "expedition_return",
+      "upgrade_activated"
+    ],
+    "negative_interactions": [
+      "distance=56 vs56.01",
+      "opposite side of solid prep table",
+      "wrong region same coordinates",
+      "UID already reserved",
+      "raw material to customer",
+      "dish to raw station",
+      "repeat request same/different args",
+      "F key repeat",
+      "paused cook",
+      "direct legacy craft/fulfill",
+      "unknown target",
+      "old save into new default"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "walk-camera-collision",
+      "seed": 1,
+      "route": "world",
+      "acceptance_ids": ["WS01", "WS02"],
+      "steps": [
+        "Create actual world profile; walk spawn→pantry→prep→pass→all seats→shop-exit→vendor→garden-gate with real held input/advance.",
+        "Test all colliders/corners/diagonal speed, near56/far56.01/occluded/wrong-region targets; compare equal frame partitions."
+      ],
+      "outcomes": [
+        "All working anchors reachable with radius12, no collision teleport. Core position/facing and camera follow; distant/occluded intents fail atomically."
+      ]
+    },
+    {
+      "id": "first-real-customer",
+      "seed": 1,
+      "route": "first_loop",
+      "acceptance_ids": ["WS02", "WS03", "WS04"],
+      "steps": [
+        "Run configuration.first_loop from untouched starter state through spatial commands; no free money, fake stock or direct craft shortcut.",
+        "Track each ingredient/output UID, cost, job timer, seat/order, reservation and paid ledger event."
+      ],
+      "outcomes": [
+        "First actual sale has matching customer reaction; world take/put/cook/serve are required and observable. Merely opening books or drawing a walking actor cannot pass."
+      ]
+    },
+    {
+      "id": "two-world-routes",
+      "seed": 1,
+      "route": "quick_and_hot",
+      "acceptance_ids": ["WS03", "WS04", "WS05"],
+      "steps": [
+        "For all seeds and both price_tiers, run quick_service fresh batches through pass and hot_meals batches with cauldron/held leftovers from normal startup.",
+        "Finish three waves and next_day; choose affordable growth with actual dish revenue and next-night basic supplies. Also run without expedition."
+      ],
+      "outcomes": [
+        "Both routes behave differently, no softlock/recovery dependence. Record cash/ingredients/manual trips/service outcomes; old quality economic projections are not reused as proof."
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "uid-job-and-customer-negatives",
+      "seed": 1,
+      "route": "transactions",
+      "acceptance_ids": ["WS02", "WS03", "WS04", "WS06"],
+      "steps": [
+        "Run all configuration.negative_interactions including cold stew/wrong budget, full carry/station/output, raw/dish mix and stale order.",
+        "Save during cooking and delivery, replay request IDs and first-loaded held key; cross-check exact UID/cost/reservation/customer state."
+      ],
+      "outcomes": [
+        "Failures preserve complete state; no duplicated items or income. Paused/loaded state does not complete jobs/delivery from wall time."
+      ]
+    },
+    {
+      "id": "relay-and-fan-growth",
+      "seed": 1,
+      "route": "growth",
+      "acceptance_ids": ["WS03", "WS05"],
+      "steps": [
+        "From legitimate first-night settled snapshots, branch into shelf or field_kit, next_day activate.",
+        "Repeat same physical cooking sequence with/without shelf, count manual ready→pass carrying trips; fan branch walks lane gate and uses actual new weapon in reused garden."
+      ],
+      "outcomes": [
+        "Relay reduces repeated dish hauling and creates no food/cash; blocked menu leaves output at station. Fan changes actual combat; no forced double-purchase prohibition."
+      ],
+      "seed_policy": "all_seeds"
+    },
+    {
+      "id": "save-and-old-player-guards",
+      "seed": 1,
+      "route": "save",
+      "acceptance_ids": ["WS01", "WS04", "WS06"],
+      "steps": [
+        "At every save boundary fork continuous/save/restart with identical later inputs, test map/profile/version corruption and same-profile valid backup.",
+        "Run real old r2/rain-night/three-day and new launchers against isolated temporary copies; hash old main/bak and package inputs before/after new default play/save."
+      ],
+      "outcomes": [
+        "Position/facing/region/carry/jobs/customer/order/meal/return/RNG are equal apart from explicitly cleared held input. Old artifacts untouched; no hidden migration."
+      ]
+    },
+    {
+      "id": "actual-three-input-world",
+      "seed": 1,
+      "route": "runtime",
+      "acceptance_ids": ["WS07"],
+      "steps": [
+        "With render lock and Godot real Main, inject mouse/keyboard, touch, pad InputEvents to play first loop and a full night plus growth; save/quit/restart process.",
+        "Capture movement, camera boundary, hands/table, cooking, real customer/flight/income, narrow/fullscreen; record times without enforcing waiting."
+      ],
+      "outcomes": [
+        "Actual UI path reaches complete business loop; no core.command or Button.pressed bypass. Motion probe is labeled separate and cannot satisfy sale case."
+      ]
+    },
+    {
+      "id": "human-entry-feedback",
+      "seed": 1,
+      "route": "human",
+      "acceptance_ids": ["WSH"],
+      "steps": [
+        "User or 咩咩 freely tries new candidate; record actual actions and quoted feedback on moving/handling/cooking/serving and desire to continue."
+      ],
+      "outcomes": [
+        "Negative r2 entry feedback retained; new untested periods stay untested. If still dull or excessive hauling, fail experience and fix before expanding."
+      ]
+    }
+  ]
+}
