@@ -187,10 +187,11 @@ func _vendor():
 	content.add_child(_button("recover", "需要时领取今日基础补助", func(): _send("recover", {}), _allowed("recover")))
 
 func _ledger():
-	content.add_child(_label("现有%s金 · 料理收入%s金" % [str(view.cash), str(view.get("dish_income", 0))], 19))
+	content.add_child(_label("当前余额%s金 · 累计料理收入%s金" % [str(view.cash), str(view.get("dish_income", 0))], 19))
 	var summary: Dictionary = view.get("summary", {})
 	if not summary.is_empty():
-		content.add_child(_label("料理收入%s − 成本%s − 店铺费用%s = 结末%s金" % [str(summary.get("revenue", "")), str(summary.get("sold_cost", "")), str(summary.get("fee", "")), str(summary.get("cash", ""))]))
+		content.add_child(_label("第%s夜日结\n料理收入%s金 · 已售食材成本%s金\n毛利润%s金 · 店铺费用%s金\n本期利润%s金\n日结时余额%s金" % [str(summary.day), str(summary.revenue), str(summary.sold_cost), str(summary.gross_profit), str(summary.fee), str(int(summary.gross_profit)-int(summary.fee)), str(summary.cash)]))
+		content.add_child(_label("利润计算这夜的经营；余额还包含往日结余、采购等其他收支。", 15))
 	content.add_child(_button("settle", "记下今晚的账", func(): _send("settle", {}), _allowed("settle")))
 	for upgrade in view.get("upgrades", []):
 		var id = str(upgrade.upgrade_id)
