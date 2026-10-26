@@ -57,6 +57,7 @@ func guidance(name: String, expected_focus: String):
 func picture(name: String):
 	if not render: return
 	await frames(8)
+	expect(not ui.illustration.missing.is_visible_in_tree(), name+": actual pixel room resources are loaded")
 	expect(root.has_focus(), name+": actual rendered window is focused")
 	await RenderingServer.frame_post_draw
 	var path = folder+"/"+name+".png"
