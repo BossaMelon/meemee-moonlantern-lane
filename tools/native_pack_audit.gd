@@ -63,20 +63,25 @@ func _initialize() -> void:
 			34: value = PackedStringArray(value)
 		ProjectSettings.set_setting(key, value)
 		ProjectSettings.set_initial_value(key, null)
-	ProjectSettings.set_setting("application/config/custom_user_dir_name", request.verification_namespace)
-	ProjectSettings.set_setting("autoload/H06NativeQA", "*res://tests/native/qa_autoload.gd")
-	check(ProjectSettings.save_custom(request.settings_output) == OK, "cannot serialize verification project.binary")
-	if errors.is_empty():
+	for role: String in ["player", "verification"]:
+		var config: Dictionary = request.roles[role]
+		ProjectSettings.set_setting("application/config/custom_user_dir_name", config.namespace)
+		if role == "verification":
+			ProjectSettings.set_setting("autoload/H06NativeQA", "*res://tests/native/qa_autoload.gd")
+		check(ProjectSettings.save_custom(config.settings_output) == OK, "cannot serialize " + role + " project.binary")
+		if not errors.is_empty():
+			break
 		var packer := PCKPacker.new()
-		check(packer.pck_start(request.verification_pck) == OK, "cannot start verification PCK")
+		check(packer.pck_start(config.pck) == OK, "cannot start " + role + " PCK")
 		var paths: Array = request.inventory.keys()
 		paths.sort()
 		for path: String in paths:
-			var bytes := FileAccess.get_file_as_bytes(request.settings_output if path == "res://project.binary" else path)
+			var bytes := FileAccess.get_file_as_bytes(config.settings_output if path == "res://project.binary" else path)
 			check(packer.add_file_from_buffer(path, bytes) == OK, "cannot pack " + path)
-		for path: String in request.qa:
-			check(packer.add_file(path, request.qa[path]) == OK, "cannot add frozen QA resource")
-		check(packer.flush() == OK, "cannot flush verification PCK")
+		if role == "verification":
+			for path: String in request.qa:
+				check(packer.add_file(path, request.qa[path]) == OK, "cannot add frozen QA resource")
+		check(packer.flush() == OK, "cannot flush " + role + " PCK")
 	write_text(request.license_output, Engine.get_license_text())
 	write_text(request.third_party_output, JSON.stringify({"licenses": Engine.get_license_info(), "copyrights": Engine.get_copyright_info()}, "\t"))
 	write_text(request.report, JSON.stringify({"ok": errors.is_empty(), "errors": errors, "inventory": inventory}, "\t"))

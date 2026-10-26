@@ -227,15 +227,21 @@ def build(args):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
             path.chmod(0o755 if mode == '100755' else 0o644)
-        (stage/'project.godot').write_bytes(stage_settings(sources['project.godot'][0], namespaces['player']))
+        staged = stage_settings(sources['project.godot'][0], namespaces['player'])
+        # Editor startup creates objectdb_snapshots even with an explicit log.
+        # Never start it in either release namespace. Serialize the final release
+        # settings through the public API below, before any release startup.
+        staged = staged.replace(json.dumps(namespaces['player']).encode(),
+                                json.dumps('MeeMeeMoonlanternLane-D02-Audit/' + build_id + '/export').encode())
+        (stage/'project.godot').write_bytes(staged)
         (stage/'export_presets.cfg').write_text(preset(args.target), encoding='utf-8')
         # Each process has its own bounded session/Job and explicit local engine log.
         run(editor, ['--headless', '--path', stage, '--log-file', work/'import-engine.log', '--editor', '--import'], stage, work, 'import')
         release, chain, resources = template_files(tpz, args.target)
         layouts = {role: layout(output, role, args.target, release, resources) for role in namespaces}
-        player_pack = layouts['player'][2]
-        run(editor, ['--headless', '--path', stage, '--log-file', work/'export-engine.log', '--export-pack', 'D02 Player', player_pack], stage, work, 'export')
-        player = h06.pck_files(player_pack)
+        seed_pack = work/'export-seed.pck'
+        run(editor, ['--headless', '--path', stage, '--log-file', work/'export-engine.log', '--export-pack', 'D02 Player', seed_pack], stage, work, 'export')
+        player = h06.pck_files(seed_pack)
         settings = h06.binary_settings(player['res://project.binary'])
         # Own audit bootstrap: never bootstrap Main or either release user directory.
         audit = work/'audit'
@@ -245,10 +251,10 @@ def build(args):
         if cache.exists():
             (audit/'.godot').mkdir()
             shutil.copyfile(cache, audit/'.godot/global_script_class_cache.cfg')
-        request = {'pack': str(player_pack), 'inventory': {p: h06.payload(raw) for p, raw in player.items()},
+        request = {'pack': str(seed_pack), 'inventory': {p: h06.payload(raw) for p, raw in player.items()},
                    'settings': {k: {'tag': struct.unpack_from('<I', v)[0], 'value': h06.setting_value(v)} for k, v in settings.items()},
-                   'verification_namespace': namespaces['verification'], 'verification_pck': str(layouts['verification'][2]),
-                   'settings_output': str(work/'verification.binary'),
+                   'roles': {role: {'namespace': ns, 'pck': str(layouts[role][2]),
+                                    'settings_output': str(work/(role + '.binary'))} for role, ns in namespaces.items()},
                    'qa': {p: str(ROOT/p[6:]) for p in h06.CONTRACT['qa_resources']},
                    'report': str(work/'public-api-audit.json'), 'license_output': str(work/'godot-license.txt'),
                    'third_party_output': str(work/'godot-third-party.json')}
