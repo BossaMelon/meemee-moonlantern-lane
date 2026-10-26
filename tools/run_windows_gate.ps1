@@ -387,7 +387,7 @@ else:
         $mainProbe=Join-Path $ownedRoot 'source-main-probe.gd'
         $mainBinding=Join-Path $ReportDirectory 'main-source-binding.json'
         $mainProfile='MoonlanternH07Source/'+[guid]::NewGuid().ToString('N')+'/verify'
-        $null=Invoke-Owned $python @($mainHelper,'prepare',$source,$mainBinding,$mainSource,$mainProfile,$mainProbe,$sha) $source 60 'main-prepare'
+        $null=Invoke-Owned $python @('-B',$mainHelper,'prepare',$source,$mainBinding,$mainSource,$mainProfile,$mainProbe,$sha) $source 60 'main-prepare'
         $mainImportLog=Join-Path $ReportDirectory 'main-import-engine.log'
         $null=Invoke-Owned $engine @('--headless','--path',$mainSource,'--import','--log-file',$mainImportLog) $mainSource 120 'main-import' $mainImportLog
         $previousMainEnvironment=@{}
@@ -400,7 +400,7 @@ else:
                 $mainLog=Join-Path $ReportDirectory ('main-'+$mode+'-engine.log')
                 $label='main-'+$mode
                 $null=Invoke-Owned $engine @('--headless','--path',$mainSource,'--log-file',$mainLog,'--script',$mainProbe) $mainSource 120 $label $mainLog
-                $null=Invoke-Owned $python @($mainHelper,'validate',$source,$mainBinding,$mode,$env:MOON_DEMO_REPORT,(Join-Path $ReportDirectory 'executions.json'),$label,$engineDir) $source 60 ($label+'-validate')
+                $null=Invoke-Owned $python @('-B',$mainHelper,'validate',$source,$mainBinding,$mode,$env:MOON_DEMO_REPORT,(Join-Path $ReportDirectory 'executions.json'),$label,$engineDir) $source 60 ($label+'-validate')
             }
         } finally {
             foreach ($key in $previousMainEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key,$previousMainEnvironment[$key],'Process') }
