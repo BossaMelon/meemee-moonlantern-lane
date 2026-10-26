@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "engine_version": "4.7.2.stable.official.ed1daf0bf",
+  "template_archive": {
+    "bytes": 1281349702,
+    "sha256": "f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011"
+  },
+  "main_scene": "res://scenes/main.tscn",
+  "main_script": "res://game/ui/main.gd",
+  "default_save_path": "user://profiles/rain-night-v1/moonlantern.json",
+  "qa_autoload_key": "autoload/H06NativeQA",
+  "qa_autoload_value": "*res://tests/native/qa_autoload.gd",
+  "qa_resources": [
+    "res://tests/native/qa_autoload.gd",
+    "res://tests/native/qa_autoload.gd.uid"
+  ],
+  "profiles": {
+    "release_headless": [
+      "P08-ARTIFACT-IDENTITY",
+      "P08-PACKAGE-PARITY",
+      "P08-RESOURCES-LICENSES",
+      "P08-PLAYER-STARTUP",
+      "P08-MAIN-DEFAULT-FRESH",
+      "P08-UI-BUY-ONCE",
+      "P08-UI-SAVE-EXIT",
+      "P08-AUTORESTORE-PREINPUT",
+      "P08-SECOND-UI-EXIT",
+      "P08-ISOLATION-CLEANUP"
+    ],
+    "mac_release_rendered": [
+      "P08-ARTIFACT-IDENTITY",
+      "P08-PACKAGE-PARITY",
+      "P08-RESOURCES-LICENSES",
+      "P08-PLAYER-STARTUP",
+      "P08-MAIN-DEFAULT-FRESH",
+      "P08-UI-BUY-ONCE",
+      "P08-UI-SAVE-EXIT",
+      "P08-AUTORESTORE-PREINPUT",
+      "P08-SECOND-UI-EXIT",
+      "P08-ISOLATION-CLEANUP",
+      "P08-NATIVE-VIEWPORT"
+    ]
+  },
+  "export_policy": {
+    "script_export_mode": 0,
+    "editor/export/convert_text_resources_to_binary": false,
+    "embedded_pck": false
+  },
+  "required_resources": [
+    "res://assets/SOURCES.md",
+    "res://assets/pixel/SOURCES.md",
+    "res://assets/pixel/manifest.json",
+    "res://assets/fonts/font-manifest.json",
+    "res://assets/fonts/noto-sans-sc/OFL.txt",
+    "res://assets/fonts/noto-sans-sc/NOTICE.txt"
+  ],
+  "route": [
+    "world_lane",
+    "world_stall",
+    "batch_1",
+    "buy_flour",
+    "sheet_close",
+    "pause",
+    "save",
+    "quit"
+  ],
+  "deadlines": {
+    "ready_seconds": 15,
+    "action_seconds": 5,
+    "exit_seconds": 10,
+    "process_seconds": 90,
+    "focus_seconds": 5,
+    "draw_seconds": 5
+  },
+  "upload_allowlist": [
+    "native-result.json",
+    "build-metadata.json",
+    "fixture-report.json",
+    "capability-version.log",
+    "capability-help.log",
+    "player-process.json",
+    "player-process.log",
+    "player-engine.log",
+    "purchase_save-observation.json",
+    "purchase_save-inputs.jsonl",
+    "purchase_save-process.json",
+    "purchase_save-process.log",
+    "purchase_save-engine.log",
+    "restore_exit-observation.json",
+    "restore_exit-inputs.jsonl",
+    "restore_exit-process.json",
+    "restore_exit-process.log",
+    "restore_exit-engine.log"
+  ],
+  "local_only": [
+    "manifest.json",
+    "purchase_save-request.json",
+    "restore_exit-request.json",
+    "restore-expected.json",
+    "fresh-main.png",
+    "after-buy.png",
+    "paused-saved.png",
+    "restored-before-input.png"
+  ],
+  "windows_helper": {
+    "path": "tools/windows_process.ps1",
+    "protocol": "h06-owned-process-v1",
+    "parameters": [
+      "-RequestPath",
+      "-ResultPath"
+    ],
+    "required_semantics": [
+      "create_suspended",
+      "assign_job_before_resume",
+      "kill_on_job_close",
+      "wait_active_processes_zero",
+      "host_timeout",
+      "no_unowned_signals"
+    ]
+  }
+}
