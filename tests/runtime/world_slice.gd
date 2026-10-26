@@ -31,8 +31,8 @@ func _enter_tree():
 	var version = Engine.get_version_info()
 	var version_text = "%d.%d.%d.%s.%s.%s" % [version.major, version.minor, version.patch, version.status, version.build, str(version.hash).substr(0, 9)]
 	report = {"kind":"world-source-headless-observation", "status":"failed", "nonce":request.nonce, "source_commit":request.source_commit, "pid":OS.get_process_id(), "engine_version":version_text, "mode":request.mode, "namespace":ProjectSettings.get_setting("application/config/custom_user_dir_name", ""), "user_dir":OS.get_user_data_dir(), "save_path":"", "main_scene":"", "main_script":"", "ready_seen":false, "current_scene_matches":false, "display":DisplayServer.get_name(), "inputs":[], "screenshots":[], "failures":[], "ws07_passed":false, "snapshot":{}, "geometry":{}, "files":{}}
-	report.merge({"stage":request.stage, "checkpoints":[], "trajectory":[], "events":[], "actions":[], "intents":[], "quit_input_dispatched":false})
-	if request.stage not in ["inspect", "first-manual", "first-auto", "restore-exit"] or DisplayServer.get_name() != "headless":
+	report.merge({"stage":request.stage, "checkpoints":[], "trajectory":[], "events":[], "actions":[], "intents":[], "waves":[], "batches":[], "scroll":[], "combat_events":[], "dish_carry_trips":0, "quit_input_dispatched":false})
+	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != "headless":
 		fail("unsupported stage/display; rendered WS07 is not enabled")
 		return
 	if report.namespace != request.namespace or report.user_dir != request.user_dir or not ProjectSettings.get_setting("application/config/use_custom_user_dir", false):
@@ -52,10 +52,17 @@ func _enter_tree():
 	if input_trace == null:
 		fail("cannot create input trace")
 		return
+	# Godot desktop ScrollContainer uses this declared synthetic-touch mode.
+	# It changes input routing only, never geometry, clocks or product state.
+	if request.stage != "inspect": Input.emulate_touch_from_mouse = request.mode == "touch"
+	report.desktop_touch_emulation = Input.emulate_touch_from_mouse
 	get_tree().node_added.connect(observe_node)
 	inspect_main.call_deferred()
 
 func observe_node(node: Node):
+	if node.has_signal("action_events") and node.get_script() != null and node.get_script().resource_path == "res://game/expedition/expedition_panel.gd":
+		node.action_events.connect(func(events):
+			for event in events: report.combat_events.append({"event":event.duplicate(true),"input_count":report.inputs.size(),"elapsed_ms":Time.get_ticks_msec()-started_ms}))
 	if node.scene_file_path != MAIN_SCENE: return
 	if ui != null:
 		fail("multiple natural Main nodes")
@@ -103,6 +110,7 @@ func inspect_main():
 		if not restore_barrier(): return
 		await quit_from_pause()
 	else:
+		if request.stage.begins_with("night-") and not await configure_menu(): return
 		await first_loop()
 
 func observe_geometry() -> Dictionary:
@@ -206,6 +214,7 @@ func file_state(path: String) -> Dictionary:
 func save_files() -> Dictionary: return {"primary":file_state(SAVE_PATH),"backup":file_state(SAVE_PATH + ".bak")}
 
 func checkpoint(label: String):
+	if not check(ui.game.validate_snapshot(ui.game.snapshot()).is_empty(), "invalid product snapshot at " + label): return
 	report.checkpoints.append({"name":label,"elapsed_ms":Time.get_ticks_msec()-started_ms,"input_count":report.inputs.size(),"snapshot":ui.game.snapshot(),"files":save_files()})
 	write_report()
 
@@ -376,6 +385,7 @@ func first_loop():
 	checkpoint("ready")
 	await interact("prep","take")
 	if not await wait_for(func(): return same(view().world.carried_uids,job.output_uids),1000,"ready dish UIDs carried"): return
+	report.dish_carry_trips += 1
 	if not await walk_to("door-bell"): return
 	await interact("door-bell","open_shop")
 	if not await wait_for(func(): return view().phase == "trading" and not view().world.customers.is_empty(),1000,"real arriving customers"): return
@@ -412,8 +422,10 @@ func first_loop():
 	var observed_events: Array = report.events + after.events
 	if not check(observed_events.any(func(e): return e.get("type") == "sale" and e.get("order_id") == order.id and e.get("uid") == sale.uid) and observed_events.any(func(e): return e.get("type") == "served" and e.get("order_id") == order.id), "authoritative sale/served events not observed"): return
 	report.first_sale = sale.duplicate(true); report.first_income_ms = Time.get_ticks_msec()-started_ms
+	report.first_batch = {"recipe":job.recipe_id,"quantity":job.output_uids.size(),"manual_dish_trips":report.dish_carry_trips}
 	checkpoint("first-sale")
-	await save_and_exit("after-sale")
+	if request.stage.begins_with("night-"): await complete_night()
+	else: await save_and_exit("after-sale")
 
 func save_at(boundary: String) -> bool:
 	if failed: return true
@@ -424,6 +436,9 @@ func save_at(boundary: String) -> bool:
 func click_control(id: String, exiting: bool = false):
 	if not check(ui.has_method("get_action_control"), "P11 control locator unavailable"): return
 	var control = ui.get_action_control(id)
+	await activate_control(control,id,exiting)
+
+func activate_control(control: Variant, id: String, exiting: bool = false):
 	if not check(is_instance_valid(control) and control is Button and control.is_visible_in_tree() and not control.disabled, "actual enabled control missing: " + id): return
 	if request.mode == "pad":
 		var visited: Dictionary = {}
@@ -437,6 +452,7 @@ func click_control(id: String, exiting: bool = false):
 		if not check(get_window().gui_get_focus_owner() == control, "pad control not focused"): return
 		await dispatch_event(pad_button(JOY_BUTTON_A,true)); send_event(pad_button(JOY_BUTTON_A,false))
 	else:
+		if not await scroll_to_control(control): return
 		var position = pointer_position(control, control.size/2)
 		if failed: return
 		if request.mode == "touch":
@@ -468,3 +484,265 @@ func quit_from_pause():
 	report.snapshot = ui.game.snapshot(); report.files = save_files(); report.status = "exit_requested"; report.quit_input_dispatched = true
 	write_report()
 	await click_control("quit",true)
+
+func scroll_to_control(control: Control) -> bool:
+	var ancestor = control.get_parent()
+	while ancestor != null and not ancestor is ScrollContainer: ancestor = ancestor.get_parent()
+	if ancestor == null: return true
+	var scroll: ScrollContainer = ancestor
+	var before = ui.game.snapshot()
+	for attempt in range(40):
+		var clip = scroll.get_global_rect().intersection(get_window().get_visible_rect()).grow(-6)
+		var rect = control.get_global_rect()
+		if clip.has_point(rect.get_center()):
+			return check(same(before,ui.game.snapshot()), "scrolling changed authoritative book state")
+		var direction = 1 if rect.get_center().y > clip.get_center().y else -1
+		report.scroll.append({"control":str(control.get_meta("action_id","")),"attempt":attempt,"value":scroll.scroll_vertical,"clip":[clip.position.x,clip.position.y,clip.size.x,clip.size.y],"target":[rect.position.x,rect.position.y,rect.size.x,rect.size.y]})
+		if request.mode == "touch":
+			# Start on a real visible label/gap. Never tap a transaction button to scroll.
+			var point = Vector2.ZERO; var found = false
+			for label in scroll.find_children("*","Label",true,false):
+				var visible = label.get_global_rect().intersection(clip)
+				if visible.size.x < 8 or visible.size.y < 8: continue
+				var candidate = visible.get_center()
+				if (candidate.y-clip.position.y if direction > 0 else clip.end.y-candidate.y) >= 32:
+					point = candidate; found = true; break
+			if not check(found,"no visible non-action touch scroll origin"): return false
+			var distance = minf(112,(point.y-clip.position.y if direction > 0 else clip.end.y-point.y)-4)
+			var origin = get_window().get_final_transform()*point
+			await dispatch_event(touch_event(origin,true,7))
+			var last = origin
+			for step in range(1,7):
+				var drag = InputEventScreenDrag.new(); drag.index = 7
+				drag.position = get_window().get_final_transform()*(point-Vector2(0,direction*distance*step/6.0)); drag.relative = drag.position-last; last = drag.position
+				await dispatch_event(drag)
+			var until = Time.get_ticks_msec()+250
+			while Time.get_ticks_msec() < until: await get_tree().process_frame
+			await dispatch_event(touch_event(last,false,7))
+		else:
+			var point = get_window().get_final_transform()*clip.get_center()
+			var motion = InputEventMouseMotion.new(); motion.position = point; motion.global_position = point; await dispatch_event(motion)
+			for down in [true,false]:
+				var wheel = InputEventMouseButton.new(); wheel.position = point; wheel.global_position = point
+				wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN if direction > 0 else MOUSE_BUTTON_WHEEL_UP; wheel.pressed = down; await dispatch_event(wheel)
+		await get_tree().process_frame
+	return check(false,"real scrolling did not reach control")
+
+func open_book(target: String) -> bool:
+	if not await walk_to(target): return false
+	var option = primary()
+	if not check(option.get("target_id") == target,"book is not actual primary: "+target): return false
+	await interact(target,option.action)
+	if not await wait_for(func(): return ui.world_controller.book_target == target and ui.world_controller.books.is_visible_in_tree() and view().paused,1000,"actual nearby book opened"): return false
+	for i in range(2): await get_tree().process_frame
+	return true
+
+func book_action(id: String, action: String, payload: Dictionary = {}) -> bool:
+	var count = report.actions.size(); var target = ui.world_controller.book_target
+	if not check(not target.is_empty() and view().paused,"book transaction requires actual paused book"): return false
+	await click_control(id)
+	if not await wait_for(func(): return report.actions.size() > count,1000,"actual book command: "+id): return false
+	var rows = report.actions.slice(count)
+	if not check(rows.size() == 1 and rows[0].kind == "world_interact" and same(rows[0].args,{"target_id":target,"action":action,"payload":payload}) and rows[0].result.get("ok",false),"book control emitted wrong/rejected/duplicate action: "+id): return false
+	for i in range(2): await get_tree().process_frame
+	return not failed
+
+func close_book() -> bool:
+	await click_control("book_close")
+	return await wait_for(func(): return ui.world_controller.book_target.is_empty() and not view().paused,1000,"book closes and restores unpaused world")
+
+func configure_menu() -> bool:
+	var desired = ["floating_pie","ember_soup"] if request.stage == "night-quick" else ["floating_pie","moon_stew"]
+	if not await open_book("menu-board"): return false
+	for id in view().service.menu_priority.duplicate():
+		if id in desired: continue
+		var items = view().service.menu_priority.duplicate(); items.erase(id)
+		if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+	for id in desired:
+		if id not in view().service.menu_priority:
+			var items = view().service.menu_priority.duplicate(); items.append(id)
+			if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+		if view().tiers.get(id,"standard") != request.tier:
+			var tiers = view().tiers.duplicate(); tiers[id] = request.tier
+			if not await book_action("menu_price_"+id+"_"+request.tier,"menu",{"item_ids":view().service.menu_priority.duplicate(),"tiers":tiers}): return false
+	if not check(same(view().service.menu_priority,desired),"actual menu differs from route"): return false
+	return await close_book()
+
+func travel(region: String) -> bool:
+	if view().world.region_id == region: return true
+	var portal = "shop-exit" if region == "lane" else "lane-home"
+	if not await walk_to(portal): return false
+	var before = view(); await interact(portal,"enter")
+	if not await wait_for(func(): return view().world.region_id == region,1000,"actual portal transition"): return false
+	return check(view().day == before.day and view().cash == before.cash and same(view().world.carried_uids,before.world.carried_uids),"portal changed day/cash/carried UIDs")
+
+func bag_count(id: String) -> int:
+	return view().items.filter(func(item): return item.item_id == id and item.location == "bag").size()
+
+func purchase(purchases: Dictionary) -> bool:
+	if not await travel("lane") or not await open_book("vendor"): return false
+	for id in purchases:
+		var remaining = int(purchases[id])
+		while remaining > 0:
+			var quantity = 6 if remaining >= 6 else (3 if remaining >= 3 else 1)
+			var offers = view().supply.filter(func(item): return item.item_id == id)
+			if not check(offers.size() == 1,"actual supply item missing: "+id): return false
+			var before = view(); var count = bag_count(id); var cost = int(offers[0].buy)*quantity
+			if not await book_action("buy_"+id+"_"+str(quantity),"buy",{"item_id":id,"quantity":quantity}): return false
+			if not check(bag_count(id) == count+quantity and view().cash == before.cash-cost and view().cash >= 0,"actual supply/cash delta differs"): return false
+			remaining -= quantity
+	if not await close_book(): return false
+	return await travel("shop")
+
+func prepare_batch(recipe: String, quantity: int, relay: bool = false) -> bool:
+	if not check(view().world.carried_uids.is_empty() and station().input_uids.is_empty() and station().output_uids.is_empty() and station().job == null,"batch starts with empty hands/station"): return false
+	if not await open_book("recipe-book"): return false
+	if view().world.plan.recipe_id != recipe:
+		if not await book_action("plan_recipe_"+recipe,"plan",{"recipe_id":recipe,"quantity":view().world.plan.quantity}): return false
+	if int(view().world.plan.quantity) != quantity:
+		if not await book_action("plan_quantity_"+str(quantity),"plan",{"recipe_id":recipe,"quantity":quantity}): return false
+	if not await close_book(): return false
+	var recipes = view().recipes.filter(func(row): return row.recipe_id == recipe)
+	if not check(recipes.size() == 1,"actual recipe missing"): return false
+	var inputs: Dictionary = recipes[0].inputs; var units = 0
+	for amount in inputs.values(): units += int(amount)
+	var input_uids: Array = []; var input_cost = 0; var counts: Dictionary = {}
+	for trip in range(3):
+		if input_uids.size() == quantity*units: break
+		if not await walk_to("pantry"): return false
+		var taken = await interact("pantry","take")
+		if failed: return false
+		if not await wait_for(func(): return same(view().world.carried_uids,taken.payload.uids),1000,"actual ingredient bundle"): return false
+		for uid in taken.payload.uids:
+			var rows = view().items.filter(func(item): return item.uid == uid)
+			if not check(uid not in input_uids and rows.size() == 1 and rows[0].item_id in inputs,"bundle UID duplicated or unexpected"): return false
+			input_uids.append(uid); input_cost += int(rows[0].cost); counts[rows[0].item_id] = counts.get(rows[0].item_id,0)+1
+		if not await walk_to("prep"): return false
+		await interact("prep","put")
+		if not await wait_for(func(): return view().world.carried_uids.is_empty() and same(station().input_uids,input_uids),1000,"all original UIDs loaded once"): return false
+	for id in inputs:
+		if not check(counts.get(id,0) == int(inputs[id])*quantity,"loaded ingredients differ from requested full batch"): return false
+	var before_cash = view().cash; var trips_before = report.dish_carry_trips
+	await interact("prep","cook")
+	if failed: return false
+	if not check(station().job is Dictionary and station().job.output_uids.size() == quantity,"actual batch job missing/wrong quantity"): return false
+	var job = station().job.duplicate(true); var tick = int(view().world.tick)
+	if not await wait_for(func(): return station().job == null,4000,"actual batch cooking completes"): return false
+	var events: Array = report.events + view().events
+	if not check(events.any(func(e): return e.get("type") == "cooking_ready" and e.get("job_id") == job.id and (int(e.tick)-tick)*50 == job.remaining_ms),"actual batch completion tick missing/differs"): return false
+	var dishes = view().items.filter(func(item): return item.uid in job.output_uids)
+	var output_cost = 0
+	for item in dishes: output_cost += int(item.cost)
+	if not check(dishes.size() == quantity and dishes.all(func(item): return item.item_id == recipes[0].output) and output_cost == input_cost and not view().items.any(func(item): return item.uid in input_uids),"cooked UID/count/cost conservation failed"): return false
+	if relay:
+		if not await wait_for(func(): return station().output_uids.is_empty() and view().items.filter(func(item): return item.uid in job.output_uids and item.location == "shelf").size() == quantity,1000,"earned shelf relays actual dishes"): return false
+		if not check(view().world.carried_uids.is_empty() and report.dish_carry_trips == trips_before,"relay needed manual dish carry"): return false
+	else:
+		await interact("prep","take")
+		if not await wait_for(func(): return same(view().world.carried_uids,job.output_uids),1000,"batch dishes actually carried"): return false
+		report.dish_carry_trips += 1
+		if not await walk_to("pass"): return false
+		await interact("pass","put")
+		if not await wait_for(func(): return view().world.carried_uids.is_empty(),1000,"actual pass deposit"): return false
+	if not check(view().cash == before_cash,"preparation created cash before customer delivery"): return false
+	report.batches.append({"day":view().day,"recipe":recipe,"quantity":quantity,"input_uids":input_uids,"output_uids":job.output_uids,"input_cost":input_cost,"output_cost":output_cost,"manual_dish_trips":report.dish_carry_trips-trips_before,"relay":relay})
+	return true
+
+func finish_wave(index: int) -> bool:
+	var before = view(); var wave = before.service.wave_id
+	if not check(before.phase == "trading" and int(before.service.wave_index) == index,"wrong real wave start"): return false
+	if not await wait_for(func(): return view().phase in ["intermission","closing"],100000,"normal wall-clock wave completion"): return false
+	var after = view(); var rows = after.sales.filter(func(s): return s.wave_id == wave)
+	var paid = rows.filter(func(s): return s.get("revenue",0) > 0); var revenue = 0; var seen: Dictionary = {}
+	for sale in rows:
+		if not check(not seen.has(sale.order_id) and sale.get("tip",0) == 0,"duplicate order/payment or tip-dependent night"): return false
+		seen[sale.order_id] = true; revenue += int(sale.get("revenue",0))
+	var interval_revenue = 0
+	for sale in after.sales.slice(before.sales.size()): interval_revenue += int(sale.get("revenue",0))
+	if not check(rows.size() == (3 if index == 1 else 4) and not paid.is_empty() and after.cash-before.cash == interval_revenue and after.service.reservations.is_empty() and after.service.orders.all(func(o): return o.status in ["delivered","left"]),"actual wave cash/order/reservation reconciliation failed"): return false
+	report.waves.append({"wave_id":wave,"paid":paid.size(),"left":rows.size()-paid.size(),"revenue":revenue,"cash":after.cash,"held_uids":after.service.held_uids.duplicate(),"elapsed_ms":Time.get_ticks_msec()-started_ms})
+	checkpoint("wave-%d-complete" % index)
+	return not failed
+
+func start_next_wave(index: int) -> bool:
+	if not await walk_to("door-bell"): return false
+	var next = view().service.next_wave_id
+	await interact("door-bell","start_wave")
+	return await wait_for(func(): return view().phase == "trading" and view().service.wave_id == next and int(view().service.wave_index) == index,1000,"real next wave bell")
+
+func complete_night():
+	if not await finish_wave(1): return
+	if request.stage == "night-quick":
+		if not await purchase({"flour":4,"pumpkin":6,"ember_herb":2}) or not await prepare_batch("floating_pie",2): return
+	else:
+		if not await purchase({"pumpkin":4,"cream":4}) or not await prepare_batch("moon_stew",4): return
+	if not await start_next_wave(2) or not await finish_wave(2): return
+	if request.stage == "night-quick":
+		if not await prepare_batch("floating_pie",2) or not await prepare_batch("ember_soup",2): return
+	else:
+		if not check(view().service.held_uids.size() == 2 and view().items.filter(func(i): return i.uid in view().service.held_uids).all(func(i): return i.item_id == "moon_stew" and i.temperature == "held"),"hot route did not preserve two real warm portions"): return
+	if not await start_next_wave(3) or not await finish_wave(3): return
+	if not await open_book("ledger") or not await book_action("settle","settle"): return
+	if not check(view().phase == "settled" and view().cash >= 125 and ui.game.snapshot().daily_recovery == 0 and view().sales.all(func(s): return s.get("tip",0) == 0),"normal night cannot fund growth and basics without recovery/tips"): return
+	checkpoint("settled")
+	var upgrade = request.growth; var offered = view().upgrades.filter(func(row): return row.upgrade_id == upgrade)
+	if not check(offered.size() == 1 and offered[0].available,"earned upgrade not actually available"): return
+	var cash = view().cash
+	if not await book_action("upgrade_"+upgrade,"upgrade",{"upgrade_id":upgrade}): return
+	if not check(upgrade in ui.game.snapshot().upgrades and upgrade not in view().active_upgrades and view().cash == cash-int(offered[0].cost),"upgrade purchase not deferred/cash-exact"): return
+	checkpoint("upgrade-purchased")
+	if not await book_action("next_day","next_day"): return
+	if not check(view().day == 2 and view().phase == "preparation" and upgrade in view().active_upgrades,"next morning did not activate purchased upgrade"): return
+	checkpoint("next-morning")
+	# P11 next_day closes the ledger itself; observe that actual transition.
+	if not await wait_for(func(): return ui.world_controller.book_target.is_empty() and not view().paused,1000,"next morning leaves ledger"): return
+	if not await purchase({"flour":3,"pumpkin":3}) or not await prepare_batch("floating_pie",3,upgrade == "shelf"): return
+	if upgrade == "shelf" and not check(report.first_batch.recipe == report.batches.back().recipe and report.first_batch.quantity == report.batches.back().quantity and report.first_batch.manual_dish_trips > report.batches.back().manual_dish_trips,"observed relay batch did not reduce manual dish trips"): return
+	if upgrade == "field_kit" and not await demonstrate_fan(): return
+	report.growth = {"upgrade":upgrade,"day":view().day,"demonstrated":true,"active_upgrades":view().active_upgrades.duplicate(),"last_batch":report.batches.back().duplicate(true),"baseline_first_batch":report.first_batch.duplicate(true),"combat_event_count":report.combat_events.size()}
+	checkpoint("growth-demonstrated")
+	await save_and_exit("growth")
+
+func demonstrate_fan() -> bool:
+	if not await open_book("recipe-book") or not await book_action("equip_fan_wand","equip_weapon",{"weapon_id":"fan_wand"}): return false
+	if not check(view().progression.equipped_weapon == "fan_wand","earned fan not equipped"): return false
+	if not await close_book() or not await travel("lane") or not await walk_to("garden-gate"): return false
+	var portals = view().world.geometry.portals.filter(func(p): return p.id == "garden-gate")
+	if not check(portals.size() == 1 and portals[0].get("return") is Dictionary,"authoritative garden return anchor unavailable"): return false
+	var expected_return: Dictionary = portals[0]["return"].duplicate(true)
+	await interact("garden-gate","enter")
+	if not await wait_for(func(): return view().phase == "expedition" and is_instance_valid(ui.world_controller.battle_panel),2000,"actual reused garden scene"): return false
+	var panel = ui.world_controller.battle_panel
+	if not check(panel.is_visible_in_tree() and panel.has_method("touch_radius"),"actual E02 panel/input geometry unavailable"): return false
+	var count = report.combat_events.size()
+	if request.mode == "mouse":
+		send_event(key_event(KEY_RIGHT,true)); send_event(key_event(KEY_J,true))
+	elif request.mode == "pad":
+		var aim = InputEventJoypadMotion.new(); aim.axis = JOY_AXIS_RIGHT_X; aim.axis_value = 1; send_event(aim); send_event(pad_button(JOY_BUTTON_A,true))
+	else:
+		var centers: Dictionary = panel._centers()
+		send_event(touch_event(pointer_position(panel,centers.aim),true,4))
+		var drag = InputEventScreenDrag.new(); drag.index = 4; drag.position = pointer_position(panel,centers.aim+Vector2(panel.touch_radius("aim"),0)); send_event(drag)
+		send_event(touch_event(pointer_position(panel,centers.cast),true,5))
+	if not await wait_for(func(): return report.combat_events.slice(count).any(func(row): return row.event.get("type") == "cast" and row.event.get("weapon_id") == "fan_wand" and row.event.get("projectile_count") == 3),3000,"real earned fan casts three projectiles"): return false
+	if request.mode == "mouse":
+		send_event(key_event(KEY_RIGHT,false)); send_event(key_event(KEY_J,false))
+	elif request.mode == "pad":
+		var aim = InputEventJoypadMotion.new(); aim.axis = JOY_AXIS_RIGHT_X; aim.axis_value = 0; send_event(aim); send_event(pad_button(JOY_BUTTON_A,false))
+	else:
+		var centers: Dictionary = panel._centers()
+		send_event(touch_event(pointer_position(panel,centers.aim),false,4)); send_event(touch_event(pointer_position(panel,centers.cast),false,5))
+	if request.mode == "touch": await activate_control(panel.pause_button,"battle-pause")
+	else:
+		send_event(key_event(KEY_ESCAPE,true) if request.mode == "mouse" else pad_button(JOY_BUTTON_START,true))
+		send_event(key_event(KEY_ESCAPE,false) if request.mode == "mouse" else pad_button(JOY_BUTTON_START,false))
+	if not await wait_for(func(): return view().paused,1000,"actual battle pause"): return false
+	await activate_control(panel.return_button,"battle-return")
+	if not await wait_for(func(): return view().phase == "preparation" and view().world.region_id == "lane",2000,"actual battle return"): return false
+	var expected_player = {"x":expected_return.x,"y":expected_return.y,"facing":expected_return.facing}
+	if not check(view().progression.equipped_weapon == "fan_wand" and view().world.region_id == expected_return.region_id and same(view().world.return_pose,expected_return) and same(view().world.player,expected_player),"growth/authoritative return pose changed on return"): return false
+	# Returning from a paused battle may preserve pause; resume through actual UI.
+	if view().paused:
+		await click_control("resume")
+		if not await wait_for(func(): return not view().paused,1000,"resume returned world"): return false
+	return true

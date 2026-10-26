@@ -1,14 +1,16 @@
 # P03 主场景运行验收
 
-## V02 world 切片：监督器与观察入口
+## V02 world 切片：真实输入驱动与监督器
 
-`world_slice.py` 提供 **Mac 源码 headless 观察与首段输入诊断**，不能通过 WS07。
+`world_slice.py` 提供 **Mac 源码 headless 观察、首段和整夜输入诊断**，不能通过 WS07。
 它拒绝旧 rain-night 默认值，要求固定完整提交及与该提交一致的监督器/复用 helper；
 在全新目录导出 Git tree，先独立观测 OS user-data 位置，再用 Node autoload 观察自然
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
 窗口/控件布局，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
 world view、P11 world_play/world_input；**首次生产路线执行仍待总协调给出固定组合候选**。
+后续候选必须包含 Core `a060e920ec12de15af38d9cfc389cc566deef931`（或其后继），入口
+检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
 
 ```sh
 python3 -m unittest discover -s tests/runtime -p 'test_world_slice.py' -v
@@ -34,6 +36,25 @@ UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现�
 零输入的 ready/settled 快照和主备各自哈希必须一致，之后才按真实暂停页退出。
 手柄保存控件靠 D-pad 遍历当前焦点链；未知控件/焦点循环都失败，等待实际 P11 集成修正。
 
+整夜阶段为 `--stage night-quick` 或 `night-hot`，`--growth shelf|field_kit` 选择次晨
+成长，`--tier standard|premium` 通过实际菜单控件选择价格。整夜只接受 growth 保存边界
+（省略时自动选择），首段仍默认 after-sale。路线沿用 a060e92 的正常经营方案：首波
+实际自动出餐后，快捷路线采购4面粉/6南瓜/2暖焰草，再做浮空饼2+2和暖焰汤2；热食路线
+采购4南瓜/4奶油，制作炖锅4，核对真实 held 温热余餐跨波。按正常墙钟等待每波结束，
+逐波核对唯一订单、成交/离开、现金、零小费及无在途残留，不跳时钟或调用 Core 推进。
+
+日结须实际资金至少125且未领取补助；点击账本购买110成长并迎接次晨，再采购和制作
+3份基础料理。shelf 分支观察同批真实UID自动进入出餐台、原料/产物成本守恒、无菜品手搬
+和无提前收入；报告列出首批3份曾实际手搬一次，但不把免费继承原料与付费原料称作同成本
+对照。field_kit 分支实际装备散射杖、步行入菇圃，注入各设备施法，要求 E02 实际 cast
+事件给出 fan_wand/3弹，再经暂停页返回真实巷道返回位姿，最后保存并独立重启。该短段
+仅验证获得武器的实际出手，不声称完成探险/击败敌人或取得掉落。
+
+册页选择和购买核对 Main 实际 action_completed 的唯一完整 payload/成功结果。鼠标靠
+真实滚轮，触屏从可见文本区域拖动，手柄依实际焦点链；不设置 scroll_vertical 或焦点。
+触屏入口显式启用并记录 Godot 桌面触摸模拟以走 ScrollContainer，产品状态仍须全量不变。
+整夜子进程有720秒总上限，各步另有导航/交互/100秒波次上限，所有未观测断言失败留证。
+
 输出目录和 namespace 都不可复用，即使之前失败或为空。实际源码默认应用目录须为
 `moonlantern-world-slice-v1`；仅在临时源副本以
 `MeeMeeMoonlanternLane-V02/<unique-id>/<mode>` 隔离 OS 目录，产品默认
@@ -52,7 +73,7 @@ preflight 成功仅为 `status=observed` / exit 0；首段双进程成功仅为
 实际输入通过声明。Python 合成观察和受控子进程测试仅证明监督器边界；缺少 P10/P11 时
 真实入口在启动产品前失败。WS01–06 继续由 Core 自动 runner 负责，WSH 必须是真人反馈。
 
-后续 WS07 仍需实跑并修正同候选三输入首段和各保存边界，补完整夜三波与次晨成长驱动；
+后续 WS07 仍需实跑并修正同候选三输入首段、各保存边界、整夜三波与次晨成长驱动；
 授权渲染时段再检查全屏/窄屏/镜头和 viewport PNG。当前仅语法/纯路径计算检查不算输入证据。
 不得通过 headless dummy、运动 probe 或旧 Q/P 套件替代。合成输入不证明实体设备。
 

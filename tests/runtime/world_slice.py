@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop_owned_group
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
+CORE_CHECKPOINT = "a060e920ec12de15af38d9cfc389cc566deef931"
 MAIN_SCENE = "res://scenes/main.tscn"
 MAIN_SCRIPT = "res://game/ui/main.gd"
 SAVE_RELATIVE = "profiles/world-slice-v1/moonlantern.json"
@@ -212,11 +213,18 @@ def validate_observation(obs, request, process):
         require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
     else:
         require("saved" in names and "paused-" + request["save_boundary"] in names, "requested real save boundary missing")
-        if request["save_boundary"] == "after-sale":
+        if request["save_boundary"] in ["after-sale", "growth"]:
             require(all(n in names for n in ["carrying", "cooking", "ready", "customer-arriving", "first-sale"]), "first-loop checkpoints missing")
             sale = obs.get("first_sale", {})
             require(sale.get("revenue", 0) > 0 and sale.get("paid_total") == sale.get("base_price",0)+sale.get("tip",0), "actual paid sale missing")
             require(sale.get("channel") == ("manual" if stage == "first-manual" else "floating"), "wrong first-loop delivery route")
+        if stage in ["night-quick", "night-hot"]:
+            require(request["save_boundary"] == "growth" and all("wave-%d-complete" % i in names for i in [1,2,3])
+                    and all(n in names for n in ["settled", "upgrade-purchased", "next-morning", "growth-demonstrated"]), "full night/growth checkpoints missing")
+            growth = obs.get("growth", {})
+            require(growth.get("upgrade") == request["growth"] and growth.get("demonstrated") is True
+                    and growth.get("day") == 2, "actual next-morning growth proof missing")
+            require(len(obs.get("waves", [])) == 3 and all(w["paid"] > 0 for w in obs["waves"]), "three actual paid waves missing")
 
 
 def save_pair(user):
@@ -242,7 +250,7 @@ def run_source(args):
     result = {"kind": "world-source-headless-preflight", "status": "failed",
               "source_commit": args.candidate, "ws07_passed": False, "wsh_observed": False,
               "processes": [], "evidence": {}, "errors": [],
-              "remaining": ["first execution against fixed P10/P11 candidate", "full night/growth route", "authorized rendered WS07", "human WSH"]}
+              "remaining": ["first execution against fixed P10/P11 candidate", "three-input full night/growth integration", "authorized rendered WS07", "human WSH"]}
     tracked = {}
     guards = {}
     def launch(label, command, timeout=35):
@@ -257,6 +265,8 @@ def run_source(args):
         require(sys.platform == "darwin", "This V02 source entry is Mac-only; no Windows ownership claim")
         candidate = resolve_candidate(ROOT, args.candidate)
         require(not git(ROOT, "status", "--porcelain").strip(), "commit the combined candidate before inspection")
+        git(ROOT, "merge-base", "--is-ancestor", CORE_CHECKPOINT, candidate)
+        result["minimum_core_checkpoint"] = CORE_CHECKPOINT
         for relative in OWN_SOURCES:
             require((ROOT / relative).read_bytes() == git(ROOT, "show", candidate + ":" + relative),
                     "running harness/helper differs from candidate: " + relative)
@@ -302,7 +312,7 @@ def run_source(args):
         for stage in (["inspect"] if args.stage == "inspect" else [args.stage,"restore-exit"]):
             request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
                        "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
-                       "save_boundary":args.save_boundary,"window_size":args.window_size,
+                       "save_boundary":args.save_boundary,"window_size":args.window_size,"growth":args.growth,"tier":args.tier,
                        "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
             if previous is not None:
                 expected = output / "restore-expected.json"; write_json(expected, previous)
@@ -310,7 +320,7 @@ def run_source(args):
             request_path = output / (stage + "-request.json"); write_json(request_path, request)
             flags = [] if args.window_size is None else ["--resolution", "x".join(map(str,args.window_size))]
             process = launch(stage, [engine, "--headless", *flags, "--max-fps", "60", "--path", source,
-                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], 150)
+                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], 720 if stage.startswith("night-") else 150)
             error_free(output / (stage + "-engine.log"))
             observation = read_json(output / (stage + "-observation.json"))
             validate_observation(observation, request, process)
@@ -354,8 +364,10 @@ def main():
     parser.add_argument("--godot", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--mode", choices=["mouse", "touch", "pad"], required=True)
-    parser.add_argument("--stage", choices=["inspect", "first-manual", "first-auto"], default="inspect")
-    parser.add_argument("--save-boundary", choices=["carrying", "cooking", "customer", "manual-reservation", "after-sale"], default="after-sale")
+    parser.add_argument("--stage", choices=["inspect", "first-manual", "first-auto", "night-quick", "night-hot"], default="inspect")
+    parser.add_argument("--save-boundary", choices=["carrying", "cooking", "customer", "manual-reservation", "after-sale", "growth"])
+    parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
+    parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
     parser.add_argument("--guard", type=Path, action="append", default=[], help="explicit archived/immutable file only; never active userdata")
     args = parser.parse_args()
@@ -363,6 +375,11 @@ def main():
         parser.error("input diagnostics require an explicit window size of at least 640x360; no runtime geometry setters")
     if args.stage == "first-auto" and args.save_boundary == "manual-reservation":
         parser.error("manual reservation boundary requires first-manual")
+    night = args.stage.startswith("night-")
+    if args.save_boundary is None:
+        args.save_boundary = "growth" if night else "after-sale"
+    if night != (args.save_boundary == "growth"):
+        parser.error("night stages require growth boundary; first-loop stages cannot claim growth")
     try:
         return run_source(args)
     except (ValueError, OSError) as error:
