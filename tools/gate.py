@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -49,8 +50,13 @@ def read_json(path: Path) -> dict:
         return result
     def nonfinite(value):
         raise GateError(f"non-finite JSON {value}: {path}")
+    def finite_float(value):
+        number = float(value)
+        require(math.isfinite(number), f"overflow/non-finite JSON number {value}: {path}")
+        return number
     try:
-        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique, parse_constant=nonfinite)
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique,
+                          parse_constant=nonfinite, parse_float=finite_float)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise GateError(f"invalid JSON {path}: {exc}") from exc
     require(isinstance(data, dict), f"JSON object required: {path}")
