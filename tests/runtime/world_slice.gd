@@ -105,7 +105,7 @@ func inspect_main():
 		return
 	var logical_size = request.get("headless_logical_size")
 	if logical_size != null:
-		if native or request.stage == "inspect" or not logical_size is Array or logical_size.size() != 2 or logical_size[0] < 640 or logical_size[1] < 360 or request.get("window_size") != null:
+		if request.get("native",false) or request.stage == "inspect" or not logical_size is Array or logical_size.size() != 2 or logical_size[0] < 640 or logical_size[1] < 360 or request.get("window_size") != null:
 			fail("invalid explicit headless logical preparation"); return
 		var root = get_tree().root
 		var before = observe_geometry()

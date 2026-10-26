@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """V02 source diagnostics; native first-loop preview is never WS07 completion.
 
-Route execution awaits a fixed P10/P11 candidate and an explicitly requested
-CLI resolution, checked against the actual window before any injected input.
+Route execution requires a fixed P10/P11 candidate and an explicitly requested
+CLI resolution or separately recorded headless logical Root preparation.
 Native preview requires a separately authorized slot, fresh foreground reads,
 and the shared render lock. No OS input or activation commands are used.
 """
