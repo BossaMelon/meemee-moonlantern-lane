@@ -92,6 +92,18 @@
 
 `rain-scene-native.png`为960×540原生合成；`rain-scene-scale.png`按冻结E02的角色2倍、长桩1倍展示比例。`rain-scene-layout.png`青线表示本组准确模型边界、粉线表示未修改的圆/短障碍参考、土色细线表示route事实源；这些标线不进入任何运行时资产。`rain-scene-logs-native.png`与`rain-scene-logs-3x.png`检查两版长桩。所有文件位于 `preview/`，不是完整地图截图，未包含所有现有动态物件，不能证明交互、碰撞、遮挡、真实viewport或趣味通过。
 
+## 咩咩四方向行走小包
+
+旧 `meemee_walk_se/sw/ne/nw` 是单姿态，保留原PNG/ID，不把旧姿态切换当步行动画。新帧为 `meemee_walk_<se|sw|ne|nw>_<01|02|03|04>`，共16件；每帧48×64，pivot统一`[24,61]`，专用图集 `atlases/meemee_walk_cycle.png` 为192×256（行顺序SE、SW、NE、NW，列顺序01–04）。
+
+`manifest.animations.meemee_walk_<direction>_cycle`分别列出本方向四帧、`duration_ms=[125,125,125,125]`、`loop=true`、停止参考帧和暂停策略。顺序是接触A→过渡A→另一脚接触B→过渡B；每循环500ms是首版表现初值，不改变世界移动速度或经营合同。由UI根据实际位移播放，站住时停止并可用同方向旧单姿态，暂停时冻结帧相位。绘制仍使用世界脚点减当前帧pivot；旧idle的pivot为`[24,59]`，切换时也应读取各帧pivot，不直接复用纹理左上角。
+
+SE/NE来自image_gen生成的真实四姿态；SW/NW由对应完整循环水平镜像派生，不在一个循环内来回换方向。来源和裁切见 `meemee-walk-provenance.json`、像素目录 `SOURCES.md` 与manifest逐帧`export`/`derived_from`。每个源clip统一缩放，不逐帧伸缩身体；对齐头部横向中心及落地鞋底。共享32色、nearest、硬透明和透明RGB清零与原包一致。源SE初稿重复同侧落脚，仅留恢复点，实际导出使用定向修正的v2。
+
+只更新本组：`python3 assets/pixel/build.py --walk-only`。`verify.py`可传16个新ID检查编码/图集/引用；`python3 assets/pixel/verify_meemee_walk.py`检查四帧独立、相邻下肢变化（含04→01闭环）、接触脚交替、裁切无截断、镜像来源与锚点。当前脚底边界均y=61；头部横向范围≤1px、纵向起伏≤2px。数值检查与实际看图共同作为素材证据，不能证明世界位移速度与步频已经匹配。
+
+联系表、四方向GIF及指标放在本地Git-ignored且带`.gdignore`的 `assets/pixel/evidence/meemee-walk/`；可由构建重现，不提交成运行素材。`contact-native.png`首列是旧单姿态，之后是四帧；`contact-3x.png`便于检查像素；`four-directions.gif`只有原地姿态循环，无模拟地图移动。未改背景/floor/UI/Core，也未启动游戏前台。真实运动手感、与拿放/出餐动作切换、是否滑步仍需UI接入及真人probe验证；此包不代表最终美术品质完成。
+
 ## 重建与检查
 
 需要 Python 3 与 Pillow（本次实际 Python 3.12.14 / Pillow 12.3.0），运行 `python3 assets/pixel/build.py`，再运行 `python3 assets/pixel/verify.py`。本机可用 bundled Python；不需要在线生成或 API key。构建只做已有生成原稿的裁切、最近邻缩放、固定色板导出、硬透明处理与图集打包，不生成替代美术。`source/`、`preview/` 带 `.gdignore`，不参与游戏资源导入。
