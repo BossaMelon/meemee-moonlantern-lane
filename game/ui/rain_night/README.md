@@ -61,3 +61,18 @@ python3 tools/with_render_lock.py -- Godot --fullscreen --path . --script game/u
 `native` 只验证呈现整改，复用真实经营流程到次晨装备即保存退出，不进入战斗。历史和投资区使用实际鼠标滚轮 InputEvent 导航，不能直接改滚动值或发 pressed。根窗口原图不后期缩放，逐图记录 Window/DisplayServer mode、尺寸、screen DPI/scale、stretch 与 PNG/UI 坐标映射、真实窗口焦点与焦点控件；focus signals 单独留在同一报告。等待 frame_post_draw 超过5秒即报告失败退出。用 `--windowed --resolution 844x390` 启动并在输出目录后附 `--small` 检查小窗口。headless 调用仅为无图的布局预检，不充当原生证据。原生运行必须先获负责人时段分配，再用全程共享锁串行执行。
 
 完整三输入、料理效果实战、稀材和退出恢复由 P06 runtime suite 验证；这些定向检查不自行声称 Q06、实体设备或趣味通过。
+
+
+### P09：经营阶段指引
+
+热点名称与既有阶段句同时显示；打开册页或显示短时反馈时，阶段句暂时隐藏，反馈结束后恢复。保持现有Label输入忽略和无焦点，不加教程状态或存档字段。
+
+定向检查（调用者先创建独立的空临时目录，分别使用mouse、touch、pad）：
+
+```sh
+GODOT --headless --path PROJECT --script game/ui/checks/phase_guidance.gd -- mouse ABS_FRESH_OUTPUT
+```
+
+报告为`ABS_FRESH_OUTPUT/phase-guidance.json`；exit0通过，exit1断言失败，exit2入口或报告写入失败。真实Mouse/ScreenTouch/D-pad/A/B检查初始deferred焦点、等待、账本返回、阶段切换和真实反馈到期。day2特殊委托由挂载前合法核心夹具建立，与输入证据分开；挂载后导航不发经济命令。每个Main在挂载前只把save_path指向该目录全新unused文件，不证明默认路径保存恢复。保持time_scale=1。
+
+`--render`使用同一检查并在真实输入后保存引擎viewport PNG；实际全屏用Godot `--fullscreen`，窄屏用`--windowed --resolution 844x390`及touch模式。仅总协调分配渲染时段后，由共享`tools/with_render_lock.py`包住有界supervisor运行；报告记录实际窗口模式、尺寸、焦点、几何和源hash。透明Label矩形与热点矩形相交只作观察，是否遮住物件由实际PNG核对，不能拿整个透明框冒充文字像素。截图不代表原生包、系统窗口截图或实体设备认证。
