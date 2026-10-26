@@ -5,7 +5,8 @@ const ShopCanvas = preload("res://game/ui/shop_canvas.gd")
 const Art = preload("res://game/ui/pixel_assets.gd")
 const PortableFont = preload("res://game/ui/portable_font.gd")
 const RainPanels = preload("res://game/ui/rain_night/panels.gd")
-const PROFILE_ID = "rain-night-v1"
+const WorldController = preload("res://game/ui/world/world_controller.gd")
+var PROFILE_ID = "world-slice-v1"
 const EXPEDITION_SCENE = "res://scenes/expedition/expedition.tscn"
 const CREAM = Color("493527")
 const MUTED = Color("84694d")
@@ -25,7 +26,7 @@ var selected_item = "floating_pie"
 var batch = 1
 var request_serial = 0
 var request_prefix = str(Time.get_unix_time_from_system())+":"+str(Time.get_ticks_usec())
-var save_path = "user://profiles/rain-night-v1/moonlantern.json"
+var save_path = "user://profiles/world-slice-v1/moonlantern.json"
 var save_writes_allowed = false
 var messages: Array[String] = []
 var action_controls: Dictionary = {}
@@ -69,8 +70,16 @@ var clock_accumulator = 0.0
 var body_context = ""
 var last_pending = ""
 var rain_panels: Array=[]
+var world_controller
+var _world_fraction_ms = 0.0
+var _paused_before_book = false
 
 func _ready():
+	var initial = game.view()
+	if initial.get("profile_id", "") == "world-slice-v1" or not initial.has("profile_id"):
+		_ready_world(); return
+	PROFILE_ID = str(initial.profile_id)
+	if save_path == "user://profiles/world-slice-v1/moonlantern.json": save_path = "user://profiles/rain-night-v1/moonlantern.json"
 	get_tree().auto_accept_quit = false
 	var window=get_window()
 	if window.mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN]:
@@ -95,8 +104,118 @@ func _ready():
 		_notice("欢迎回家，咩咩。读需求、备料理，也可以去巷后采些特别食材。")
 	_refresh()
 
+func _ready_world():
+	get_tree().auto_accept_quit = false
+	var window = get_window()
+	if window.mode in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN]:
+		window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		window.content_scale_size = Vector2i(1440, roundi(1440.0*window.size.y/window.size.x))
+	else: window.content_scale_size = Vector2i.ZERO
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_build_theme(); _configure_input()
+	world_controller = WorldController.new(); world_controller.session = game; add_child(world_controller)
+	world_controller.movement_requested.connect(_world_input)
+	world_controller.intent_requested.connect(_world_action)
+	world_controller.book_opened.connect(_world_open_book)
+	world_controller.book_closed.connect(_world_close_book)
+	world_controller.pause_requested.connect(_world_pause)
+	world_controller.save_requested.connect(_world_save)
+	world_controller.load_requested.connect(_world_load)
+	world_controller.returned.connect(_world_returned)
+	feedback = world_controller.world.feedback
+	view = game.view()
+	if not view.has("world"):
+		save_writes_allowed = false; _world_refresh()
+		world_controller.world.show_feedback("世界核心尚未就绪，不能开始经营。")
+		return
+	if FileAccess.file_exists(save_path) or FileAccess.file_exists(save_path+".bak"):
+		var result = game.load_from(save_path)
+		save_writes_allowed = bool(result.ok)
+		if not result.ok:
+			game.set_paused(true)
+			_show_file_error("RestoreFailure", "世界存档未恢复，原文件已保留", str(result.message))
+	else: save_writes_allowed = true
+	_world_refresh()
+
+func _world_input(axis: Vector2):
+	if game.view().get("phase", "") == "expedition": return
+	# Held axes are not economic requests and never allocate persistent IDs.
+	game.command("world_input", {"move_x": axis.x, "move_y": axis.y})
+
+func _world_returned():
+	world_controller.world.reset_projection(); _world_fraction_ms = 0
+	_world_refresh()
+
+func _world_refresh(events: Array = []):
+	view = game.view(); world_controller.save_allowed = save_writes_allowed; world_controller.present(view)
+	for event in events:
+		if event.get("type", "") == "served": world_controller.world.show_feedback("客人收到了料理 · +%s金" % str(event.get("paid_total", "")))
+		elif event.get("type", "") == "cooking_ready": world_controller.world.show_feedback("这一批料理做好了，走近工作台取走吧。")
+
+func _world_action(option: Dictionary):
+	if not save_writes_allowed: return
+	if str(option.get("action", "")) == "enter": world_controller.clear_inputs()
+	var args = {"target_id": str(option.get("target_id", "")), "action": str(option.get("action", "")), "payload": option.get("payload", {}).duplicate(true)}
+	request_serial += 1
+	var result = game.command("world_interact", args, request_prefix+":"+str(request_serial))
+	last_ui_action = "world_interact"; last_ui_args = args.duplicate(true)
+	if not result.ok: world_controller.world.show_feedback(str(result.message))
+	else:
+		if option.action == "serve": world_controller.world.show_feedback("已递出餐盘，等待客人接收。")
+		if option.action in ["next_day", "enter"]:
+			world_controller.close_book(); _paused_before_book = false
+			if game.view().get("phase", "") != "expedition": game.set_paused(false)
+	_world_refresh(result.get("events", []))
+	action_completed.emit("world_interact", args, result)
+
+func _world_open_book(target: String):
+	if not save_writes_allowed: return
+	_paused_before_book = bool(game.view().paused)
+	world_controller.clear_inputs(); game.set_paused(true); world_controller.open_book(target); _world_refresh()
+
+func _world_close_book():
+	world_controller.close_book(); game.set_paused(_paused_before_book); _world_refresh()
+
+func _world_pause():
+	world_controller.clear_inputs()
+	if not world_controller.book_target.is_empty(): world_controller.close_book(); game.set_paused(true)
+	else: game.set_paused(not bool(game.view().get("paused", false)))
+	_world_refresh()
+
+func _world_load():
+	world_controller.clear_inputs()
+	var result = game.load_from(save_path)
+	if result.ok:
+		save_writes_allowed = true; world_controller.close_book(); world_controller.world.reset_projection(); _world_fraction_ms = 0
+	else:
+		save_writes_allowed = false; game.set_paused(true); _show_file_error("RestoreFailure", "未恢复，当前进度与原文件保留", str(result.message))
+	_world_refresh()
+
+func _world_save(exit_after: bool):
+	if not save_writes_allowed:
+		if exit_after: get_tree().quit()
+		return
+	world_controller.clear_inputs()
+	var was_processing = is_processing()
+	var panel = world_controller.battle_panel
+	var panel_mode = panel.process_mode if is_instance_valid(panel) else Node.PROCESS_MODE_INHERIT
+	if exit_after:
+		set_process(false)
+		if is_instance_valid(panel): panel.process_mode = Node.PROCESS_MODE_DISABLED
+	var result = game.save_to(save_path)
+	if result.ok and exit_after: get_tree().quit(); return
+	if exit_after:
+		set_process(was_processing)
+		if is_instance_valid(panel): panel.process_mode = panel_mode; panel.cancel_save_quit()
+	if not result.ok:
+		game.set_paused(true); _show_file_error("SaveFailure", "保存失败，当前进度仍保留", str(result.message))
+	_world_refresh()
+	world_controller.world.show_feedback("世界存档已保存。" if result.ok else str(result.message))
+
 func _notification(what):
-	if what == NOTIFICATION_WM_CLOSE_REQUEST: _save(true)
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if is_instance_valid(world_controller): _world_save(true)
+		else: _save(true)
 
 func _configure_input():
 	Input.emulate_mouse_from_touch = true
@@ -114,6 +233,9 @@ func _configure_input():
 		InputMap.action_add_event("shop_pause",pad)
 
 func _unhandled_input(event):
+	if is_instance_valid(world_controller):
+		if world_controller.handle_back(event): get_viewport().set_input_as_handled()
+		return
 	if not view.is_empty() and view.phase=="expedition": return
 	# Effective Godot 4.7 defaults do not bind joypad B to ui_cancel.
 	# Keep this business-only; expedition receives its own B=dodge first.
@@ -124,6 +246,16 @@ func _unhandled_input(event):
 		get_viewport().set_input_as_handled()
 
 func _process(delta):
+	if is_instance_valid(world_controller):
+		# Main is the sole non-battle clock owner; WorldPlay never calls advance.
+		var current = game.view()
+		if current.get("phase", "") == "expedition" or current.get("paused", false) or not current.has("world"): return
+		_world_fraction_ms += delta*1000.0
+		var milliseconds = int(_world_fraction_ms); _world_fraction_ms -= milliseconds
+		if milliseconds > 0:
+			var result = game.advance(milliseconds)
+			if result.ok: _world_refresh(result.get("events", []))
+		return
 	if not built or view.is_empty(): return
 	toast_remaining=maxf(0,toast_remaining-delta)
 	_update_message_visibility()
@@ -308,9 +440,11 @@ func _activate_hotspot(id: String):
 		_refresh()
 
 func get_open_sheet() -> String:
+	if is_instance_valid(world_controller): return world_controller.book_target
 	return tab if sheet_open else ""
 
 func get_world_view() -> String:
+	if is_instance_valid(world_controller): return str(view.get("world", {}).get("region_id", ""))
 	return world_view
 
 func _build_sheet():
@@ -446,6 +580,7 @@ func _button(id: String, value: String, callback: Callable, enabled: bool = true
 	return button
 
 func get_action_control(id: String) -> Control:
+	if is_instance_valid(world_controller): return world_controller.get_action_control(id)
 	if id=="departure_summary" and is_instance_valid(departure_status) and departure_status.is_inside_tree(): return departure_status
 	var direct=action_controls.get(id)
 	if is_instance_valid(direct) and direct.is_inside_tree(): return direct

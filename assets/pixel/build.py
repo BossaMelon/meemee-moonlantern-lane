@@ -401,6 +401,8 @@ def build():
     update_rain_assets()
     from build_rain_scene import build_scene
     build_scene()
+    from build_meemee_walk import build_walk
+    build_walk()
 
 
 def preview(manifest):
@@ -455,7 +457,10 @@ if __name__=="__main__":
     elif sys.argv[1:] == ["--rain-scene-only"]:
         from build_rain_scene import build_scene
         build_scene()
+    elif sys.argv[1:] == ["--walk-only"]:
+        from build_meemee_walk import build_walk
+        build_walk()
     elif not sys.argv[1:]:
         build()
     else:
-        raise SystemExit("Usage: build.py [--garden-only|--rain-only|--rain-scene-only]")
+        raise SystemExit("Usage: build.py [--garden-only|--rain-only|--rain-scene-only|--walk-only]")

@@ -41,6 +41,7 @@ func run():
 	before_files=hashes()
 	root.size=Vector2i(1280,800)
 	ui=Main.instantiate()
+	ui.game=load("res://game/core/game_session.gd").new(7,"rain-night-v1")
 	ui.save_path=folder+"/progress.json"
 	root.add_child(ui)
 	await frames(12)
@@ -80,7 +81,7 @@ func run():
 		expect(false,"actual product exit must close this process")
 
 func ui_session_fixture():
-	var fixture=load("res://game/core/game_session.gd").new(7)
+	var fixture=load("res://game/core/game_session.gd").new(7,"rain-night-v1")
 	fixture.command("finish_shopping")
 	fixture.command("open_shop")
 	fixture.advance(3000)

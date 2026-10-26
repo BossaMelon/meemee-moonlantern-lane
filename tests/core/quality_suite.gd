@@ -68,7 +68,7 @@ func basket(g, route: String):
 	for purchase in recipe.buys: act(g,"buy",{"item_id":purchase.item_id,"quantity":int(purchase.quantity)})
 
 func normal_night(seed_value: int, route: String, explore: bool = false, tier: String = "standard"):
-	var g = Session.new(seed_value)
+	var g = Session.new(seed_value,"rain-night-v1")
 	if explore:
 		act(g,"start_expedition"); drive(g,"shelf" if route == "quick" else "canal")
 	if route == "quick": act(g,"recycle",{"item_id":"stirring_cauldron","quantity":1})
@@ -111,7 +111,7 @@ func normal_night(seed_value: int, route: String, explore: bool = false, tier: S
 func test_combat_case():
 	component("res://tests/expedition/run_rain_model.gd","rain-model-components")
 	for seed_value in seeds:
-		var g = Session.new(int(seed_value)); act(g,"start_expedition"); drive(g,"shelf",true)
+		var g = Session.new(int(seed_value),"rain-night-v1"); act(g,"start_expedition"); drive(g,"shelf",true)
 		if battle_origin.is_empty(): battle_origin = g.snapshot()
 		g = normal_night(int(seed_value),"heat")
 		act(g,"start_expedition"); expect(g.snapshot().expedition.weapon_id == "fan_wand","deep fan route uses legitimately earned weapon")
@@ -120,7 +120,7 @@ func test_combat_case():
 func test_growth_case():
 	test_meal_transfer()
 	if battle_origin.is_empty():
-		var acquired = Session.new(1); act(acquired,"start_expedition"); drive(acquired,"shelf",true); battle_origin = acquired.snapshot()
+		var acquired = Session.new(1,"rain-night-v1"); act(acquired,"start_expedition"); drive(acquired,"shelf",true); battle_origin = acquired.snapshot()
 	var origin = fixture(battle_origin,"real-combat-rare-origin")
 	test_rare_four_uses(origin)
 	var heart = fixture(battle_origin,"real-moonheart-sale"); var cash = heart.view().cash
@@ -203,7 +203,7 @@ func profile_process(project: String, profile: String, mode: String) -> Dictiona
 	return result if result is Dictionary else {}
 
 func test_profile_processes():
-	expect(ProjectSettings.get_setting("application/config/use_custom_user_dir",false) and ProjectSettings.get_setting("application/config/custom_user_dir_name","") == "MeeMeeMoonlanternLane/rain-night-v1","actual new launcher configuration chooses an independent user directory")
+	expect(ProjectSettings.get_setting("application/config/use_custom_user_dir",false) and ProjectSettings.get_setting("application/config/custom_user_dir_name","") == "moonlantern-world-slice-v1","new world default remains isolated; explicit rain regression below uses its own child namespace")
 	var projects = []
 	for profile in ["prototype-v1","rain-night-v1"]:
 		var project = output_dir.path_join(profile); projects.append(project)

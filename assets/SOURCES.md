@@ -9,6 +9,8 @@
 
 ## 随包文字字体
 
+P11 世界呈现复用已验收 A01 的四向 `meemee_walk_*_cycle`（各四帧、125ms/帧、循环500ms）。每帧使用清单脚底 pivot，动画相位只随 Core 实际位移推进；停步、碰撞与暂停保持相位。P11 不改像素图或资产清单；门铃提示使用 Core 锚点上的程序绘制标记，未冒用不存在的门铃贴图。
+
 - 原文件：`assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf`，官方中国区域静态 Regular 400；Noto Sans SC 2.004，内部版本 `Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603`。保留官方原始字节，不自行裁剪、改名或合成字重。
 - [固定官方文件](https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf)，8331336 字节；Git blob SHA-1 `fc0fda9394367c16c1af7555a2ae4d5e2e6a6f02`（含 Git blob header，不是裸文件 SHA-1）；文件 SHA-256 `faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9`。
 - [同 commit 的 OFL 1.1 原许可证](https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/LICENSE) 原样保存在 `assets/fonts/noto-sans-sc/OFL.txt`；字体内原版权 `© 2014-2021 Adobe (http://www.adobe.com/).` 另存 `NOTICE.txt`，随字体一起分发。
