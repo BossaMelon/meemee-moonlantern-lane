@@ -204,8 +204,11 @@ func refresh():
 		if pause_button != null: pause_button.text = _pause_text(view.get("paused",false))
 	queue_redraw()
 
+func _is_rain_view() -> bool:
+	return state.get("version",1) == 2 or (state.get("version",1) == 3 and state.get("ruleset","") == "world-slice-v1")
+
 func _update_water_ripples():
-	if state.get("version",1) != 2 or not state.has("player"): return
+	if not _is_rain_view() or not state.has("player"): return
 	if _ripple_run_id != state.run_id:
 		_ripple_run_id = state.run_id; _water_positions.clear(); _ripple_next_tick.clear(); _water_ripples.clear()
 	_water_ripples = _water_ripples.filter(func(ripple): return ripple.until_tick > state.tick)
@@ -225,7 +228,7 @@ func _update_water_ripples():
 				break
 
 func _region_feedback():
-	if state.get("version",1) != 2 or not state.has("player"): return
+	if not _is_rain_view() or not state.has("player"): return
 	if _hint_run_id != state.run_id:
 		_hint_run_id = state.run_id; _hint_regions.clear(); _region_hint = ""; _region_hint_until_tick = 0
 	if state.tick < _region_hint_until_tick: return
@@ -623,7 +626,7 @@ func _draw_hud():
 		if i < state.player.hp: draw_circle(center+Vector2(-2,-2)*u,1.5*u,Color("fff0c8"))
 	if state.player.shield: draw_arc(inset+Vector2(92,46)*u,8*u,0,TAU,24,Color("b3e3cc"),2*u)
 	_text(inset+Vector2(116,51)*u,"散射魔杖" if state.weapon_id == "fan_wand" else "直线魔杖",14)
-	var quality = state.get("version",1) == 2
+	var quality = _is_rain_view()
 	var seconds = floori(state.elapsed_ms/1000.0) if quality else ceili(state.remaining_ms/1000.0)
 	var timer_width = 144 if quality else 104
 	var timer_rect = Rect2(Vector2((size.x-timer_width*u)/2.0,18*u),Vector2(timer_width,42)*u)

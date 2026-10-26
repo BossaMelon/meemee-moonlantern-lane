@@ -10,6 +10,11 @@ var cases: Array = []
 var simulations: Array = []
 var seeds: Array = []
 var fixture_data: Dictionary = {}
+var campaign_evidence: Dictionary = {}
+var timing: Dictionary = {}
+var case_started_us = 0
+var current_case = ""
+var progress_path = ""
 
 func expect(condition: bool, message: String):
 	checks += 1
@@ -17,44 +22,77 @@ func expect(condition: bool, message: String):
 
 func act(g, target: String, action: String, payload: Dictionary = {}):
 	request_serial += 1
+	var command_started = Time.get_ticks_usec()
 	var result = g.command("world_interact",{"target_id":target,"action":action,"payload":payload},"test-%d" % request_serial)
+	measured("action_command_us",Time.get_ticks_usec()-command_started)
 	expect(result.ok,"world action %s/%s: %s" % [target,action,str(result)])
+	var validation_started = Time.get_ticks_usec()
 	expect(g.validate_snapshot(g.snapshot()) == "","world snapshot validates after "+action+": "+g.validate_snapshot(g.snapshot()))
+	measured("action_validation_us",Time.get_ticks_usec()-validation_started)
 	return result
 
-func pos(g) -> Vector2:
-	var p = g.snapshot().world.player; return Vector2(p.x,p.y)
+func measured(key: String, elapsed: int):
+	timing[key] = timing.get(key,0)+elapsed
 
-func move_to(g, target: Vector2):
+func progress(phase: String):
+	var row = {"case":current_case,"phase":phase,"elapsed_ms":int((Time.get_ticks_usec()-case_started_us)/1000),"checks":checks,"timing_us":timing.duplicate()}
+	print("WORLD_PROGRESS "+JSON.stringify(row))
+	if progress_path != "":
+		var file = FileAccess.open(progress_path,FileAccess.WRITE)
+		if file != null: file.store_string(JSON.stringify(row,"\t")); file.close()
+
+func pos(g) -> Vector2:
+	var started = Time.get_ticks_usec(); var p = g.snapshot().world.player
+	measured("position_snapshots",1); measured("position_snapshot_us",Time.get_ticks_usec()-started)
+	return Vector2(p.x,p.y)
+
+func move_to(g, target: Vector2, current: Vector2) -> Vector2:
+	var move_started = Time.get_ticks_usec()
 	for n in range(200):
-		var delta = target-pos(g)
+		var delta = target-current
 		if delta.length() < 1.7: break
 		var axis = delta/8.0 if delta.length() < 8 else delta.normalized()
 		g.command("world_input",{"move_x":axis.x,"move_y":axis.y}); var result = g.advance(50)
 		if not result.ok: expect(false,"movement tick succeeds"); break
+		# Production reports the authoritative foot point for every actual move.
+		# Reuse it between ticks instead of deep-copying the entire economic ledger.
+		for event in result.events:
+			if event.type == "world_moved": current = Vector2(event.x,event.y)
 	g.command("world_input",{"move_x":0,"move_y":0})
-	expect(pos(g).distance_to(target) < 2,"normal movement reaches waypoint "+str(target))
+	# Read-only observation, never a position write: retain the original precise
+	# per-waypoint assertion without exporting the full inventory/ledger each time.
+	var foot = g._game._s.world.player; var actual = Vector2(foot.x,foot.y)
+	expect(actual == current and actual.distance_to(target) < 2,"normal movement reaches waypoint "+str(target))
+	measured("navigation_move_us",Time.get_ticks_usec()-move_started)
+	return actual
 
 func walk_to(g, id: String):
 	var region = g.snapshot().world.region_id; var object = Walk.object(id); var anchor = Vector2(object.anchor.x,object.anchor.y)
 	expect(object.region_id == region,"navigation stays in current region")
-	if pos(g).distance_to(anchor) < 40 and Walk.clear_line(region,pos(g),anchor): return
-	var start = Vector2i(roundi(pos(g).x/16),roundi(pos(g).y/16)); var queue = [start]; var came = {start:start}; var found = start; var index = 0; var reached = false
+	var current = pos(g)
+	if current.distance_to(anchor) < 40 and Walk.clear_line(region,current,anchor): return
+	var search_started = Time.get_ticks_usec()
+	var start = Vector2i(roundi(current.x/16),roundi(current.y/16)); var queue = [start]; var came = {start:start}; var found = start; var index = 0; var reached = false
 	while index < queue.size():
 		var cell: Vector2i = queue[index]; index += 1; var p = Vector2(cell)*16.0
 		if p.distance_to(anchor) < 28 and Walk.clear_line(region,p,anchor): found = cell; reached = true; break
 		for direction in [Vector2i.LEFT,Vector2i.RIGHT,Vector2i.UP,Vector2i.DOWN]:
 			var next = cell+direction
 			if not came.has(next) and Walk.clear_position(region,Vector2(next)*16.0): came[next] = cell; queue.append(next)
+	measured("navigation_search_us",Time.get_ticks_usec()-search_started); measured("navigation_search_nodes",index)
 	expect(reached,"reachable interaction anchor: "+id)
 	if not reached: return
 	var points = []
 	while found != start: points.push_front(Vector2(found)*16.0); found = came[found]
-	for p in points: move_to(g,p)
-	expect(pos(g).distance_to(anchor) <= 56 and Walk.clear_line(region,pos(g),anchor),"walk reaches real action range: "+id)
+	for p in points: current = move_to(g,p,current)
+	# Also prove the exported position agrees at every completed navigation path.
+	var exported = pos(g)
+	expect(exported == current and exported.distance_to(anchor) <= 56 and Walk.clear_line(region,exported,anchor),"walk reaches real action range: "+id)
 
 func suggested(g, target: String, action: String) -> Dictionary:
-	for row in g.view().interactions:
+	var started = Time.get_ticks_usec(); var v = g.view()
+	measured("suggestions_us",Time.get_ticks_usec()-started)
+	for row in v.interactions:
 		if row.target_id == target and row.action == action: return row.payload.duplicate(true)
 	return {}
 
@@ -109,14 +147,16 @@ func fixture(state: Dictionary, label: String):
 	return g
 
 func roundtrip(g, label: String):
+	var started = Time.get_ticks_usec()
 	request_serial += 1; var path = output_dir+"/save-%s-%d.json" % [label,request_serial]
 	var expected = g.snapshot(); expected.world.input = {"move_x":0,"move_y":0}
 	if not expected.expedition.is_empty():
-		var model = preload("res://game/expedition/expedition_model.gd"); model.set_input(expected.expedition,{})
+		var model = preload("res://game/expedition/world_rain_model.gd"); model.set_input(expected.expedition,{})
 		expected = g._game._normalize(expected)
 	expect(g.save_to(path).ok,"real world save "+label)
 	var restored = Session.new(99); var loaded = restored.load_from(path)
 	expect(loaded.ok and restored.snapshot() == expected,"exact restore (only input cleared) "+label+": "+str(loaded)); audit(restored,label)
+	measured("save_restore_us",Time.get_ticks_usec()-started)
 	return restored
 
 func set_pose(g, p: Vector2, region: String = "shop"):
@@ -305,10 +345,12 @@ func farm_rares(g = null):
 	travel(g,"lane"); walk_to(g,"garden-gate"); act(g,"garden-gate","enter")
 	var driver = preload("res://tests/expedition/rain_driver.gd").new("canal",true)
 	driver.route_points.append_array([Vector2(650,100),Vector2(540,100),Vector2(415,95)])
+	var observed = g.snapshot()
 	for n in range(5000):
-		if g.snapshot().phase != "expedition": break
-		var input = driver.next_input(g.snapshot().expedition)
+		if observed.phase != "expedition": break
+		var input = driver.next_input(observed.expedition)
 		expect(g.command("expedition_input",input).ok and g.advance(50).ok,"real rare-material combat/movement advances")
+		observed = g.snapshot()
 	expect(g.snapshot().phase == "preparation","rare route returns through actual E02 entrance")
 	audit(g,"rare harvest")
 	traces.append({"scenario":"real-three-input-material-source","snapshot":g.snapshot()})
@@ -316,7 +358,7 @@ func farm_rares(g = null):
 
 func test_recipe_matrix():
 	# Controlled boundary snapshot, explicitly not obtainable-route evidence:
-	# E02 currently supports days1..2 and one elite unit/run. Extend an isolated
+	# E02 supplies one elite unit/run. Extend an isolated
 	# previous-day pickup's quantity and its UID/cost ledger consistently so the
 	# frozen batch6 boundary can exercise actual save/load and public commands.
 	var origin = farm_rares()
@@ -339,7 +381,7 @@ func test_recipe_matrix():
 			pickup.quantity += 5; record.quantity += 5; row.moves.moonheart += 5
 	boundary.items.reverse() # Inventory order must not affect lowest-UID selection.
 	origin = fixture(boundary,"controlled-elite-batch-boundary")
-	traces.append({"scenario":"controlled-elite-batch-boundary","not_normal_economy":true,"reason":"frozen ingredient_bundle_cases; E02 only days1..2, one elite unit per run"})
+	traces.append({"scenario":"controlled-elite-batch-boundary","not_normal_economy":true,"reason":"frozen ingredient_bundle_cases; one elite unit per run; normal campaign acquisition is proved separately"})
 	for recipe in preload("res://game/core/catalog.gd").RECIPES:
 		for quantity in [1,3,6]:
 			var g = fixture(origin.snapshot(),"controlled-batch-"+recipe+str(quantity))
@@ -413,6 +455,7 @@ func test_nights_and_growth():
 	for seed_value in seeds:
 		for route in ["quick","hot"]:
 			for tier in fixture_data.configuration.price_tiers:
+				progress("economy-%s-%s-%s" % [str(seed_value),route,tier])
 				var g = normal_night(int(seed_value),route,tier); var settled = g.snapshot()
 				for upgrade in ["shelf","field_kit"]:
 					var branch = fixture(settled,"growth-"+upgrade); branch.set_paused(true); act(branch,"ledger","upgrade",{"upgrade_id":upgrade}); act(branch,"ledger","next_day"); branch.set_paused(false)
@@ -435,6 +478,7 @@ func test_nights_and_growth():
 	reject(poor,"world_interact",{"target_id":"vendor","action":"recover","payload":{}})
 	var resale = Session.new(1); walk_to(resale,"prep"); act(resale,"prep","uninstall",{"uid":1}); travel(resale,"lane"); walk_to(resale,"vendor"); act(resale,"vendor","recycle",{"item_id":"stirring_cauldron","quantity":1})
 	expect(resale.snapshot().cash == 78 and resale.view().dish_income == 0,"selling inherited cauldron has real18 opportunity cost without dish income")
+	test_campaign_progression()
 
 func test_save_and_expedition():
 	var g = manual_origin(); var original = g.snapshot(); var path = output_dir+"/corrupt-world.json"; expect(g.save_to(path).ok,"world backup created")
@@ -470,7 +514,7 @@ func test_save_and_expedition():
 		expect(not g.load_from(old_path).ok and not g.save_to(old_path).ok,"world rejects explicit old-profile test copies")
 		expect(hashes == [FileAccess.get_sha256(old_path),FileAccess.get_sha256(old_path+".bak")],"old controlled primary/backup untouched")
 	var explorer = Session.new(23); travel(explorer,"lane"); walk_to(explorer,"garden-gate"); act(explorer,"garden-gate","enter")
-	expect(explorer.snapshot().expedition.ruleset == "rain-night-v1","world reuses the actual E02 ruleset")
+	expect(explorer.snapshot().expedition.version == 3 and explorer.snapshot().expedition.ruleset == "world-slice-v1","world uses the dedicated E02 campaign adapter")
 	reject(explorer,"world_input",{"move_x":1,"move_y":0}); var world_before = explorer.snapshot().world.duplicate(true)
 	var driver = preload("res://tests/expedition/rain_driver.gd").new("shelf",false)
 	for n in range(2400):
@@ -483,6 +527,8 @@ func test_save_and_expedition():
 	expect(not explorer.snapshot().collected_drops.is_empty(),"real E02 resource acquisition creates actual pantry UID")
 	audit(explorer,"actual E return"); roundtrip(explorer,"expedition-return")
 	test_isolated_processes()
+	if campaign_evidence.is_empty(): test_campaign_progression()
+	preload("res://tests/core/world_campaign_cases.gd").new().contexts(self,campaign_evidence)
 
 func copy_scripts(source: String, target: String):
 	DirAccess.make_dir_recursive_absolute(target)
@@ -491,9 +537,12 @@ func copy_scripts(source: String, target: String):
 	for name in DirAccess.get_directories_at(source): copy_scripts(source.path_join(name),target.path_join(name))
 
 func child_process(project: String, profile: String, mode: String) -> Dictionary:
+	progress("child-"+profile+"-"+mode)
+	var started = Time.get_ticks_usec()
 	var report = project.path_join(mode+".json"); var output = []
 	var script = "world_profile_process.gd" if profile == "world-slice-v1" else "profile_process.gd"
 	var code = OS.execute(OS.get_executable_path(),["--headless","--path",project,"--log-file",project.path_join(mode+".log"),"--script","res://tests/core/"+script,"--","--profile",profile,"--mode",mode,"--report",report],output,true)
+	measured("child_process_us",Time.get_ticks_usec()-started)
 	var text = "\n".join(output); var result = JSON.parse_string(FileAccess.get_file_as_string(report)) if FileAccess.file_exists(report) else null
 	expect(code == 0 and result is Dictionary and result.get("failures",["missing"]).is_empty() and "SCRIPT ERROR" not in text and "ERROR:" not in text,"actual isolated "+profile+" "+mode+": "+text.right(500))
 	return result if result is Dictionary else {}
@@ -517,11 +566,29 @@ func test_isolated_processes():
 
 func run(folder: String, selected: String = "") -> Dictionary:
 	output_dir = folder+"/world-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
+	DirAccess.make_dir_recursive_absolute("res://output"); progress_path = "res://output/world-progress-%d.json" % OS.get_process_id()
 	fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/world-slice-scenarios.json")); seeds = fixture_data.seeds
 	var callbacks = {"WS01":test_movement,"WS02":test_spatial_guards,"WS03":test_cooking_and_carry,"WS04":test_delivery,"WS05":test_nights_and_growth,"WS06":test_save_and_expedition}
 	for id in callbacks:
 		if selected != "" and selected != id: continue
-		checks = 0; failures = []; traces = []; callbacks[id].call()
-		cases.append({"id":id,"status":"passed" if failures.is_empty() and checks > 0 else "failed","checks":checks,"failures":failures.duplicate(),"traces":traces.duplicate(true)})
+		checks = 0; failures = []; traces = []; timing = {}; current_case = id; case_started_us = Time.get_ticks_usec(); progress("started")
+		callbacks[id].call(); progress("completed")
+		cases.append({"id":id,"status":"passed" if failures.is_empty() and checks > 0 else "failed","checks":checks,"failures":failures.duplicate(),"traces":traces.duplicate(true),"elapsed_ms":int((Time.get_ticks_usec()-case_started_us)/1000),"timing_us":timing.duplicate()})
 		print("%s: %s (%d checks)" % [id,cases.back().status,checks])
 	return {"schema_version":1,"suite":"world-slice","cases":cases,"simulations":simulations}
+
+func test_campaign_progression():
+	progress("campaign-start")
+	var economic_cases = simulations.size()
+	campaign_evidence = preload("res://tests/core/world_campaign_cases.gd").new().campaign(self)
+	expect(simulations.size() == economic_cases,"campaign funding evidence does not duplicate the original twenty-route matrix")
+
+func run_adapter(folder: String) -> Dictionary:
+	output_dir = folder+"/adapter-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
+	fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/world-slice-scenarios.json")); seeds = fixture_data.seeds
+	for entry in [["WS05-adapter-supplement",test_campaign_progression],["WS06",test_save_and_expedition]]:
+		checks = 0; failures = []; traces = []; timing = {}; current_case = entry[0]; case_started_us = Time.get_ticks_usec(); progress("started")
+		entry[1].call(); progress("completed")
+		cases.append({"id":entry[0],"status":"passed" if failures.is_empty() and checks > 0 else "failed","checks":checks,"failures":failures.duplicate(),"traces":traces.duplicate(true)})
+		print("%s: %s (%d checks)" % [entry[0],cases.back().status,checks])
+	return {"schema_version":1,"suite":"world-adapter-targeted","scope":"Changed expedition paths only; existing20-route WS05 evidence remains separately preserved, not relabeled.","cases":cases}

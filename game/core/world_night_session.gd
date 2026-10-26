@@ -6,6 +6,11 @@ const WORLD_SAVE = "user://profiles/world-slice-v1/moonlantern.json"
 const BOOK_ACTIONS = ["plan","menu","buy","recycle","recover","equip_weapon","consume","install","uninstall","settle","upgrade","next_day"]
 var _world_events: Array = []
 
+func _expedition_model():
+	var path = "res://game/expedition/world_rain_model.gd"
+	if _model == null and ResourceLoader.exists(path): _model = load(path)
+	return _model
+
 func snapshot() -> Dictionary:
 	# JSON has one numeric domain; canonicalize integral coordinates as well as money.
 	return _normalize(_s)
@@ -258,11 +263,24 @@ func _interact(s: Dictionary, args: Dictionary) -> Dictionary:
 	return _result(true,"ok","操作完成",events)
 
 func _old_action(s: Dictionary, kind: String, args: Dictionary) -> Dictionary:
+	if kind == "start_expedition":
+		if s.expedition_attempts.has(str(s.day)): return _fail("daily_limit","今日探险次数已使用")
+		var model = _expedition_model()
+		if model == null: return _fail("module_unavailable","世界动作适配尚未集成")
+		var run_id = "n%d-expedition" % s.day
+		var options = {"ruleset":WORLD_PROFILE,"map_id":"rain-garden-two-routes","map_revision":1,"meal_effect":s.pending_meal_effect}
+		var created: Dictionary = model.create(int(s.day),run_id,int(s.seed),s.progression.equipped_weapon,s.progression.skills,false,options)
+		if created.is_empty() or created.get("version") != 3 or created.get("ruleset") != WORLD_PROFILE or created.get("day") != s.day or created.get("run_id") != run_id or model.validate(created) != "":
+			return _fail("invalid_expedition","世界探索创建失败，次数与餐前效果已保留")
+		s.expedition = created; s.expedition_attempts[str(s.day)] = run_id
+		s.expedition_meals[run_id] = s.pending_meal_effect.duplicate(true) if s.pending_meal_effect != null else null
+		s.pending_meal_effect = null; s.phase = "expedition"
+		return _result(true,"ok","已进入菇圃")
 	var phase = s.phase
-	if kind in ["buy","recover","recycle","consume","equip_weapon","start_expedition"]: s.phase = "shopping"
+	if kind in ["buy","recover","recycle","consume","equip_weapon"]: s.phase = "shopping"
 	elif kind in ["install","uninstall"]: s.phase = "preparation"
 	var result = super._apply(s,kind,args)
-	if kind != "start_expedition" or not result.ok: s.phase = phase if kind != "settle" or not result.ok else "settled"
+	s.phase = phase if kind != "settle" or not result.ok else "settled"
 	return result
 
 func _find_order(s: Dictionary, id: String) -> Dictionary:
