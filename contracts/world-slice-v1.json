@@ -309,9 +309,17 @@
     },
     "economy": "Reuse existing five recipes/catalog/base prices/rain25%/rare resale/recovery/atomic ledger. Stable four-ingredient supply12..14 per night, buy in preparation/intermission. New wave counts/starter/relay are world-only initial values and must be simulated; old Q05 balance claims do not transfer. First night each normal route can afford at least one choice and basic next-night cooking without recovery; investigate domination/softlocks before expansion. Normal quick/hot route feasibility must also pass with automatic service and zero tips; the optional tip cannot rescue a required economic route.",
     "expedition": {
-      "options": {"ruleset": "rain-night-v1", "map_id": "rain-garden-two-routes", "map_revision": 1, "meal_effect": null},
-      "model_version": 2,
-      "rule": "Reuse real E02 movement/combat/drops, initial bolt/dodge/gust and existing meal object. Entry from lane only, return to saved lane gate anchor, collected UIDs enter pantry bag once. No new combat map/skill tree."
+      "options": {"ruleset": "world-slice-v1", "map_id": "rain-garden-two-routes", "map_revision": 1, "meal_effect": null},
+      "model_version": 3,
+      "snapshot_context": {"version": "integer=3", "ruleset": "world-slice-v1", "day": "positive integer, actual campaign day", "encounter_day": "integer=min(day,2)"},
+      "internal_projection": {"model_version": 2, "ruleset": "rain-night-v1", "day": "encounter_day; internal execution/validation only, never the public World snapshot identity"},
+      "context_rules": [
+        "WorldCore outer save_version4/world_model_version1 remain unchanged. Embedded World action state is explicitly version3/ruleset world-slice-v1; never label it as original Rain v2. Reject unknown/wrong version, ruleset, map or missing/invalid context, including bool/noninteger/nonpositive day or encounter_day != min(day,2).",
+        "Core validates embedded action day equals the actual world campaign day on entry/save/load/return; Panel displays actual day, not encounter_day. No silent date clamping or fallback on a bad public context.",
+        "For day>=3 reuse existing second-day/highest encounter configuration through the internal Rain v2 projection; never fall back to weaker first-day configuration or claim new enemies/progression. Legacy Rain/prototype schemas, supported date ranges and invalid-date cases remain unchanged.",
+        "Drop identity and pickup deduplication distinguish actual campaign day/run even when encounter_day=2 is shared. Save/reload, repeated returns and same/new request IDs cannot grant one drop twice or suppress a legitimate later-day drop. Preserve all existing real combat, cost and UID provenance guards."
+      ],
+      "rule": "Reuse real E02 movement/combat/drops, initial bolt/dodge/gust and existing meal object through the World-only thin adapter. Entry from lane only, return to saved lane gate anchor, collected UIDs enter pantry bag once. No new combat map/skill tree."
     },
     "intro_flags": "moved requires actual traveled distance>=32; took/loaded/cooked/served advance only on real take/put/completion/paid-delivery events; no guide step grants progress or items."
   },
@@ -333,7 +341,7 @@
   "integration": {
     "core_owner": "core implementation: game/core/world_night_session.gd + GameSession explicit profile routing + optional local world_model.gd geometry helper + tests/core/world_session_cases.gd and runner; owns UID references, position, transactions and save validation.",
     "ui_owner": "UI implementation: scenes/main.tscn + scenes/ui/world_play.tscn/game/ui/world_play.gd, camera/actor/prompts/input/books/flight feedback; consume production view, no fake core or collision source.",
-    "expedition_owner": "existing expedition paths/scene and input routing, return hook only as needed; reuse unchanged model contract.",
+    "expedition_owner": "World-only version3 action adapter and existing expedition panel routing/return hook; project internally to unchanged Rain v2 and retain actual campaign day display. Legacy model contracts stay unchanged; concrete adapter API changes are coordinated by root.",
     "art": "Reuse existing walk NW/NE/SW/SE, floor_wood/floor_stone, stove/prep_table/dining_table/serving_counter and other current sprites; pivot/depth anchored at feet. No bulk full-world art prerequisite.",
     "dependencies": "H03/root registers actual new task IDs/paths and dispatches. Core publishes view/actions→UI binds→runtime same candidate; motion-only probe may use same geometry but cannot count as economy completion. One combined implementation review, not per-SHA design review."
   },
@@ -393,7 +401,8 @@
       "pass_conditions": [
         "五seed×两路线×standard/premium走正常经营三波到次晨，不靠恢复/作弊、无负现金与软锁；首晚能买至少一个选择并做下一晚基础料理。 正常两路线必须有不依赖小费的实际自动服务经济证据。",
         "shelf升级后同批次完成更少手搬趟数且UID/成本不变；field_kit次晨真实装备入菇圃改变打法；两项不得靠强制互斥造取舍。",
-        "从店门步行到巷道供应商/菇圃，真实战斗掉落回库一次；不探索分支也可经营，地点切换不刷新天/次数。"
+        "从店门步行到巷道供应商/菇圃，真实战斗掉落回库一次；不探索分支也可经营，地点切换不刷新天/次数。",
+        "第3/6日由合法世界准备态经真实garden-gate入口进入动作v3，day保持真实日期、encounter_day=2；实际战斗/领取后返回保存的巷道位姿。复用既有第二日配置，跨日掉落身份唯一且每个只入库一次；正常经营/真实探索证据不能用batch6高级原料边界夹具代替。"
       ]
     },
     {
@@ -406,7 +415,8 @@
       "pass_conditions": [
         "在携料、台内、烹饪、成菜、预留、客人途中、门口/巷道、战斗返程、升级后分别保存重启，与同输入连续分支等价。 包含manual50ms预留、冻结报价与每波小费已付标记。",
         "仅非活动旧档、受控测试副本及不可变旧包前后哈希不变；新world默认新profile且不访问真人活跃r2档。本人正常保存可改变活跃档，不读取/恢复/删除或要求哈希静止。错版本/地图/坏档边界使用独立测试副本验证。",
-        "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。 高频world_input仅更新保持轴，不使持久requests/经济流水随输入帧数增长。"
+        "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。 高频world_input仅更新保持轴，不使持久requests/经济流水随输入帧数增长。",
+        "第3/6日动作途中、掉落领取前后及返程保存重启与连续分支等价；v3真实day/encounter_day、RNG/敌人/冷却/掉落/返回位姿完整恢复，重复领取/返程或读档不重付。未知/错ruleset/version、缺失或非法day/encounter_day、动作day与世界日期不符均原子拒绝；旧Rain/prototype日期负例仍拒绝，不放宽旧schema。"
       ]
     },
     {
