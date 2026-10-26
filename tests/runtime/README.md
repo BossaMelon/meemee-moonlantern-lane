@@ -2,18 +2,37 @@
 
 ## V02 world 切片：监督器与观察入口
 
-`world_slice.py` 当前只提供 **Mac 源码 headless 只读 preflight**，不是 WS07 路线。
+`world_slice.py` 提供 **Mac 源码 headless 观察与首段输入诊断**，不能通过 WS07。
 它拒绝旧 rain-night 默认值，要求固定完整提交及与该提交一致的监督器/复用 helper；
 在全新目录导出 Git tree，先独立观测 OS user-data 位置，再用 Node autoload 观察自然
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
-窗口/控件布局，也不会读取实际玩家旧档。`world_slice.gd` 的真实 InputEvent 分发边界
-已保留，但 inspect 阶段禁止调用；实际导航、制作、出餐、保存/恢复路线待 P10/P11
-发布真实组合候选后接入。三种 mode 在此入口仅标识隔离证据，**尚未执行三输入路线**。
+窗口/控件布局，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
+与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
+world view、P11 world_play/world_input；**首次生产路线执行仍待总协调给出固定组合候选**。
 
 ```sh
 python3 -m unittest discover -s tests/runtime -p 'test_world_slice.py' -v
 python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolute/path/to/Godot --mode mouse --output /private/tmp/NEW_V02_RUN
 ```
+
+取得固定候选与首次执行授权后，在上例增加 `--stage first-manual`（或 `first-auto`）及
+明确的 `--window-size 1280 720`。尺寸只通过官方 `--resolution` 启动参数请求；输入前
+必须观测实际 Window 等于请求、实际 world Control 至少640×360。headless 若仍返回64×64
+便明确失败，不设置 root/控件大小、不把 dummy 当作真实渲染。该参数的实际有效性尚待
+固定生产候选实测；不是已经解决旧 H06 的尺寸问题。
+
+键鼠使用真实 WASD/F，手柄使用左轴/A，触屏读取实际 P11 relay 的圆盘/动作区域并经
+当前变换映射事件。只读 Core 几何按16格、半径12加容差规划保守路径；途中反复检查真实
+脚点、停滞/总时限与区域。不会直接设置位置、发送 core 命令、按钮信号或抢 UI 焦点。
+F 前必须确认 Core 的首个 enabled interaction 恰为目标动作。记录输入、实际轨迹、
+UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现金与订单/客人反应。
+
+`--save-boundary carrying|cooking|customer|manual-reservation|after-sale` 默认 after-sale。
+每次用新 namespace，从真实新游戏走到边界，实际暂停并确认250ms状态不变，再用真实
+控件保存退出。manual-reservation 必须在下一服务步前实际观测到50ms预留，否则失败；
+不回写时间或构造预留。宿主退出后比较完整主档与pre-quit，再启动独立 restore-exit：
+零输入的 ready/settled 快照和主备各自哈希必须一致，之后才按真实暂停页退出。
+手柄保存控件靠 D-pad 遍历当前焦点链；未知控件/焦点循环都失败，等待实际 P11 集成修正。
 
 输出目录和 namespace 都不可复用，即使之前失败或为空。实际源码默认应用目录须为
 `moonlantern-world-slice-v1`；仅在临时源副本以
@@ -27,14 +46,14 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolu
 目录，拒绝 live OS user-data 根下的路径及软链接。活动 r2 保存可正常变化，不读取、
 冻结或恢复它；这里的受控副本 guard 不冒充对真人文件的访问审计。
 
-preflight 成功仅为 `status=observed` / exit 0，始终 `ws07_passed=false`、
+preflight 成功仅为 `status=observed` / exit 0；首段双进程成功仅为
+`status=save-boundary-observed` / exit 0。两者始终 `ws07_passed=false`、
 `wsh_observed=false`；失败 exit 2 保留原件。当前没有原生渲染 CLI，也没有任何截图或
 实际输入通过声明。Python 合成观察和受控子进程测试仅证明监督器边界；缺少 P10/P11 时
 真实入口在启动产品前失败。WS01–06 继续由 Core 自动 runner 负责，WSH 必须是真人反馈。
 
-后续 WS07 仍需同候选真实鼠键/合成触屏/手柄的首段、整夜三波与次晨成长，实际携料、
-两秒制作、成菜、手递/自动成交、各关键保存边界和独立进程恢复；记录完整状态、实际位置
-轨迹、时间、输入与收入，授权渲染时段再检查全屏/窄屏/镜头和 viewport PNG。
+后续 WS07 仍需实跑并修正同候选三输入首段和各保存边界，补完整夜三波与次晨成长驱动；
+授权渲染时段再检查全屏/窄屏/镜头和 viewport PNG。当前仅语法/纯路径计算检查不算输入证据。
 不得通过 headless dummy、运动 probe 或旧 Q/P 套件替代。合成输入不证明实体设备。
 
 Mac 启动设置 `display/window/size/no_focus` 不能承诺保留真人应用焦点：Godot 4.7.2

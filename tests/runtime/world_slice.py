@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""V02 source supervisor. Inspect is headless/read-only, never WS07 completion.
+"""V02 headless source inspection/first-loop diagnostics, never WS07 completion.
 
-World routes await the actual P10/P11 candidate. No native-render CLI is exposed
-in this first increment; no_focus is not a Mac non-activation guarantee.
+Route execution awaits a fixed P10/P11 candidate and an explicitly requested
+CLI resolution, checked against the actual window before any injected input.
+No native-render CLI: no_focus is not a Mac non-activation guarantee.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import time
 import uuid
 
 from check_source_launch import git_tree
-from quality_support import file_states, _validate_json
+from quality_support import file_states, snapshot_differences, _validate_json
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -183,20 +184,45 @@ def validate_probe(probe, namespace, expected_user, pid):
 
 
 def validate_observation(obs, request, process):
-    require(obs.get("kind") == "world-source-headless-observation" and obs.get("status") == "observed",
-            "missing/completed-route claim in headless observation")
+    stage = request.get("stage", "inspect")
+    require(obs.get("kind") == "world-source-headless-observation" and obs.get("status") == ("observed" if stage == "inspect" else "exit_requested"),
+            "missing/unexpected headless observation status")
     for key in ["nonce", "source_commit", "namespace", "user_dir", "mode"]:
         require(obs.get(key) == request[key], "observation identity mismatch: " + key)
     require(obs.get("pid") == process["pid"] and obs.get("engine_version") == ENGINE_VERSION, "process/engine identity mismatch")
     require(obs.get("save_path") == SAVE_PATH and obs.get("main_scene") == MAIN_SCENE
             and obs.get("main_script") == MAIN_SCRIPT and obs.get("ready_seen") is True
             and obs.get("current_scene_matches") is True, "natural world Main not observed")
-    require(obs.get("display") == "headless" and obs.get("inputs") == [] and obs.get("screenshots") == []
+    require(obs.get("display") == "headless" and obs.get("screenshots") == []
             and obs.get("ws07_passed") is False and obs.get("failures") == [], "headless/read-only evidence cannot pass WS07")
     snapshot = obs.get("snapshot", {})
     require(snapshot.get("profile_id") == "world-slice-v1" and snapshot.get("version") == 4
             and isinstance(snapshot.get("world"), dict), "world snapshot unavailable")
-    require(obs.get("files") == {"primary": False, "backup": False}, "read-only fresh probe wrote saves")
+    if stage == "inspect":
+        require(obs.get("inputs") == [] and obs.get("files") == {"primary": False, "backup": False}, "read-only fresh probe wrote saves/input")
+        return
+    require(obs.get("stage") == stage and obs.get("quit_input_dispatched") is True, "route did not request real UI exit")
+    require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
+    trace = obs.get("inputs", [])
+    require(trace and [r["sequence"] for r in trace] == list(range(1,len(trace)+1)), "missing/noncontiguous actual inputs")
+    names = [r["name"] for r in obs.get("checkpoints", [])]
+    require(names and len(names) == len(set(names)) and names[0] == "startup-before-input" and names[-1] == "pre-quit", "checkpoint sequence incomplete/duplicate")
+    require(obs["checkpoints"][0]["input_count"] == 0, "startup barrier received input")
+    if stage == "restore-exit":
+        require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
+    else:
+        require("saved" in names and "paused-" + request["save_boundary"] in names, "requested real save boundary missing")
+        if request["save_boundary"] == "after-sale":
+            require(all(n in names for n in ["carrying", "cooking", "ready", "customer-arriving", "first-sale"]), "first-loop checkpoints missing")
+            sale = obs.get("first_sale", {})
+            require(sale.get("revenue", 0) > 0 and sale.get("paid_total") == sale.get("base_price",0)+sale.get("tip",0), "actual paid sale missing")
+            require(sale.get("channel") == ("manual" if stage == "first-manual" else "floating"), "wrong first-loop delivery route")
+
+
+def save_pair(user):
+    paths = [path_safe(user / SAVE_RELATIVE), path_safe(Path(str(user / SAVE_RELATIVE) + ".bak"))]
+    states = file_states(paths)
+    return {name: states[str(path)] for name, path in zip(["primary", "backup"], paths)}
 
 
 # This pre-Main source-only probe stays outside the immutable source archive.
@@ -211,12 +237,12 @@ func _initialize():
 '''
 
 
-def inspect(args):
+def run_source(args):
     output = new_output(args.output)
     result = {"kind": "world-source-headless-preflight", "status": "failed",
               "source_commit": args.candidate, "ws07_passed": False, "wsh_observed": False,
               "processes": [], "evidence": {}, "errors": [],
-              "remaining": ["P10/P11 real route integration", "authorized rendered WS07", "human WSH"]}
+              "remaining": ["first execution against fixed P10/P11 candidate", "full night/growth route", "authorized rendered WS07", "human WSH"]}
     tracked = {}
     guards = {}
     def launch(label, command, timeout=35):
@@ -272,18 +298,44 @@ def inspect(args):
         generated = file_states(p for p in source.rglob("*") if p.is_file() and ".godot" not in p.parts)
         write_json(output / "source-manifest.json", {"candidate": candidate, "tree": tree,
                    "tracked": tracked, "after_import_and_override": generated})
-        request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
-                   "user_dir": str(user), "mode": args.mode, "stage": "inspect", "output": str(output),
-                   "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
-        write_json(output / "request.json", request)
-        process = launch("main", [engine, "--headless", "--path", source, "--log-file", output / "main-engine.log",
-                                 "--", "--v02-request", output / "request.json"])
-        error_free(output / "main-engine.log")
-        validate_observation(read_json(output / "observation.json"), request, process)
-        require((output / "inputs.jsonl").read_bytes() == b"", "inspect emitted input")
-        require(not save.exists() and not Path(str(save) + ".bak").exists(), "inspect changed fresh save state")
+        previous = None
+        for stage in (["inspect"] if args.stage == "inspect" else [args.stage,"restore-exit"]):
+            request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
+                       "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
+                       "save_boundary":args.save_boundary,"window_size":args.window_size,
+                       "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
+            if previous is not None:
+                expected = output / "restore-expected.json"; write_json(expected, previous)
+                request.update(previous=str(expected), previous_sha256=hashlib.sha256(expected.read_bytes()).hexdigest())
+            request_path = output / (stage + "-request.json"); write_json(request_path, request)
+            flags = [] if args.window_size is None else ["--resolution", "x".join(map(str,args.window_size))]
+            process = launch(stage, [engine, "--headless", *flags, "--max-fps", "60", "--path", source,
+                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], 150)
+            error_free(output / (stage + "-engine.log"))
+            observation = read_json(output / (stage + "-observation.json"))
+            validate_observation(observation, request, process)
+            trace = [strict_json(line) for line in (output / (stage + "-inputs.jsonl")).read_text().splitlines()]
+            require(trace == observation["inputs"], "raw input trace differs from observation")
+            if stage == "inspect":
+                require(not save.exists() and not Path(str(save) + ".bak").exists(), "inspect changed fresh save state")
+            else:
+                # Preserve exact bytes before another process can rotate the backup.
+                stage_files = save_pair(user)
+                for name, path in [("primary", save), ("backup", Path(str(save) + ".bak"))]:
+                    if stage_files[name]["exists"]:
+                        raw = output / (stage + "-" + name + ".json")
+                        raw.write_bytes(path.read_bytes())
+                        require(evidence_files([raw])[str(raw)] == stage_files[name], "raw save copy differs from product bytes")
+                pre_quit = observation["checkpoints"][-1]["snapshot"]
+                require(pre_quit["paused"] is True and not snapshot_differences(pre_quit,read_json(save)), "host primary differs from complete pre-quit snapshot")
+                if previous is not None:
+                    for checkpoint in observation["checkpoints"][:2]:
+                        require(checkpoint["input_count"] == 0 and not snapshot_differences(previous["snapshot"],checkpoint["snapshot"])
+                                and checkpoint["files"] == previous["files"], "restore state/files changed before input")
+                    require(result["processes"][-2]["ended_ns"] <= process["started_ns"], "restore processes overlapped")
+                previous = {"snapshot":pre_quit,"files":stage_files}
         check_guards(generated)
-        result["status"] = "observed"
+        result["status"] = "observed" if args.stage == "inspect" else "save-boundary-observed"
     except (ValueError, OSError, KeyError, TypeError, BuildError, subprocess.SubprocessError, tarfile.TarError) as error:
         result["errors"].append(str(error))
     finally:
@@ -293,7 +345,7 @@ def inspect(args):
             result["status"] = "failed"; result["errors"].append(str(error))
         result["evidence"] = evidence_files(p for p in output.iterdir() if p.is_file() and p.name != "result.json")
         write_json(output / "result.json", result)
-    return 0 if result["status"] == "observed" else 2
+    return 0 if result["status"] in ["observed", "save-boundary-observed"] else 2
 
 
 def main():
@@ -302,10 +354,17 @@ def main():
     parser.add_argument("--godot", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--mode", choices=["mouse", "touch", "pad"], required=True)
+    parser.add_argument("--stage", choices=["inspect", "first-manual", "first-auto"], default="inspect")
+    parser.add_argument("--save-boundary", choices=["carrying", "cooking", "customer", "manual-reservation", "after-sale"], default="after-sale")
+    parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
     parser.add_argument("--guard", type=Path, action="append", default=[], help="explicit archived/immutable file only; never active userdata")
     args = parser.parse_args()
+    if args.stage != "inspect" and (args.window_size is None or args.window_size[0] < 640 or args.window_size[1] < 360):
+        parser.error("input diagnostics require an explicit window size of at least 640x360; no runtime geometry setters")
+    if args.stage == "first-auto" and args.save_boundary == "manual-reservation":
+        parser.error("manual reservation boundary requires first-manual")
     try:
-        return inspect(args)
+        return run_source(args)
     except (ValueError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 2

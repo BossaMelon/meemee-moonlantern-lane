@@ -167,6 +167,16 @@ class SupervisorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             w.read_json(missing)
 
+    def test_route_cli_requires_resolution_before_engine_start(self):
+        output = self.root / "must-not-exist"
+        command = [sys.executable, str(w.ROOT / "tests/runtime/world_slice.py"),
+                   "--candidate", "a"*40, "--godot", "/must-not-start-godot",
+                   "--mode", "touch", "--output", str(output), "--stage", "first-manual"]
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("explicit window size", result.stderr)
+        self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
