@@ -244,13 +244,49 @@
       "dish to raw station",
       "repeat request same/different args",
       "F key repeat",
-      "paused cook",
+      "paused take/put/cook/serve/enter/open_shop/start_wave",
+      "paused nonzero world_input; zero axes remain permitted",
+      "paused book action with wrong phase/distance/LOS/UID",
+      "incomplete full-trip ingredient bundle; do not shrink plan",
+      "repeat pantry pickup for already carried/loaded plan portions",
+      "cook quantity6 with only first4 portions loaded",
       "direct legacy craft/fulfill",
       "unknown target",
       "old save into new default",
       "2000 world_input setters leave persisted requests/economic ledger unchanged",
       "client supplied serve amounts rejected/ignored, never used for payment"
     ],
+    "paused_book_cases": {
+      "allowed_actions": ["plan", "menu", "buy", "recycle", "recover", "equip_weapon", "consume", "install", "uninstall", "settle", "upgrade", "next_day"],
+      "blocked_actions": ["take", "put", "cook", "serve", "enter", "open_shop", "start_wave"],
+      "steps": [
+        "For each allowed action use a valid nearby target, legal business phase and real eligible UIDs/budget, pause/open its book and execute via world_interact. Include closing settle then settled upgrade and next_day at ledger; these remain usable while paused.",
+        "Repeat allowed actions with far/occluded/wrong-region targets, wrong phases and invalid UIDs where applicable; pause must not waive any guard.",
+        "With otherwise valid state for each blocked action, pause and attempt it. Include cook with complete station ingredients, serve with ready carried dish and waiting customer, and both bell actions; each rejects atomically.",
+        "While paused reject nonzero world_input, allow zero axes and Session save/pause APIs. Advance with jobs, seated patience and a50ms manual reservation saved in flight; timers and position remain unchanged through book operations and pause, then resume their normal timing after unpause."
+      ],
+      "outcomes": ["Allowed book transactions change only their authorized state; no cooking/patience/service clock advances. Invalid/blocked actions preserve state and cannot use stopped time to cook or serve."]
+    },
+    "ingredient_bundle_cases": {
+      "plan_quantity": 6,
+      "carry_capacity": 12,
+      "station_capacity": 24,
+      "trip_portions": [4, 2],
+      "trip_input_units": [12, 6],
+      "cook_quantity": 6,
+      "recipes": [
+        {"recipe_id": "star_soup", "inputs_per_portion": {"pumpkin": 1, "ember_herb": 1, "sparkcap": 1}, "bag_uids": {"pumpkin": [106, 101, 105, 102, 104, 103], "ember_herb": [206, 201, 205, 202, 204, 203], "sparkcap": [306, 301, 305, 302, 304, 303]}, "shortage_item": "sparkcap"},
+        {"recipe_id": "comet_pie", "inputs_per_portion": {"flour": 1, "pumpkin": 1, "moonheart": 1}, "bag_uids": {"flour": [106, 101, 105, 102, 104, 103], "pumpkin": [206, 201, 205, 202, 204, 203], "moonheart": [306, 301, 305, 302, 304, 303]}, "shortage_item": "moonheart"}
+      ],
+      "steps": [
+        "Use controlled boundary snapshots with valid owned/unlocked recipe, these real input UIDs in bag and recorded costs; not a normal-route economic proof. Plan6; pantry suggests each material's lowest4 UIDs, twelve total, then real take/put loads them at prep.",
+        "Already carried first bundle counts as4 prepared portions; another take cannot repeat those portions or exceed capacity. After loading, remaining_plan_quantity=2; cook6 with only first12 ingredients rejects without consumption. Save/reload at carried/loaded boundaries retains these counts.",
+        "Take each material's remaining lowest2 UIDs, six total, and put into station_input. It now holds18 unique UIDs; further pantry pickup for this plan cannot fetch duplicate/excess materials. Cook once with quantity6 and advance nonpaused2000ms; exactly6 output UIDs inherit all18 consumed input costs.",
+        "Negative branch: before first take retain only3 of shortage_item while other materials have6. Required first bundle is4 portions; reject all pickup with missing material, leaving bag/carry/station/plan unchanged despite a smaller batch being possible. Reject caller-supplied partial bundle payload too.",
+        "Cross-check plan1/3/6 for all known recipes against min(remaining_plan_quantity,floor(12/sum(inputs))); no individual-unit F loop or silent plan decrease."
+      ],
+      "outcomes": ["Trip sizes12 then6 fit tray12 and station24; complete batch6 is cooked once, inputs and costs conserved. Lowest-UID selection is deterministic regardless of bag order. Loaded/carried portions are not fetched twice; missing full bundle fails atomically."]
+    },
     "manual_delivery_cases": {
       "item_id": "floating_pie",
       "price_tier": "standard",
@@ -316,6 +352,7 @@
       "acceptance_ids": ["WS02", "WS03", "WS04", "WS06"],
       "steps": [
         "Run all configuration.negative_interactions including cold stew/wrong budget, full carry/station/output, raw/dish mix and stale order.",
+        "Execute configuration.paused_book_cases and ingredient_bundle_cases through real Session/world_interact; check WS02 pause guards and WS03 two-trip batch UID/cost conservation, not copied expected reports.",
         "Save during cooking and delivery, replay request IDs and first-loaded held key; cross-check exact UID/cost/reservation/customer state.",
         "Execute configuration.manual_delivery_cases; compare quoted/reserved/committed base_price, tip, paid_total and actual cash delta.",
         "Replay served order with same and new request IDs, including pre50ms and postcommit reload; ensure auto scheduler cannot double-reserve manual UID/order and no second tip per wave.",
@@ -323,6 +360,7 @@
       ],
       "outcomes": [
         "Failures preserve complete state; no duplicated items or income. Paused/loaded state does not complete jobs/delivery from wall time.",
+        "Paused ledger upgrade/day actions work only with normal guards; stopped-time cooking/serving/bell actions fail. Three-input batch6 uses two whole bundles4+2, with full-trip shortage and incomplete cook rejected atomically.",
         "Manual next-step payment is exclusive; budget-fallback/auto/nonpreferred tips0, eligible tip2 once, base-unaffordable no state change. Frozen quote survives save and ledger total balances."
       ]
     },

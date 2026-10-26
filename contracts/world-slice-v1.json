@@ -67,23 +67,23 @@
     "commands": {
       "world_input": {
         "args": {"move_x": "finite number [-1,1]", "move_y": "finite number [-1,1]"},
-        "effect": "Set held movement only; advance is sole time progression. Do not append to persistent requests/economic ledger or allocate per-frame request IDs; a supplied generic request_id is not stored for this setter. Snapshot holds current axes only. Clear on focus loss/modal/load/region transition."
+        "effect": "Set held movement only; advance is sole time progression. Do not append to persistent requests/economic ledger or allocate per-frame request IDs; a supplied generic request_id is not stored for this setter. Snapshot holds current axes only. Clear on focus loss/modal/load/region transition. While paused accept only both axes=0 to clear; reject nonzero axes atomically, never move."
       },
       "world_interact": {
         "args": {"target_id": "string", "action": "enum below", "payload": "object, empty when unused"},
-        "effect": "One atomic spatial/economic transaction; all existing request_id duplicate/conflict guarantees apply. Target/action must be offered and revalidated; paused allows only book planning/purchase/save, no take/put/cook/serve/enter."
+        "effect": "One atomic spatial/economic transaction; all existing request_id duplicate/conflict guarantees apply. Target/action must be offered and revalidated; while paused only pause_policy.allowed_book_actions are permitted, with every normal target/range/LOS/phase/UID guard. Save/pause remain nonspatial Session APIs, not world_interact actions."
       }
     },
     "actions": {
       "take": {
         "targets": ["pantry", "prep"],
         "payload": {"uids": "unique array<int>=1, 1..12"},
-        "rule": "bag at pantry or ready/station_input at prep → carried; station_input may be recovered only with no active job. Core offers deterministic suggested_uids for planned bundle or ready output. No ingredient/dish mixing, no hidden copies."
+        "rule": "bag at pantry or ready/station_input at prep → carried; station_input may be recovered only with no active job. Core still offers deterministic suggested_uids for prep recovery/ready output. Pantry ingredient take uses the complete suggested bundle defined by loop.cooking.ingredient_bundle, with recipe materials and lowest UIDs chosen stably; payload cannot shrink it to partial ingredients or silently reduce the plan. Already carried/loaded ingredients count toward that plan. Missing any full-trip material rejects atomically with shortage reason. No ingredient/dish mixing, no hidden copies."
       },
       "put": {
         "targets": ["pantry", "prep", "pass"],
         "payload": {"uids": "unique subset of carried UIDs"},
-        "rule": "pantry→bag; prep accepts ingredients→station_input; pass accepts dishes→shelf subject to menu slots. All-or-nothing. Putting down never sells; no arbitrary floor drop is required."
+        "rule": "pantry→bag; prep accepts ingredients→station_input, accumulating multiple complete trips up to existing24 capacity; pass accepts dishes→shelf subject to menu slots. All-or-nothing. Putting down never sells; no arbitrary floor drop is required."
       },
       "cook": {
         "targets": ["prep"],
@@ -167,11 +167,17 @@
         "rule": "preparation/intermission, no active job or pot delivery; installed→bag, held portions cool, intrinsic tags retained."
       }
     },
+    "pause_policy": {
+      "allowed_book_actions": ["plan", "menu", "buy", "recycle", "recover", "equip_weapon", "consume", "install", "uninstall", "settle", "upgrade", "next_day"],
+      "blocked_world_actions": ["take", "put", "cook", "serve", "enter", "open_shop", "start_wave"],
+      "guards": "Pause/modal never waives original target, same-region/range/LOS, phase, ownership/UID, budget or request guards. Ledger settle/upgrade/next_day work while paused only when their normal preconditions hold.",
+      "clocks": "Book operations advance no cooking, customer patience or service clocks. advance while paused advances none; world_input may only clear both axes. Save/pause stay nonspatial Session APIs."
+    },
     "blocked_bypasses": [
       "In world profile reject direct craft/display/undisplay/fulfill/start_expedition/finish_shopping and remote economic commands that bypass world_interact spatial guards; internal helpers are not public shortcuts.",
       "Only ordinary inventory listing is global. Purchase, plan, menu and upgrades require their nearby world object even inside a book; opening a book clears movement and pauses clocks."
     ],
-    "retained_nonspatial": ["pause/advance", "expedition_input and leave_expedition while expedition"],
+    "retained_nonspatial": ["pause/advance", "save_to/load_from", "expedition_input and leave_expedition while expedition"],
     "tick_ownership": "Main advances non-expedition world exactly once; existing expedition panel advances only phase=expedition. Session rejects world_input there; world jobs/time freeze during expedition. Never let both panels advance same interval."
   },
   "state": {
@@ -246,7 +252,7 @@
   },
   "loop": {
     "phases": ["preparation", "trading", "intermission", "closing", "settled", "expedition"],
-    "phase_rules": "No separate shopping phase in world profile. First boot preparation with known recipe plan. World movement/take/put allowed in all business phases; cooking allowed preparation/trading/intermission. Planning/menu/vendor only preparation/intermission. Three waves retain real intermission. Legacy/quality phase rules remain unchanged.",
+    "phase_rules": "No separate shopping phase in world profile. First boot preparation with known recipe plan. When unpaused, world movement/take/put allowed in all business phases; cooking allowed preparation/trading/intermission. Planning/menu/vendor only preparation/intermission. While paused apply api.pause_policy without bypassing these phase guards. Three waves retain real intermission. Legacy/quality phase rules remain unchanged.",
     "starter": {
       "cash": 60,
       "items": {"flour": 3, "pumpkin": 3, "stirring_cauldron": 1},
@@ -261,6 +267,12 @@
       "duration_ms": 2000,
       "parallel_station_jobs": 1,
       "default_repeat_without_book": true,
+      "ingredient_bundle": {
+        "trip_quantity": "min(remaining_plan_quantity, floor(12 / sum(recipe.inputs.values())))",
+        "remaining_plan_quantity": "Current plan quantity minus recipe portions already prepared in station_input and carried ingredients together; count each existing UID once, never fetch material again for already carried/loaded portions.",
+        "selection": "Select recipe material quantities for exactly trip_quantity whole portions, using lowest eligible bag UIDs in stable recipe-material order. If any material cannot fill that trip, reject all pickup with an explicit shortage; do not shrink quantity, alter plan or give a partial recipe.",
+        "loading": "Allow successive whole-bundle trips into station_input max24, with carried max12. Three-input star_soup/comet_pie quantity6 uses4 portions/12 UIDs then2 portions/6 UIDs, followed by one cook quantity6. Batch1..6/default3 and one-F bundle convenience remain."
+      },
       "completion_rule": "On cook-start consume input UIDs and create cooking output UIDs with per-recipe cost, prepared_wave_id=null. At ready transition stamp current wave if trading, next_wave_id if preparation/intermission, otherwise last wave. No reheat of already-ready/cooled dishes. Jobs continue in nonpaused intermission even after service wave ends.",
       "cancellation": "Before cook, take loaded ingredients back using original UIDs. After cook starts there is no cancel/refund; the2s job may pause/save and produces once. In-flight service likewise cannot cancel/refund or be reselected; completion owns the one payment."
     },
@@ -344,7 +356,8 @@
       "evidence_kinds": ["automated_case_report", "action_trace"],
       "pass_conditions": [
         "拿食材→放工作台→拿成菜→交付均移动同UID；carry容量12、位置互斥、远距/隔墙/错误目标/非法UID/重复F/请求冲突原子拒绝。",
-        "屏幕按钮、直接旧craft/display/fulfill与远程采购不能绕开空间guard；同区距离边界56内外均验证。"
+        "屏幕按钮、直接旧craft/display/fulfill与远程采购不能绕开空间guard；同区距离边界56内外均验证。",
+        "暂停册页白名单逐项按原目标/距离/LOS/阶段/UID验证；合法settle/upgrade/next_day可用，错阶段/远距仍拒绝。take/put/cook/serve/enter/open_shop/start_wave及非零world_input暂停拒绝；清零/save/pause可用，料理/耐心/服务时钟不推进。"
       ]
     },
     {
@@ -354,7 +367,7 @@
       "required": true,
       "claim": "批量魔法料理和两路线在世界中可操作。",
       "evidence_kinds": ["automated_case_report", "action_trace"],
-      "pass_conditions": ["已知五配方1/3/6批量，真实原料在台才可做，成本进实际cooking/readyUID；2秒工作可边走边进行，暂停/恢复不复制。", "新制浮空双通道与锅3份跨波保温各有正常/冷余货反例，视觉对应真实状态，不是改标签或仅开面板。"]
+      "pass_conditions": ["已知五配方1/3/6批量，真实原料在台才可做，成本进实际cooking/readyUID；2秒工作可边走边进行，暂停/恢复不复制。", "星火汤/彗星饼6份各需18原料，按4份束12料+2份束6料两趟累积后一次cook6；最小UID稳定选择，已携/已装料不重复取，18个输入UID各消耗一次、产6个真实菜UID且成本守恒。缺少该趟完整束原子失败，不暗减批量/给残缺料；只装首趟时cook6失败，暂停cook/serve失败且时钟不动。", "新制浮空双通道与锅3份跨波保温各有正常/冷余货反例，视觉对应真实状态，不是改标签或仅开面板。"]
     },
     {
       "id": "WS04",
