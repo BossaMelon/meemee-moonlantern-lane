@@ -1,0 +1,1145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:moonlantern:h06:protocol:v1",
+  "title": "Four H06 handoff documents; local $defs only",
+  "$defs": {
+    "File": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "FileState": {
+      "type": "object",
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "exists",
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "Payload": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "SavePair": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "$ref": "#/$defs/FileState"
+        },
+        "backup": {
+          "$ref": "#/$defs/FileState"
+        }
+      },
+      "required": [
+        "primary",
+        "backup"
+      ],
+      "additionalProperties": false
+    },
+    "Package": {
+      "type": "object",
+      "properties": {
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable": {
+          "$ref": "#/$defs/File"
+        },
+        "pck": {
+          "$ref": "#/$defs/File"
+        },
+        "override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/File"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^MeeMeeMoonlanternLane-H06/[0-9a-f]{32}/(player|verification)$"
+        },
+        "user_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inventory": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Payload"
+          }
+        },
+        "imports": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        },
+        "setting_hashes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "setting_values": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "effective_setting_values": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "staging_delta": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "source_literal": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effective_value": {}
+            },
+            "required": [
+              "source_literal",
+              "effective_value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "root",
+        "executable",
+        "pck",
+        "override",
+        "namespace",
+        "user_dir",
+        "inventory",
+        "imports",
+        "setting_hashes",
+        "setting_values",
+        "effective_setting_values",
+        "staging_delta"
+      ],
+      "additionalProperties": false
+    },
+    "BuildManifest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "source_tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "build_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "builder_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "builder_source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "harness": {
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "contract_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "schema_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "qa_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "runner_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "commit",
+            "contract_sha256",
+            "schema_sha256",
+            "qa_sha256",
+            "runner_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "os": {
+              "enum": [
+                "macos",
+                "windows"
+              ]
+            },
+            "arch": {
+              "enum": [
+                "arm64",
+                "x86_64",
+                "universal"
+              ]
+            }
+          },
+          "required": [
+            "os",
+            "arch"
+          ],
+          "additionalProperties": false
+        },
+        "engine": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": "4.7.2.stable.official.ed1daf0bf"
+            },
+            "editor": {
+              "$ref": "#/$defs/File"
+            },
+            "template_archive": {
+              "$ref": "#/$defs/File"
+            },
+            "template_member_chain": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "maxItems": 2
+            },
+            "template_member_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "template_kind": {
+              "const": "standard-release"
+            },
+            "transformations": {
+              "const": []
+            }
+          },
+          "required": [
+            "version",
+            "editor",
+            "template_archive",
+            "template_member_chain",
+            "template_member_sha256",
+            "template_kind",
+            "transformations"
+          ],
+          "additionalProperties": false
+        },
+        "export_policy": {
+          "const": {
+            "script_export_mode": 0,
+            "editor/export/convert_text_resources_to_binary": false,
+            "embedded_pck": false
+          }
+        },
+        "packages": {
+          "type": "object",
+          "properties": {
+            "player": {
+              "$ref": "#/$defs/Package"
+            },
+            "verification": {
+              "$ref": "#/$defs/Package"
+            }
+          },
+          "required": [
+            "player",
+            "verification"
+          ],
+          "additionalProperties": false
+        },
+        "source_files": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Payload"
+          }
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "purpose": {
+                "enum": [
+                  "old_save",
+                  "old_package"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "state": {
+                "$ref": "#/$defs/FileState"
+              }
+            },
+            "required": [
+              "purpose",
+              "path",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "schema_version",
+        "source_commit",
+        "source_tree",
+        "build_id",
+        "builder_revision",
+        "builder_source_sha256",
+        "harness",
+        "target",
+        "engine",
+        "export_policy",
+        "packages",
+        "source_files",
+        "guards"
+      ],
+      "additionalProperties": false
+    },
+    "RunRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "contract_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "profile": {
+          "enum": [
+            "release_headless",
+            "mac_release_rendered"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "purchase_save",
+            "restore_exit"
+          ]
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pck_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "qa_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "expected_namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_user_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_default_save_path": {
+          "const": "user://profiles/rain-night-v1/moonlantern.json"
+        },
+        "output_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "previous_evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_evidence_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "deadlines": {
+          "const": {
+            "ready_seconds": 15,
+            "action_seconds": 5,
+            "exit_seconds": 10,
+            "process_seconds": 90,
+            "focus_seconds": 5,
+            "draw_seconds": 5
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_sha256",
+        "run_id",
+        "nonce",
+        "profile",
+        "stage",
+        "manifest_sha256",
+        "executable_sha256",
+        "pck_sha256",
+        "qa_sha256",
+        "expected_namespace",
+        "expected_user_dir",
+        "expected_default_save_path",
+        "output_dir",
+        "previous_evidence",
+        "previous_evidence_sha256",
+        "deadlines"
+      ],
+      "additionalProperties": false
+    },
+    "Checkpoint": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "enum": [
+            "fresh",
+            "after_buy",
+            "paused_saved",
+            "pre_quit",
+            "startup_before_input",
+            "settled_before_input"
+          ]
+        },
+        "snapshot": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "files": {
+          "$ref": "#/$defs/SavePair"
+        },
+        "input_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "feedback": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "snapshot",
+        "files",
+        "input_count",
+        "feedback"
+      ],
+      "additionalProperties": false
+    },
+    "Display": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "integer"
+        },
+        "focused": {
+          "type": "boolean"
+        },
+        "window_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "screen_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "viewport_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "content_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "transform": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "png": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "name",
+        "mode",
+        "focused",
+        "window_size",
+        "screen_size",
+        "viewport_size",
+        "content_size",
+        "transform",
+        "png",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "Input": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "control_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "control_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "motion",
+            "button"
+          ]
+        },
+        "pressed": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "logical_position": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "rect": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "transform": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "sequence",
+        "control_id",
+        "control_path",
+        "kind",
+        "pressed",
+        "position",
+        "logical_position",
+        "rect",
+        "transform"
+      ],
+      "additionalProperties": false
+    },
+    "ProcessObservation": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stage": {
+          "enum": [
+            "purchase_save",
+            "restore_exit"
+          ]
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "executable_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "main": {
+          "type": "object",
+          "properties": {
+            "scene": {
+              "type": "string",
+              "minLength": 1
+            },
+            "script": {
+              "type": "string",
+              "minLength": 1
+            },
+            "instance_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ready_observed": {
+              "type": "boolean"
+            },
+            "current_scene_matches": {
+              "type": "boolean"
+            },
+            "node_ready": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "scene",
+            "script",
+            "instance_id",
+            "ready_observed",
+            "current_scene_matches",
+            "node_ready"
+          ],
+          "additionalProperties": false
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "minLength": 1
+            },
+            "user_dir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "save_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "absolute_save": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "namespace",
+            "user_dir",
+            "save_path",
+            "absolute_save"
+          ],
+          "additionalProperties": false
+        },
+        "initial_files": {
+          "$ref": "#/$defs/SavePair"
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checkpoint"
+          },
+          "minItems": 1
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "result": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "input_count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "kind",
+              "args",
+              "result",
+              "input_count"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Input"
+          }
+        },
+        "font": {
+          "type": "object",
+          "properties": {
+            "class": {
+              "type": "string",
+              "minLength": 1
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "system_fallback": {
+              "type": "boolean"
+            },
+            "fallback_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "consumer_same_font": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "class",
+            "path",
+            "sha256",
+            "bytes",
+            "system_fallback",
+            "fallback_count",
+            "consumer_same_font"
+          ],
+          "additionalProperties": false
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "displays": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Display"
+          }
+        },
+        "quit_input_dispatched": {
+          "type": "boolean"
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "run_id",
+        "nonce",
+        "stage",
+        "pid",
+        "executable_path",
+        "engine_version",
+        "features",
+        "main",
+        "profile",
+        "initial_files",
+        "checkpoints",
+        "actions",
+        "inputs",
+        "font",
+        "resources",
+        "displays",
+        "quit_input_dispatched",
+        "failures"
+      ],
+      "additionalProperties": false
+    },
+    "ProcessExit": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "h06-owned-process-v1"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "started_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ended_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "interrupted": {
+          "type": "boolean"
+        },
+        "ownership": {
+          "enum": [
+            "posix_session",
+            "windows_job"
+          ]
+        },
+        "owned_empty": {
+          "type": "boolean"
+        },
+        "cleanup_signals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "log_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "protocol",
+        "nonce",
+        "argv",
+        "cwd",
+        "pid",
+        "started_ns",
+        "ended_ns",
+        "exit_code",
+        "timed_out",
+        "interrupted",
+        "ownership",
+        "owned_empty",
+        "cleanup_signals",
+        "log_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "NativeResult": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "evidence_kind": {
+          "enum": [
+            "harness_fixture",
+            "release_headless",
+            "mac_release_rendered"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "harness-ready",
+            "passed",
+            "failed"
+          ]
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "contract_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "required_cases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "checks": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "checks"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "processes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProcessExit"
+          }
+        },
+        "fixture_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "checks": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "checks"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Payload"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "evidence_kind",
+        "outcome",
+        "run_id",
+        "source_commit",
+        "manifest_sha256",
+        "contract_sha256",
+        "required_cases",
+        "cases",
+        "processes",
+        "fixture_results",
+        "evidence",
+        "errors"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
