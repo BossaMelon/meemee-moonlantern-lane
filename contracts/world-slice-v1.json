@@ -1,0 +1,438 @@
+{
+  "schema_version": 1,
+  "milestone": "world-slice",
+  "suite": "world-slice",
+  "design_source": "docs/06-quality-slice.md",
+  "fixtures": "tests/fixtures/world-slice-scenarios.json",
+  "baseline": {
+    "source_sha": "f51251b6c6a4646688c03c1fbe77885f1b907c29",
+    "rain_night_recovery_sha": "13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29",
+    "scope": "New world profile only. Existing quality/prototype contracts, fixtures and saves are immutable recovery baselines. Negative r2 feedback concerns entry/shop interaction; full-night/combat human results are not inferred."
+  },
+  "report_protocol": {
+    "schema_version": 1,
+    "suite": "world-slice",
+    "runner": "tests/run.gd",
+    "runner_args": ["--", "--suite", "world-slice", "--report", "ABS_REPORT"],
+    "required_automated_ids": ["WS01", "WS02", "WS03", "WS04", "WS05", "WS06"],
+    "external_evidence_ids": ["WS07", "WSH"],
+    "rules": [
+      "Required cases must each execute checks>0 and pass; missing/duplicate/unknown/skipped/zero/crash/timeout/nonzero exit fail.",
+      "WS07/WSH cannot appear as automatic passed cases. Keep prototype and quality-slice regression suites separate; unknown world-slice must fail until implemented."
+    ]
+  },
+  "profile": {
+    "id": "world-slice-v1",
+    "default": true,
+    "save_version": 4,
+    "rules_version": 1,
+    "world_model_version": 1,
+    "user_data_name": "moonlantern-world-slice-v1",
+    "save_path": "user://profiles/world-slice-v1/moonlantern.json",
+    "backup_suffix": ".bak",
+    "old_profiles": ["rain-night-v1", "prototype-v1"],
+    "rules": [
+      "New Main, Session default, launcher and save/load defaults select this profile together; no hidden opt-in mode.",
+      "Use an independent user-data root AND new path. New world never scans/reads/migrates/overwrites active r2, rain-night or three-day main/bak. Explicitly supplied old/wrong-profile test copies fail unchanged; never probe actual active player files.",
+      "Bad JSON may recover a valid same-profile/same-version backup; identity/version/map mismatch fails without silent fallback/new game. Unknown fields cannot bypass UID/economy validation.",
+      "Hash-invariance guards cover only inactive old saves, controlled test copies and immutable old packages. Active human r2 saves may change normally; do not read/restore/delete them or treat normal saving as failure. Prove new world does not access those paths using isolated test evidence."
+    ]
+  },
+  "movement": {
+    "map_id": "moonlantern-shop-lane",
+    "map_revision": 1,
+    "geometry_source": "fixtures.configuration.layout",
+    "step_ms": 50,
+    "speed": 160,
+    "player_radius": 12,
+    "stick_deadzone": 0.2,
+    "interact_radius": 56,
+    "carry_capacity": 12,
+    "camera": {
+      "reference_view": [640, 360],
+      "follow": "center on authoritative player foot, clamp to region bounds; immediate follow with optional render-only interpolation <= one physics step",
+      "scale": "nearest-neighbor; world_view fills available game surface at reference aspect, letterbox rather than alter physics; UI/touch controls outside or at safe edges of that surface",
+      "resize_rule": "do not rescale coordinates/speed/radius or teleport player; all interactable targets reachable via movement even when off camera"
+    },
+    "rules": [
+      "Normalize diagonals, finite axes [-1,1], reject invalid values atomically. Swept circle vs fixed rectangles with slide, including corners; no teleport through collision on long delta.",
+      "Store last nonzero direction as nw/ne/sw/se; idle retains facing. Use four existing walk sprites while moving, not a static hero with scrolling background.",
+      "World collision/player position belong to core. UI Camera2D, sprite, carry icon and prompts consume view; UI physics/probe cannot independently authorize movement or transactions.",
+      "An interaction requires same region, distance<=56 to explicit anchor AND unobstructed segment to anchor; nearest eligible anchor then stable id wins F selection. Press F turns actor toward target.",
+      "Every action rechecks range/phase/UID on execution; clicked offscreen buttons do not authorize remote actions. Boundary =56 succeeds, >56 fails."
+    ]
+  },
+  "api": {
+    "session": "Session.new(seed_value=1, profile_id=\"world-slice-v1\"); retain command/view/snapshot/advance/set_paused/save_to/load_from/validate_snapshot/action_trace",
+    "commands": {
+      "world_input": {
+        "args": {"move_x": "finite number [-1,1]", "move_y": "finite number [-1,1]"},
+        "effect": "Set held movement only; advance is sole time progression. Do not append to persistent requests/economic ledger or allocate per-frame request IDs; a supplied generic request_id is not stored for this setter. Snapshot holds current axes only. Clear on focus loss/modal/load/region transition. While paused accept only both axes=0 to clear; reject nonzero axes atomically, never move."
+      },
+      "world_interact": {
+        "args": {"target_id": "string", "action": "enum below", "payload": "object, empty when unused"},
+        "effect": "One atomic spatial/economic transaction; all existing request_id duplicate/conflict guarantees apply. Target/action must be offered and revalidated; while paused only pause_policy.allowed_book_actions are permitted, with every normal target/range/LOS/phase/UID guard. Save/pause remain nonspatial Session APIs, not world_interact actions."
+      }
+    },
+    "actions": {
+      "take": {
+        "targets": ["pantry", "prep"],
+        "payload": {"uids": "unique array<int>=1, 1..12"},
+        "rule": "bag at pantry or ready/station_input at prep → carried; station_input may be recovered only with no active job. Core still offers deterministic suggested_uids for prep recovery/ready output. Pantry ingredient take uses the complete suggested bundle defined by loop.cooking.ingredient_bundle, with recipe materials and lowest UIDs chosen stably; payload cannot shrink it to partial ingredients or silently reduce the plan. Already carried/loaded ingredients count toward that plan. Missing any full-trip material rejects atomically with shortage reason. No ingredient/dish mixing, no hidden copies."
+      },
+      "put": {
+        "targets": ["pantry", "prep", "pass"],
+        "payload": {"uids": "unique subset of carried UIDs"},
+        "rule": "pantry→bag; prep accepts ingredients→station_input, accumulating multiple complete trips up to existing24 capacity; pass accepts dishes→shelf subject to menu slots. All-or-nothing. Putting down never sells; no arbitrary floor drop is required."
+      },
+      "cook": {
+        "targets": ["prep"],
+        "payload": {"recipe_id": "existing recipe id", "quantity": "integer 1..6"},
+        "rule": "Requires exact ingredients already at station, free job/output space and installed device for stew. Consume input UIDs/cost once, allocate actual cooking output UIDs, finish to ready after2000ms; no instant panel craft."
+      },
+      "serve": {
+        "targets": ["seat-1", "seat-2", "seat-3", "seat-4"],
+        "payload": {"order_id": "live seated order id", "uid": "one carried dish UID"},
+        "rule": "Match exact carried UID to live seat/customer demand and base budget; create exclusive channel=manual reservation with remaining_ms=50. Freeze base_price/tip/paid_total from core quote, stop patience. Next nonpaused fixed service step uses the same _deliver commit; do not take the ordinary3000ms channel. Commit once removes UID, pays total and records any wave tip; UI never pays."
+      },
+      "plan": {
+        "targets": ["recipe-book"],
+        "payload": {"recipe_id": "existing recipe id", "quantity": "integer 1..6"},
+        "rule": "Set next batch plan, default floating_pie×3; no ingredients moved/created. Book is optional for repeating plan; F at pantry/prep performs physical steps without reopening it."
+      },
+      "menu": {
+        "targets": ["menu-board"],
+        "payload": {"item_ids": "unique dish ids, max2 or3 with shelf", "tiers": "dictionary dish id → friendly|standard|premium"},
+        "rule": "Declare offered dishes/order and price; does not move inventory. Set in preparation/intermission, actual matching still requires carried/shelf UIDs."
+      },
+      "buy": {
+        "targets": ["vendor"],
+        "payload": {"item_id": "catalog ingredient/device id", "quantity": "positive integer"},
+        "rule": "preparation/intermission; existing prices/cash/supply guards, purchases delivered to pantry bag and visible there; no compulsory per-unit cargo trips."
+      },
+      "recycle": {
+        "targets": ["vendor"],
+        "payload": {"item_id": "catalog id", "quantity": "positive integer"},
+        "rule": "preparation/intermission, only bag instances; preserve rare4/8, device18, no sale of carried/loaded/cooking/reserved UID."
+      },
+      "recover": {
+        "targets": ["vendor"],
+        "payload": {},
+        "rule": "Existing once/day12 rescue, no dish income; not required by normal route tests."
+      },
+      "open_shop": {
+        "targets": ["door-bell"],
+        "payload": {},
+        "rule": "preparation→trading wave1; no modal. Bell/door light and approaching real guest show result."
+      },
+      "start_wave": {
+        "targets": ["door-bell"],
+        "payload": {"wave_id": "service.next_wave_id"},
+        "rule": "intermission only; no re-roll/budget or daily reset."
+      },
+      "settle": {"targets": ["ledger"], "payload": {}, "rule": "closing→settled; same ledger fee/once-only settlement."},
+      "upgrade": {
+        "targets": ["ledger"],
+        "payload": {"upgrade_id": "field_kit|shelf"},
+        "rule": "settled; costs110 each, field_kit income gate24, no hard exclusivity; activation next_day."
+      },
+      "next_day": {
+        "targets": ["ledger"],
+        "payload": {},
+        "rule": "settled→preparation; preserve inventory/positions/upgrades, generate next queues once; no real-time delay."
+      },
+      "enter": {
+        "targets": ["shop-exit", "lane-home", "garden-gate"],
+        "payload": {},
+        "rule": "shop↔lane requires valid portal and no modal; garden additionally preparation, empty hands, no active cooking/reservations and unused expedition attempt. Atomically preserve return anchor and start real existing expedition. No menu teleport."
+      },
+      "equip_weapon": {
+        "targets": ["recipe-book"],
+        "payload": {"weapon_id": "owned weapon id"},
+        "rule": "preparation, existing ownership guard; gear tab in same short book."
+      },
+      "consume": {
+        "targets": ["recipe-book"],
+        "payload": {"item_id": "floating_pie|star_soup", "quantity": "integer=1"},
+        "rule": "preparation, actual bag dish and existing exclusive next-expedition meal object/UID; no sale income."
+      },
+      "install": {
+        "targets": ["prep"],
+        "payload": {"uid": "bag stirring_cauldron UID"},
+        "rule": "preparation/intermission, no active job, existing one-device capacity; install same UID."
+      },
+      "uninstall": {
+        "targets": ["prep"],
+        "payload": {"uid": "installed stirring_cauldron UID"},
+        "rule": "preparation/intermission, no active job or pot delivery; installed→bag, held portions cool, intrinsic tags retained."
+      }
+    },
+    "pause_policy": {
+      "allowed_book_actions": ["plan", "menu", "buy", "recycle", "recover", "equip_weapon", "consume", "install", "uninstall", "settle", "upgrade", "next_day"],
+      "blocked_world_actions": ["take", "put", "cook", "serve", "enter", "open_shop", "start_wave"],
+      "guards": "Pause/modal never waives original target, same-region/range/LOS, phase, ownership/UID, budget or request guards. Ledger settle/upgrade/next_day work while paused only when their normal preconditions hold.",
+      "clocks": "Book operations advance no cooking, customer patience or service clocks. advance while paused advances none; world_input may only clear both axes. Save/pause stay nonspatial Session APIs."
+    },
+    "blocked_bypasses": [
+      "In world profile reject direct craft/display/undisplay/fulfill/start_expedition/finish_shopping and remote economic commands that bypass world_interact spatial guards; internal helpers are not public shortcuts.",
+      "Only ordinary inventory listing is global. Purchase, plan, menu and upgrades require their nearby world object even inside a book; opening a book clears movement and pauses clocks."
+    ],
+    "retained_nonspatial": ["pause/advance", "save_to/load_from", "expedition_input and leave_expedition while expedition"],
+    "tick_ownership": "Main advances non-expedition world exactly once; existing expedition panel advances only phase=expedition. Session rejects world_input there; world jobs/time freeze during expedition. Never let both panels advance same interval."
+  },
+  "state": {
+    "notation": "Required public fields, JSON integer values excluding bool; finite numbers only. Existing ledger/RNG/requests preserved. Arrays are authoritative UID references, not secondary inventory copies.",
+    "world": {
+      "version": "int=1",
+      "map_id": "moonlantern-shop-lane",
+      "map_revision": "int=1",
+      "region_id": "shop|lane (retained lane return anchor while phase=expedition)",
+      "player": "{x:number,y:number,facing:nw|ne|sw|se}",
+      "input": "{move_x:number,move_y:number}",
+      "carried_uids": "array<int>, max12",
+      "plan": "{recipe_id:string,quantity:int1..6}",
+      "stations": "array<station>",
+      "customers": "array<customer>",
+      "intro_flags": "{moved:bool,took:bool,loaded:bool,cooked:bool,served:bool}",
+      "remainder_ms": "int0..49"
+    },
+    "station": {
+      "id": "prep",
+      "input_uids": "array<int> location=station_input, max24",
+      "output_uids": "array<int> location=ready, max12",
+      "job": "null|{id:string,recipe_id:string,output_uids:array<int>,remaining_ms:int0..2000}"
+    },
+    "items_locations": ["bag", "carried", "station_input", "cooking", "ready", "shelf", "reserved", "installed"],
+    "customer": {
+      "id": "stable night/wave/order id",
+      "order_id": "same service order id",
+      "seat_id": "seat-1..4",
+      "x": "number",
+      "y": "number",
+      "state": "arriving|waiting|reserved|eating|leaving|gone",
+      "path_index": "int>=0",
+      "reaction_remaining_ms": "int>=0"
+    },
+    "view_extensions": {
+      "world": "deep-copy authoritative world incl positions/carry/job/customer state",
+      "interactions": "array<{target_id,action,payload,label,enabled,reason,anchor}> recomputed from real range/LOS/state",
+      "events": "world_moved/region_changed/item_taken/item_put/cooking_started/cooking_ready/customer_arrived/served/customer_left with entity/UID/order IDs and tick",
+      "world.geometry": "active region {width,height,colliders,objects,portals} matching fixture revision; view-only enrichment, not duplicated mutable save data. Runtime may bake exact checked layout into core; UI reads core geometry, never its own collision copy. Production player code must use packaged/baked core layout and run with tests/fixtures absent; fixtures are verification input only.",
+      "serve_quotes": "For each suggested carried UID/order: {order_id,uid,base_price,tip,paid_total,tip_reason}; reason=eligible|budget_no_room|not_preferred|already_paid|automatic|base_unaffordable. Show the hand preference and all amounts before F; caller cannot supply monetary fields."
+    },
+    "invariants": [
+      "An item UID is in exactly one location; every carried/station/job/reservation reference resolves uniquely and contributes to capacity80; consumed ingredients leave items once, cooking outputs preserve exact cost basis.",
+      "No new wallet or parallel simulated orders. service.orders/reservations/sales are existing economic facts extended by spatial customer links. No visual sale before authoritative event.",
+      "Invalid action, stale target, wrong UID, remote distance, duplicate/conflicting request or interrupted save cannot duplicate cooking output, pickup or income.",
+      "Save full region/position/facing/carry/stations/jobs/customer paths/orders/patience/delivery/RNG/held food/return anchor and once-only flags. Load clears held input, not progress; pause/offline time never advances.",
+      "Manual serve and automatic floating/pot scheduling create reservations only; reuse/extract the existing _deliver atomic commit as the sole UID removal/cash/order-completion entry. Never add cash in world_interact or UI.",
+      "Manual and auto reserve the same order/UID exclusively. Every paid sale has revenue=cash_delta=paid_total=base_price+tip<=budget; tip_paid_by_wave and terminal order/UID/cost/sale commit together. Persist frozen amounts and remaining_ms; no re-quote/re-tip after pause/load. New request ID does not reopen a terminal/reserved order.",
+      "Validate saved prefers_hand_delivery against first ordinary queue order, not caller data; tip2 is legal only for its manual sale with budget room and matching wave marker. Other channels/orders tip0, including after restore."
+    ],
+    "service_extensions": {
+      "tip_paid_by_wave": "dictionary current-night wave_id → preferred order_id, positive tips only; keep across waves, reset only real next_day to a new night id; historical sales/commits remain. Reconcile each entry with exactly one current-night tip sale."
+    },
+    "order_extensions": {"prefers_hand_delivery": "boolean, true only for first ordinary order in each generated wave, saved with queue"},
+    "reservation_extensions": {
+      "channel": "manual|ordinary|floating|pot",
+      "remaining_ms": "manual starts50; other channels unchanged",
+      "base_price": "integer>=0, existing recipe/tier/weather quote",
+      "tip": "integer0 or2, frozen by core",
+      "paid_total": "integer=base_price+tip<=order.budget",
+      "price": "if retained from existing reservation schema, alias of paid_total"
+    },
+    "sale_extensions": {
+      "base_price": "integer>=0",
+      "tip": "integer0 or2",
+      "paid_total": "integer=base_price+tip",
+      "revenue": "integer=paid_total",
+      "cost": "unchanged consumed item cost",
+      "channel": "manual|ordinary|floating|pot"
+    }
+  },
+  "loop": {
+    "phases": ["preparation", "trading", "intermission", "closing", "settled", "expedition"],
+    "phase_rules": "No separate shopping phase in world profile. First boot preparation with known recipe plan. When unpaused, world movement/take/put allowed in all business phases; cooking allowed preparation/trading/intermission. Planning/menu/vendor only preparation/intermission. While paused apply api.pause_policy without bypassing these phase guards. Three waves retain real intermission. Legacy/quality phase rules remain unchanged.",
+    "starter": {
+      "cash": 60,
+      "items": {"flour": 3, "pumpkin": 3, "stirring_cauldron": 1},
+      "device_installed": true,
+      "source": "One-time inherited pantry, cost0 ledger entries, never renewed by save/next_day",
+      "default_plan": {"recipe_id": "floating_pie", "quantity": 3},
+      "default_menu": ["floating_pie", "moon_stew"]
+    },
+    "first_minutes": "No opening modal: movement glyph by actor → nearest pantry tray icon → loaded table/stirring job → ready dish → door bell/guest bubble → carried handover OR pass floating flight → customer reaction and actual cash. One visible next hint follows persisted intro_flags, freely skippable; time goals are observations, not forced waits.",
+    "cooking": {
+      "batch_max": 6,
+      "duration_ms": 2000,
+      "parallel_station_jobs": 1,
+      "default_repeat_without_book": true,
+      "ingredient_bundle": {
+        "trip_quantity": "min(remaining_plan_quantity, floor(12 / sum(recipe.inputs.values())))",
+        "remaining_plan_quantity": "Current plan quantity minus recipe portions already prepared in station_input and carried ingredients together; count each existing UID once, never fetch material again for already carried/loaded portions.",
+        "selection": "Select recipe material quantities for exactly trip_quantity whole portions, using lowest eligible bag UIDs in stable recipe-material order. If any material cannot fill that trip, reject all pickup with an explicit shortage; do not shrink quantity, alter plan or give a partial recipe.",
+        "loading": "Allow successive whole-bundle trips into station_input max24, with carried max12. Three-input star_soup/comet_pie quantity6 uses4 portions/12 UIDs then2 portions/6 UIDs, followed by one cook quantity6. Batch1..6/default3 and one-F bundle convenience remain."
+      },
+      "completion_rule": "On cook-start consume input UIDs and create cooking output UIDs with per-recipe cost, prepared_wave_id=null. At ready transition stamp current wave if trading, next_wave_id if preparation/intermission, otherwise last wave. No reheat of already-ready/cooled dishes. Jobs continue in nonpaused intermission even after service wave ends.",
+      "cancellation": "Before cook, take loaded ingredients back using original UIDs. After cook starts there is no cancel/refund; the2s job may pause/save and produces once. In-flight service likewise cannot cancel/refund or be reselected; completion owns the one payment."
+    },
+    "service": {
+      "wave_counts": [3, 4, 4],
+      "arrival_interval_ms": 4000,
+      "walk_speed": 120,
+      "patience_ms": 60000,
+      "eating_ms": 1000,
+      "budget_range": [23, 30],
+      "ordinary_ms": 3000,
+      "floating": {"capacity": 2, "delivery_ms": 1500, "fresh_only": true},
+      "pot": {"batch_capacity": 3, "delivery_ms": 4500, "heat_capacity": 3},
+      "rule": "Customer walks to its assigned seat before patience starts; actual waiting/reserved order owns bubble and reaction. Channels reserve only arrived customers. Shelf dispatch auto; direct carried handover manual50ms at next service step, ordinary auto remains3000ms. No elapsed minimum wave; finish after orders processed and reservations empty. Floating flights/held pot portions visibly correspond to actual UIDs.",
+      "manual_ms": 50,
+      "hand_tip": {
+        "amount": 2,
+        "preferred_order_index": 0,
+        "max_paid_per_wave": 1,
+        "rule": "Only manual delivery to the saved first ordinary order may tip, if that wave has no paid tip and base_price+2<=budget. If base alone fits but +2 does not, deliver at base with tip0; if base exceeds budget reject without reservation. Auto and nonpreferred orders tip0. No mandatory hand service."
+      }
+    },
+    "routes": [
+      "quick_service: take a recipe bundle, batch bake, carry to pass once; fresh pies fly two at a time. Carryover loses speed, encourages a small fresh batch at next break.",
+      "hot_meals: installed cauldron batch, stock up to3 warm portions across waves, serve seated hearty/warm demand; cold overflow remains hearty. Preserve intrinsic tags and UID temperatures."
+    ],
+    "growth": {
+      "field_kit": {"cost": 110, "effect": "Existing fan_wand next morning, real garden route/combat use"},
+      "shelf": {
+        "cost": 110,
+        "effect": "Third menu slot PLUS station-ready→pass automatic relay next morning, max3 dishes per transfer; no ingredient creation or cash until actual delivery"
+      },
+      "relay": "Automatic transfer checks free pass menu capacity/UID ownership; batches at next fixed step, blocked output stays ready. Pause/save never repeats. Compare same inputs before/after upgrade: fewer manual dish carry trips, same recipe/UID/cost integrity."
+    },
+    "economy": "Reuse existing five recipes/catalog/base prices/rain25%/rare resale/recovery/atomic ledger. Stable four-ingredient supply12..14 per night, buy in preparation/intermission. New wave counts/starter/relay are world-only initial values and must be simulated; old Q05 balance claims do not transfer. First night each normal route can afford at least one choice and basic next-night cooking without recovery; investigate domination/softlocks before expansion. Normal quick/hot route feasibility must also pass with automatic service and zero tips; the optional tip cannot rescue a required economic route.",
+    "expedition": {
+      "options": {"ruleset": "rain-night-v1", "map_id": "rain-garden-two-routes", "map_revision": 1, "meal_effect": null},
+      "model_version": 2,
+      "rule": "Reuse real E02 movement/combat/drops, initial bolt/dodge/gust and existing meal object. Entry from lane only, return to saved lane gate anchor, collected UIDs enter pantry bag once. No new combat map/skill tree."
+    },
+    "intro_flags": "moved requires actual traveled distance>=32; took/loaded/cooked/served advance only on real take/put/completion/paid-delivery events; no guide step grants progress or items."
+  },
+  "input": {
+    "world_actions": {
+      "world_left": ["A", "Left", "left stick x-", "touch stick x-"],
+      "world_right": ["D", "Right", "left stick x+", "touch stick x+"],
+      "world_up": ["W", "Up", "left stick y-", "touch stick y-"],
+      "world_down": ["S", "Down", "left stick y+", "touch stick y+"],
+      "world_interact": ["F", "pad A", "touch F button"],
+      "world_pause": ["Esc", "pad Start", "touch pause"]
+    },
+    "rules": [
+      "F/A/touch are rising-edge intents, no key-repeat production; held movement sampled to same world_input core. No click-to-teleport or direct button signal in runtime tests.",
+      "Books consume input and clear movement; B/Esc closes book, Start pauses. Touch cancel/focus loss releases all axes.",
+      "Combat keeps existing WASD movement/arrows aim, J/Space cast, K/Shift dodge, E/L gust and A/B/X pad; F is not gust. Only active world/battle layer handles events."
+    ]
+  },
+  "integration": {
+    "core_owner": "core implementation: game/core/world_night_session.gd + GameSession explicit profile routing + optional local world_model.gd geometry helper + tests/core/world_session_cases.gd and runner; owns UID references, position, transactions and save validation.",
+    "ui_owner": "UI implementation: scenes/main.tscn + scenes/ui/world_play.tscn/game/ui/world_play.gd, camera/actor/prompts/input/books/flight feedback; consume production view, no fake core or collision source.",
+    "expedition_owner": "existing expedition paths/scene and input routing, return hook only as needed; reuse unchanged model contract.",
+    "art": "Reuse existing walk NW/NE/SW/SE, floor_wood/floor_stone, stove/prep_table/dining_table/serving_counter and other current sprites; pivot/depth anchored at feet. No bulk full-world art prerequisite.",
+    "dependencies": "H03/root registers actual new task IDs/paths and dispatches. Core publishes view/actions→UI binds→runtime same candidate; motion-only probe may use same geometry but cannot count as economy completion. One combined implementation review, not per-SHA design review."
+  },
+  "acceptance": [
+    {
+      "id": "WS01",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "店铺/巷道中角色真实移动、碰撞与镜头跟随。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": ["全部固定地图出生点/工作点/四座位/门口可达；行走改变核心位置与方向，镜头跨过参考视野且边界不露外部。", "墙、桌、柜的正反例/斜角/长delta不穿透；三输入归一同速，释放/失焦/暂停不残留移动。"]
+    },
+    {
+      "id": "WS02",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "空间近邻与携带物约束真实授权事务。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "拿食材→放工作台→拿成菜→交付均移动同UID；carry容量12、位置互斥、远距/隔墙/错误目标/非法UID/重复F/请求冲突原子拒绝。",
+        "屏幕按钮、直接旧craft/display/fulfill与远程采购不能绕开空间guard；同区距离边界56内外均验证。",
+        "暂停册页白名单逐项按原目标/距离/LOS/阶段/UID验证；合法settle/upgrade/next_day可用，错阶段/远距仍拒绝。take/put/cook/serve/enter/open_shop/start_wave及非零world_input暂停拒绝；清零/save/pause可用，料理/耐心/服务时钟不推进。"
+      ]
+    },
+    {
+      "id": "WS03",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "批量魔法料理和两路线在世界中可操作。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": ["已知五配方1/3/6批量，真实原料在台才可做，成本进实际cooking/readyUID；2秒工作可边走边进行，暂停/恢复不复制。", "星火汤/彗星饼6份各需18原料，按4份束12料+2份束6料两趟累积后一次cook6；最小UID稳定选择，已携/已装料不重复取，18个输入UID各消耗一次、产6个真实菜UID且成本守恒。缺少该趟完整束原子失败，不暗减批量/给残缺料；只装首趟时cook6失败，暂停cook/serve失败且时钟不动。", "新制浮空双通道与锅3份跨波保温各有正常/冷余货反例，视觉对应真实状态，不是改标签或仅开面板。"]
+    },
+    {
+      "id": "WS04",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "一位真实客人的到店、需求、菜与收入相连。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "从正常初始档经世界动作给首客实际交付；到达→等待→预留→进食反应→离开与order绑定。",
+        "先放柜台不收钱；交付才有账本收入，同UID/订单至多一次；错菜/预算不足/未到达/超时/在途保存有反例。",
+        "手递创建独占manual reservation后下一非暂停50ms服务步成交；普通自动仍3000ms、浮空/锅不变。每波首客偏好可见且报价由核心给base_price/tip/paid_total，客户端不能自报金额。",
+        "首客亲递且base+2<=budget才tip2；预算仅够base时tip0正常成交、自动/非首客tip0，base不够原子拒绝。每波最多一次，same/new request、预留前后保存/重启均不能重复付。单一成交提交的收入/现金/小费标记与UID守恒。"
+      ]
+    },
+    {
+      "id": "WS05",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "完整一晚与次晨成长保留可玩的选择。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "五seed×两路线×standard/premium走正常经营三波到次晨，不靠恢复/作弊、无负现金与软锁；首晚能买至少一个选择并做下一晚基础料理。 正常两路线必须有不依赖小费的实际自动服务经济证据。",
+        "shelf升级后同批次完成更少手搬趟数且UID/成本不变；field_kit次晨真实装备入菇圃改变打法；两项不得靠强制互斥造取舍。",
+        "从店门步行到巷道供应商/菇圃，真实战斗掉落回库一次；不探索分支也可经营，地点切换不刷新天/次数。"
+      ]
+    },
+    {
+      "id": "WS06",
+      "stage": "prototype",
+      "mode": "automated",
+      "required": true,
+      "claim": "新世界完整保存且旧r2与旧profile均不受影响。",
+      "evidence_kinds": ["automated_case_report", "action_trace"],
+      "pass_conditions": [
+        "在携料、台内、烹饪、成菜、预留、客人途中、门口/巷道、战斗返程、升级后分别保存重启，与同输入连续分支等价。 包含manual50ms预留、冻结报价与每波小费已付标记。",
+        "仅非活动旧档、受控测试副本及不可变旧包前后哈希不变；新world默认新profile且不访问真人活跃r2档。本人正常保存可改变活跃档，不读取/恢复/删除或要求哈希静止。错版本/地图/坏档边界使用独立测试副本验证。",
+        "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。 高频world_input仅更新保持轴，不使持久requests/经济流水随输入帧数增长。"
+      ]
+    },
+    {
+      "id": "WS07",
+      "stage": "prototype",
+      "mode": "runtime",
+      "required": true,
+      "claim": "真实三输入首段可玩并覆盖完整夜。",
+      "evidence_kinds": ["runtime_log", "screenshot", "input_trace", "artifact_manifest"],
+      "pass_conditions": [
+        "同候选真实InputEvent鼠键/合成触屏/手柄首段能走、拿、做、给实际客人得收入；首次收入观察目标3–5分钟，不用直接core/按钮signal冒充。",
+        "至少同候选三输入各一晚和次晨成长，真实全屏/窄屏、镜头边缘提示/携带图标/客人需求无遮挡，独立进程恢复，原始日志/截图/SHA齐全。",
+        "移动probe、build或旧Q回归都不能替代本项；合成输入不等于实体设备验收。"
+      ]
+    },
+    {
+      "id": "WSH",
+      "stage": "human",
+      "mode": "human",
+      "required": true,
+      "claim": "真人入口失败得到新的实际体验检验。",
+      "evidence_kinds": ["human_observation"],
+      "pass_conditions": [
+        "记录r2已明确的负面入口反馈；新候选由用户或咩咩自由操作，观察首分钟能否发现移动与近邻动作、3–5分钟是否理解做菜给客人。",
+        "观察两路线、重复搬运负担和次日期待；无人测/只测开头不外推一晚或战斗。仍无聊则失败并收敛修机制，不以自动绿或说明书宣称好玩。"
+      ]
+    }
+  ]
+}
