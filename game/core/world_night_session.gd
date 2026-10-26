@@ -1,9 +1,29 @@
 extends "res://game/core/rain_night_session.gd"
+const SnapshotValidator = preload("res://game/core/world_snapshot_validator.gd")
 const Walk = preload("res://game/core/world_walk_model.gd")
 const WORLD_PROFILE = "world-slice-v1"
 const WORLD_SAVE = "user://profiles/world-slice-v1/moonlantern.json"
 const BOOK_ACTIONS = ["plan","menu","buy","recycle","recover","equip_weapon","consume","install","uninstall","settle","upgrade","next_day"]
 var _world_events: Array = []
+
+func snapshot() -> Dictionary:
+	# JSON has one numeric domain; canonicalize integral coordinates as well as money.
+	return _normalize(_s)
+
+func _normalize(value: Variant) -> Variant:
+	var result = super._normalize(value)
+	if result.get("world") is Dictionary:
+		var positions = []
+		if result.world.get("player") is Dictionary: positions.append(result.world.player)
+		if result.world.get("customers") is Array: positions.append_array(result.world.customers)
+		for p in positions:
+			if not p is Dictionary or not SnapshotValidator.number(p.get("x")) or not SnapshotValidator.number(p.get("y")): continue
+			# Simulation positions are Vector2 (float32). Restore that exact precision
+			# after JSON's float64 parse, before both validation and continuation.
+			var point = Vector2(p.x,p.y)
+			p.x = int(point.x) if is_finite(point.x) and floor(point.x) == point.x else float(point.x)
+			p.y = int(point.y) if is_finite(point.y) and floor(point.y) == point.y else float(point.y)
+	return result
 
 func _init(seed_value: int = 1):
 	super(seed_value)
@@ -13,7 +33,7 @@ func _init(seed_value: int = 1):
 		"player":{"x":220.0,"y":380.0,"facing":"se"},"input":{"move_x":0.0,"move_y":0.0},"carried_uids":[],
 		"plan":{"recipe_id":"floating_pie","quantity":3},"stations":[{"id":"prep","input_uids":[],"output_uids":[],"job":null}],
 		"customers":[],"intro_flags":{"moved":false,"took":false,"loaded":false,"cooked":false,"served":false},
-		"remainder_ms":0,"tick":0,"travelled":0.0,"return_pose":null}
+		"remainder_ms":0,"tick":0,"travelled_mm":0,"return_pose":null}
 	_add(_s,"stirring_cauldron",0,"installed")
 	for n in range(3): _add(_s,"flour",0); _add(_s,"pumpkin",0)
 	_record_economy(_s,"inheritance",{},[],60,[])
@@ -85,8 +105,9 @@ func _bundle(s: Dictionary) -> Dictionary:
 		var n = int(loaded[material]/recipe.inputs[material])
 		if portions != -1 and portions != n: return {"uids":[],"reason":"材料束数量不一致"}
 		portions = n
-	var trip = mini(s.world.plan.quantity-portions,int((12-s.world.carried_uids.size())/units))
+	var trip = mini(s.world.plan.quantity-portions,int(12/units))
 	if trip <= 0: return {"uids":[],"reason":"本计划材料已齐或托盘已满"}
+	if s.world.carried_uids.size()+trip*units > 12: return {"uids":[],"reason":"请先放下当前完整材料束"}
 	var ids = []
 	for material in recipe.inputs:
 		var available = _instances(s,material,"bag"); var needed = int(recipe.inputs[material])*trip
@@ -104,12 +125,11 @@ func command(kind: String, args: Dictionary = {}, request_id: String = "") -> Di
 		return _result(true,"ok","移动输入已更新")
 	if kind in ["pause","advance","expedition_input","leave_expedition"]:
 		if kind == "leave_expedition":
-			if _s.phase != "expedition": return _fail("wrong_phase","当前不在菇圃")
 			var result = super.command(kind,args,request_id)
-			if result.ok: _return_world(_s)
+			if result.ok and result.code != "duplicate": _return_world(_s)
 			return result
 		var result = super.command(kind,args,request_id)
-		if result.ok and kind == "pause": _s.world.input = {"move_x":0.0,"move_y":0.0}
+		if result.ok and result.code != "duplicate" and kind == "pause": _s.world.input = {"move_x":0.0,"move_y":0.0}
 		return result
 	if kind != "world_interact": return _fail("spatial_required","请走近物件进行操作")
 	var fingerprint = JSON.stringify({"kind":kind,"args":args},"",true,true)
@@ -170,6 +190,7 @@ func _interact(s: Dictionary, args: Dictionary) -> Dictionary:
 			if s.phase not in (["preparation","intermission"] if action == "plan" else ["preparation","trading","intermission"]): return _fail("wrong_phase","当前不能计划或开工")
 			if action == "plan": s.world.plan = a.duplicate(true)
 			else:
+				if a != s.world.plan: return _fail("planned_batch","请按当前完整批量计划开工")
 				if station.job != null or station.output_uids.size()+a.quantity > 12: return _fail("busy","工作台任务或成菜位已满")
 				var recipe = Catalog.RECIPES[a.recipe_id]; var expected = 0
 				if recipe.requires_device != "" and _count(s,recipe.requires_device,"installed") == 0: return _fail("missing_device","需装配自搅锅")
@@ -207,7 +228,9 @@ func _interact(s: Dictionary, args: Dictionary) -> Dictionary:
 		"open_shop","start_wave":
 			if (action == "open_shop" and s.phase != "preparation") or (action == "start_wave" and s.phase != "intermission"): return _fail("wrong_phase","当前不能开波")
 			if action == "start_wave" and a.wave_id != s.service.next_wave_id: return _fail("stale_wave","目标波次已过期")
-			return _start_wave(s,s.service.next_wave_id)
+			var opened = _start_wave(s,s.service.next_wave_id)
+			if not opened.ok: return opened
+			events.append_array(opened.events)
 		"next_day":
 			if s.phase != "settled": return _fail("wrong_phase","先完成日结")
 			s.commits["next:%d" % s.day] = true; s.day += 1; s.phase = "preparation"; _begin_night(s)
@@ -230,7 +253,7 @@ func _interact(s: Dictionary, args: Dictionary) -> Dictionary:
 			if not result.ok: return result
 			events.append_array(result.events)
 	var direction = Vector2(target.anchor.x,target.anchor.y)-_position(s)
-	if not direction.is_zero_approx(): s.world.player.facing = Walk.facing(direction)
+	if action != "enter" and not direction.is_zero_approx(): s.world.player.facing = Walk.facing(direction)
 	for event in events: event.tick = s.world.tick
 	return _result(true,"ok","操作完成",events)
 
@@ -335,8 +358,8 @@ func _world_step(s: Dictionary, events: Array):
 	var w = s.world; var axes = Vector2(w.input.move_x,w.input.move_y); var old = _position(s)
 	var moved = Walk.move(w.region_id,old,axes); w.player.x = moved.x; w.player.y = moved.y
 	if axes.length() > 0.2: w.player.facing = Walk.facing(axes)
-	w.travelled += old.distance_to(moved)
-	if w.travelled >= 32: w.intro_flags.moved = true
+	w.travelled_mm += roundi(old.distance_to(moved)*1000)
+	if w.travelled_mm >= 32000: w.intro_flags.moved = true
 	if not old.is_equal_approx(moved): events.append({"type":"world_moved","x":moved.x,"y":moved.y})
 	var station = w.stations[0]
 	if "shelf" in s.active_upgrades:
@@ -418,8 +441,24 @@ func _suggestions(s: Dictionary) -> Array:
 					var items = _instances(s,"stirring_cauldron","bag" if action == "install" else "installed"); payload = {"uid":0 if items.is_empty() else items[0].uid}
 				"start_wave": payload = {"wave_id":s.service.next_wave_id}
 				"upgrade": payload = {"upgrade_id":"shelf"}
-			var result = _interact(s.duplicate(true),{"target_id":target.id,"action":action,"payload":payload})
-			rows.append({"target_id":target.id,"action":action,"payload":payload,"label":action,"enabled":result.ok,"reason":"" if result.ok else result.message,"anchor":target.anchor.duplicate(true)})
+			var options = [payload]
+			if action == "upgrade": options = [{"upgrade_id":"field_kit"},{"upgrade_id":"shelf"}]
+			elif action == "buy":
+				options = []
+				for id in s.supply: options.append({"item_id":id,"quantity":1})
+			elif action == "recycle":
+				options = []
+				for id in Catalog.ITEMS:
+					if _count(s,id,"bag") > 0: options.append({"item_id":id,"quantity":1})
+				if options.is_empty(): options = [payload]
+			elif action == "consume": options = [{"item_id":"floating_pie","quantity":1},{"item_id":"star_soup","quantity":1}]
+			elif action == "menu":
+				payload.tiers = {}
+				for id in s.service.menu_priority: payload.tiers[id] = s.tiers.get(id,"standard")
+			for offered in options:
+				var spatial = _spatial_error(s,target)
+				var result = _fail("out_of_reach",spatial) if spatial != "" else _interact(s.duplicate(true),{"target_id":target.id,"action":action,"payload":offered})
+				rows.append({"target_id":target.id,"action":action,"payload":offered,"label":action,"enabled":result.ok,"reason":"" if result.ok else result.message,"anchor":target.anchor.duplicate(true)})
 	rows.sort_custom(func(a,b):
 		var da = _position(s).distance_squared_to(Vector2(a.anchor.x,a.anchor.y)); var db = _position(s).distance_squared_to(Vector2(b.anchor.x,b.anchor.y))
 		return da < db if not is_equal_approx(da,db) else a.target_id < b.target_id)
@@ -461,7 +500,7 @@ func validate_snapshot(data: Variant) -> String:
 	if not data is Dictionary: return "存档必须为对象"
 	if data.get("version") != 4: return "不支持的存档版本"
 	if data.get("profile_id") != WORLD_PROFILE or data.get("rules_version") != 1: return "不支持的存档规则"
-	return "世界校验尚未完成"
+	return SnapshotValidator.validate(data,self)
 
 func _base_world_view() -> Dictionary:
 	var v = snapshot(); v.finished = false; v.inventory = []; v.prices = {}; v.supply = []; v.recipes = []; v.upgrades = []
@@ -475,12 +514,12 @@ func _base_world_view() -> Dictionary:
 		var available = _s.phase in ["preparation","intermission"] and _s.supply[id] > 0 and _s.cash >= Catalog.ITEMS[id].buy
 		v.supply.append({"item_id":id,"name":Catalog.ITEMS[id].name,"quantity":_s.supply[id],"buy":Catalog.ITEMS[id].buy,"available":available,"reason":"" if available else "需采购阶段、余货与足够金币"})
 	for id in Catalog.RECIPES:
-		var recipe = Catalog.RECIPES[id].duplicate(true); var maximum = 80
-		for material in recipe.inputs: maximum = mini(maximum,int(_count(_s,material,"bag")/recipe.inputs[material]))
+		var recipe = Catalog.RECIPES[id].duplicate(true); var maximum = 6
+		for material in recipe.inputs: maximum = mini(maximum,int((_count(_s,material,"bag")+_count(_s,material,"carried")+_count(_s,material,"station_input"))/recipe.inputs[material]))
 		var missing = recipe.requires_device != "" and _count(_s,recipe.requires_device,"installed") == 0
 		recipe.recipe_id = id; recipe.max_quantity = 0 if missing else maximum; recipe.effect_id = Catalog.ITEMS[id].effect_id
-		recipe.available = _s.phase in PHASE_COMMANDS.craft and not missing and maximum > 0
-		recipe.reason = "" if recipe.available else ("需装配自搅坩埚" if missing else ("食材不足" if maximum == 0 else "营业中不能备餐"))
+		recipe.available = _s.phase in ["preparation","trading","intermission"] and not missing and maximum > 0
+		recipe.reason = "" if recipe.available else ("需装配自搅坩埚" if missing else ("食材不足" if maximum == 0 else "当前阶段不能开工"))
 		v.recipes.append(recipe)
 	for id in QUALITY_UPGRADES:
 		var row = QUALITY_UPGRADES[id].duplicate(true); row.upgrade_id = id; row.owned = id in _s.upgrades; row.active = id in _s.active_upgrades
@@ -508,3 +547,113 @@ func _base_world_view() -> Dictionary:
 	v.expedition = _model.view(_s.expedition) if not _s.expedition.is_empty() and _expedition_model() != null else {"status":"idle","day":_s.day,"run_id":"","remaining_ms":null,"elapsed_ms":0,"attempts_remaining":1,"player":{},"enemies":[],"projectiles":[],"drops":[],"hazards":[],"resource_nodes":[],"meal_effect":null}
 	v.expedition.attempts_remaining = 0 if _s.expedition_attempts.has(str(_s.day)) else 1
 	return v
+
+func _validate_economy(s: Dictionary, uids: Dictionary, sales: Dictionary) -> String:
+	var live = {}; var issued = {}; var cash = int(s.initial_cash); var paid = []; var sold = {}; var consumed = {}; var drops = {}
+	for i in range(s.ledger.size()):
+		var row = s.ledger[i]
+		if not row is Dictionary or not row.has_all(["index","kind","day","cash_delta","moves","created","removed","args","events"]): return "经济流水字段缺失"
+		if not _whole(row.index,i,i) or not row.kind is String or not _whole(row.day,1,int(s.day)) or not _whole(row.cash_delta,-1000000) or not row.moves is Dictionary or not row.created is Array or not row.removed is Array or not row.args is Dictionary or not row.events is Array: return "非法经济流水"
+		var moves = {}; var input_cost = 0; var output_cost = 0
+		for item in row.removed:
+			if not item is Dictionary or not item.has_all(["uid","item_id","cost"]) or not _whole(item.uid,1) or not live.has(str(item.uid)) or not Catalog.ITEMS.has(item.item_id) or not _whole(item.cost): return "消耗实例非法"
+			if live[str(item.uid)].item_id != item.item_id or live[str(item.uid)].cost != item.cost: return "消耗成本来源错误"
+			live.erase(str(item.uid)); input_cost += item.cost; moves[item.item_id] = moves.get(item.item_id,0)-1
+		for item in row.created:
+			if not item is Dictionary or not item.has_all(["uid","item_id","cost"]) or not _whole(item.uid,1) or item.uid >= s.next_uid or issued.has(str(item.uid)) or not Catalog.ITEMS.has(item.item_id) or not _whole(item.cost): return "创建实例非法"
+			issued[str(item.uid)] = item; live[str(item.uid)] = item; output_cost += item.cost; moves[item.item_id] = moves.get(item.item_id,0)+1
+		for id in moves:
+			if row.moves.get(id,0) != moves[id]: return "库存流水与实例不一致"
+		for id in row.moves:
+			if not Catalog.ITEMS.has(id) or not _whole(row.moves[id],-80,80) or row.moves[id] != moves.get(id,0): return "非法库存流水"
+		var expected_cash = 0
+		if row.kind in ["buy","craft","recycle","consume"] and not _whole(row.args.get("quantity"),1,CAPACITY): return "经济流水数量类型错误"
+		if row.kind in ["buy","recycle","consume"] and not row.args.get("item_id") is String: return "经济流水物品类型错误"
+		if row.kind == "craft" and not row.args.get("recipe_id") is String: return "经济流水配方类型错误"
+		match row.kind:
+			"inheritance":
+				if i != 0 or row.created.size() != 7 or output_cost != 0 or not row.removed.is_empty(): return "继承来源错误"
+				var inherited = {}
+				for item in row.created: inherited[item.item_id] = inherited.get(item.item_id,0)+1
+				if inherited != {"stirring_cauldron":1,"flour":3,"pumpkin":3}: return "继承数量错误"
+			"buy":
+				var id = row.args.get("item_id","")
+				if id not in ["flour","pumpkin","cream","ember_herb","stirring_cauldron"] or row.created.size() != row.args.get("quantity") or not row.removed.is_empty(): return "采购来源错误"
+				for item in row.created:
+					if item.item_id != id or item.cost != Catalog.ITEMS[id].buy: return "采购成本错误"
+				expected_cash = -output_cost
+			"craft":
+				var recipe = Catalog.RECIPES.get(row.args.get("recipe_id"),{})
+				if recipe.is_empty() or row.created.size() != row.args.get("quantity") or row.created.is_empty() or input_cost != output_cost: return "配方成本不守恒"
+				var ingredients = {}
+				for item in row.removed: ingredients[item.item_id] = ingredients.get(item.item_id,0)+1
+				if ingredients.size() != recipe.inputs.size(): return "配方投入种类错误"
+				for id in recipe.inputs:
+					if ingredients.get(id,0) != recipe.inputs[id]*row.created.size(): return "配方投入数量错误"
+				for item in row.created:
+					if item.item_id != recipe.output: return "配方产出错误"
+			"recycle":
+				if not row.created.is_empty() or row.removed.is_empty() or row.removed.size() != row.args.get("quantity"): return "售回实例错误"
+				for item in row.removed:
+					if item.item_id != row.args.get("item_id"): return "售回种类错误"
+					expected_cash += _recycle_value(item)
+			"consume":
+				if row.removed.size() != 1 or row.removed[0].item_id not in ["floating_pie","star_soup"] or not row.created.is_empty(): return "餐前食用来源错误"
+				consumed[str(row.removed[0].uid)] = row.removed[0]
+			"recover":
+				if not row.created.is_empty() or not row.removed.is_empty(): return "恢复奖励类型错误"
+				expected_cash = 12
+			"upgrade":
+				var id = row.args.get("upgrade_id")
+				if not QUALITY_UPGRADES.has(id) or id in paid or not row.created.is_empty() or not row.removed.is_empty(): return "重复或非法升级支付"
+				paid.append(id); expected_cash = -QUALITY_UPGRADES[id].cost
+			"settle": expected_cash = -mini(4,cash)
+			"pickup":
+				if not row.args.get("run_id") is String or not row.args.get("pickups") is Array or row.args.pickups.is_empty() or not row.removed.is_empty() or s.expedition_attempts.get(str(int(row.day))) != row.args.run_id: return "拾取来源不一致"
+				var offset = 0
+				for pickup in row.args.pickups:
+					if not pickup is Dictionary or not pickup.has_all(["drop_id","item_id","quantity","cost"]) or not pickup.drop_id is String or pickup.drop_id.is_empty() or not _whole(pickup.quantity,1,CAPACITY) or pickup.item_id not in ["sparkcap","moonheart"] or pickup.cost != 0: return "非法拾取记录"
+					var key = _drop_key(row.args.run_id,pickup.drop_id); var picked_uids = []
+					if drops.has(key) or offset+pickup.quantity > row.created.size(): return "重复掉落或数量不一致"
+					for n in range(int(pickup.quantity)):
+						var item = row.created[offset]; offset += 1
+						if item.item_id != pickup.item_id or item.cost != 0: return "拾取物品或成本错误"
+						picked_uids.append(item.uid)
+					drops[key] = {"run_id":row.args.run_id,"drop_id":pickup.drop_id,"item_id":pickup.item_id,"quantity":int(pickup.quantity),"uids":picked_uids,"day":row.day}
+				if offset != row.created.size(): return "拾取与实例数量错误"
+			"advance","fulfill":
+				var removed = {}
+				for event in row.events:
+					if not event is Dictionary or not _whole(event.get("revenue",0)): return "非法成交事件"
+					if event.get("revenue",0) == 0: continue
+					if not event.has("order_id") or not sales.has(event.order_id) or sales[event.order_id] != event or sold.has(event.order_id): return "成交事件未对账"
+					sold[event.order_id] = true; removed[str(event.uid)] = event; expected_cash += event.revenue
+				if removed.size() != row.removed.size(): return "交付扣除数量不一致"
+				if row.kind == "fulfill":
+					if row.created.size() != 2 or row.events.size() != 1 or row.events[0].get("quest_id") != "hagrid_patrol": return "人物奖励来源错误"
+					for reward in row.created:
+						if reward.item_id != "ember_herb" or reward.cost != 0: return "人物奖励数量或成本错误"
+				elif not row.created.is_empty(): return "普通交付不能产生物品"
+				for item in row.removed:
+					if not removed.has(str(item.uid)) or removed[str(item.uid)].cost != item.cost: return "交付扣除UID/成本错误"
+			_: return "未知经济流水种类"
+		if row.cash_delta != expected_cash: return "现金变动来源错误"
+		cash += row.cash_delta
+		if cash < 0: return "历史现金为负"
+	if cash != s.cash or live.size() != uids.size() or paid != s.upgrades or drops != s.collected_drops: return "经济总账不守恒"
+	for uid in uids:
+		if not live.has(uid) or live[uid].item_id != uids[uid].item_id or live[uid].cost != uids[uid].cost: return "库存取得来源错误"
+		if Catalog.ITEMS[uids[uid].item_id].kind == "dish":
+			for key in ["intrinsic_tags","effect_id"]:
+				if live[uid].get(key) != uids[uid].get(key): return "菜品制作身份被改写"
+	for id in sales:
+		if sales[id].revenue > 0 and not sold.has(id): return "成交收入未入账"
+	var effects = s.expedition_meals.values(); effects.append(s.pending_meal_effect); var meal_uids = []
+	for meal in effects:
+		if meal == null: continue
+		if not meal is Dictionary or not meal.has_all(["effect_id","source_item_uid","used"]) or not _whole(meal.source_item_uid,1) or not consumed.has(str(meal.source_item_uid)) or not meal.used is bool or meal.used != false or meal.source_item_uid in meal_uids: return "待用餐前效果来源错误"
+		meal_uids.append(meal.source_item_uid)
+		var source = consumed[str(meal.source_item_uid)]
+		if meal.effect_id != ("light_step" if source.item_id == "floating_pie" else "clear_breath"): return "餐前效果种类错误"
+	if meal_uids.size() != consumed.size(): return "食用效果未进入待用槽或正式探索"
+	return ""

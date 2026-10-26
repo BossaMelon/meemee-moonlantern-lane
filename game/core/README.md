@@ -1,10 +1,14 @@
+# 核心公共 API
+
+默认入口已由 P10 改为 `world-slice-v1` / save v4，见 [世界物件交互 API](world_api.md)。下文保留显式 `rain-night-v1` 的恢复基线 API；三日原型仍显式选择 `prototype-v1`。新世界不使用下文的远程 craft/display/fulfill 命令。
+
 # 雨夜核心公共 API（P04 / save v3）
 
 冻结设计为 docs/06-quality-slice.md；类型以 H04 `c8aa174` 的 quality-slice-v1 契约为准。Godot 4.7.2，单人离线，运行时无网络或 LLM。
 
 ```gdscript
 const Session = preload("res://game/core/game_session.gd")
-var game = Session.new(seed_value) # 默认 rain-night-v1
+var game = Session.new(seed_value, "rain-night-v1") # 显式雨夜恢复基线
 var legacy = Session.new(seed_value, "prototype-v1") # 明确选择旧原型
 ```
 
