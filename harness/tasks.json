@@ -502,7 +502,9 @@
         "tools/README.md",
         ".github/workflows/gate.yml",
         ".github/workflows/windows-validation.yml",
-        "tools/run_windows_gate.ps1"
+        "tools/run_windows_gate.ps1",
+        "tools/with_render_lock.py",
+        "tools/test_with_render_lock.py"
       ],
       "depends_on": [
         "H02",

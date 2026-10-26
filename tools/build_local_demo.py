@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Explicit-SHA, offline Mac source wrapper; not a native Godot export or Q06 proof."""
+"""Explicit-SHA offline world Mac source wrapper; no native export or WS07 proof."""
 from __future__ import annotations
 
 import argparse
+import configparser
 import hashlib
 import io
 import json
@@ -20,8 +21,11 @@ import time
 import uuid
 
 LAUNCHER = 'tools/启动月灯巷.command'
-APP_NAME = '月灯巷质量试玩.app'
-SAVE_PATH = 'user://profiles/rain-night-v1/moonlantern.json'
+APP_NAME = '月灯巷世界试玩.app'
+PROFILE_ID = 'world-slice-v1'
+SAVE_VERSION = 4
+USER_DATA_NAME = 'moonlantern-world-slice-v1'
+SAVE_PATH = 'user://profiles/world-slice-v1/moonlantern.json'
 
 
 class BuildError(Exception):
@@ -51,8 +55,14 @@ def resolve_candidate(repo: Path, candidate: str) -> str:
 def safe_path(value: Path) -> Path:
     path = value.expanduser().absolute()
     require('..' not in path.parts, 'parent traversal is not accepted; supply the canonical absolute path')
-    require(not any(p.is_symlink() for p in (path, *path.parents)),
-            'symlink path is not accepted; supply its canonical absolute path')
+    for part in (path, *path.parents):
+        try:
+            metadata = part.lstat()
+        except FileNotFoundError:
+            continue
+        require(not stat.S_ISLNK(metadata.st_mode)
+                and not getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400),
+                'symlink/reparse path is not accepted; supply its canonical absolute path')
     return path
 
 
@@ -63,12 +73,20 @@ def digest(path):
 def validate_isolation_config(path, expected):
     """Accept only the intended bytes in a private regular file, never a link."""
     safe_path(path)
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as stream:
+    def private_file(metadata):
+        return (stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1 and metadata.st_ino != 0
+                and not getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+    before = path.lstat()
+    require(private_file(before), 'isolation config must be a private regular file')
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)
+    with os.fdopen(os.open(path, flags), 'rb') as stream:
         opened = os.fstat(stream.fileno())
-        require(stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1, 'isolation config must be a private regular file')
-        actual = stream.read()
+        require(private_file(opened), 'isolation config must be a private regular file')
+        require((before.st_dev, before.st_ino) == (opened.st_dev, opened.st_ino), 'isolation config changed before reading')
+        actual = stream.read(len(expected) + 1)
         current = path.lstat()
-        require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino), 'isolation config changed while checked')
+        require(private_file(current) and (opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino),
+                'isolation config changed while checked')
     expected_hash = hashlib.sha256(expected).hexdigest()
     require(actual == expected and hashlib.sha256(actual).hexdigest() == expected_hash,
             'isolation config differs from the expected configuration: ' + str(path))
@@ -106,7 +124,7 @@ def archive_source(repo, candidate):
         mode, kind, oid = metadata.decode().split()
         require(kind == 'blob' and mode in ('100644', '100755'), 'candidate contains a link/submodule/special file')
         expected[name.decode()] = (mode, oid)
-    archive = git(repo, 'archive', '--format=tar', candidate)
+    archive = git(repo, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'archive', '--format=tar', candidate)
     files = {}
     with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as tar:
         for member in tar.getmembers():
@@ -220,7 +238,7 @@ def same_snapshot(left, right):
 
 
 PROBE = '''extends SceneTree
-const SAVE = "user://profiles/rain-night-v1/moonlantern.json"
+const SAVE = "user://profiles/world-slice-v1/moonlantern.json"
 var failures: Array = []
 func check(ok, message):
  if not ok: failures.append(message)
@@ -232,10 +250,13 @@ func run():
  var directory=OS.get_user_data_dir()
  var saved_path=ProjectSettings.globalize_path(SAVE)
  var legacy_absent=not FileAccess.file_exists("user://moonlantern.json") and not FileAccess.file_exists("user://moonlantern.json.bak")
- var result={"suite":"D01-package-headless","mode":mode,"build_id":OS.get_environment("MOON_DEMO_BUILD_ID"),"process_id":OS.get_process_id(),"engine":Engine.get_version_info(),"executable":OS.get_executable_path(),"user_data_dir":directory,"save_path":saved_path,"headless":DisplayServer.get_name()=="headless","legacy_default_absent_in_isolated_dir":legacy_absent,"native_verified":false,"input_verified":false}
+ var defaults=load("res://game/core/game_session.gd").new().snapshot()
+ var result={"suite":"H07-package-headless","mode":mode,"build_id":OS.get_environment("MOON_DEMO_BUILD_ID"),"process_id":OS.get_process_id(),"engine":Engine.get_version_info(),"executable":OS.get_executable_path(),"user_data_dir":directory,"save_path":saved_path,"headless":DisplayServer.get_name()=="headless","legacy_default_absent_in_isolated_dir":legacy_absent,"native_verified":false,"input_verified":false,"fixtures_absent":not DirAccess.dir_exists_absolute("res://tests/fixtures"),"default_session_profile":defaults.get("profile_id"),"default_session_version":defaults.get("version")}
  check(directory.ends_with("/"+expected),"wrong isolated user directory")
  check(result.headless,"packaging probe must be headless")
  check(legacy_absent,"old default unexpectedly present in isolated directory")
+ check(result.fixtures_absent,"runtime fixtures must be absent")
+ check(result.default_session_profile=="world-slice-v1" and result.default_session_version==4,"GameSession default is not world/v4")
  if mode=="player-directory":
   check(not FileAccess.file_exists(SAVE) and not FileAccess.file_exists(SAVE+".bak"),"player profile is not fresh")
   result.player_save_absent=not FileAccess.file_exists(SAVE) and not FileAccess.file_exists(SAVE+".bak")
@@ -266,7 +287,7 @@ func run():
    result.snapshot=scene.game.snapshot()
    check(result.snapshot.get("paused")==true,"pause marker not restored through actual Main")
    check(scene.save_path==SAVE,"UI default save path changed")
-   check(result.snapshot.get("profile_id")=="rain-night-v1" and result.snapshot.get("version")==3,"wrong runtime profile/version")
+   check(result.snapshot.get("profile_id")=="world-slice-v1" and result.snapshot.get("version")==4,"wrong runtime profile/version")
    var art=load("res://game/ui/pixel_assets.gd")
    var metadata=art.manifest()
    check(not metadata.is_empty(),"pixel manifest not loaded")
@@ -288,7 +309,7 @@ func run():
   else: check(false,"actual Main failed to load")
  result.failures=failures
  result.passed=failures.is_empty()
- result.claim="Headless packaging/default-core-save and Main-autorestore diagnostic only; no UI input, native, Q06 or external old-save hash claim."
+ result.claim="Headless world packaging/default-core-save and Main-autorestore diagnostic only; no UI input, native, WS07/WSH or external old-save hash claim."
  var output=FileAccess.open(report_path,FileAccess.WRITE)
  if output==null: quit(2); return
  output.store_string(JSON.stringify(result,"  ")); output.close()
@@ -304,20 +325,24 @@ exec "$task_contents/Resources/project/tools/启动月灯巷.command" "$@" >> "$
 COMMAND = '''#!/bin/zsh
 set -euo pipefail
 task_demo_root="${0:A:h}"
-exec "$task_demo_root/月灯巷质量试玩.app/Contents/MacOS/开始试玩" "$@"
+exec "$task_demo_root/月灯巷世界试玩.app/Contents/MacOS/开始试玩" "$@"
 '''
 
 
 def validate_probe(report, execution, mode, profile, build_id, executable, main_scene, source_hashes):
-    require(report.get('suite') == 'D01-package-headless' and report.get('mode') == mode
+    require(report.get('suite') == 'H07-package-headless' and report.get('mode') == mode
             and report.get('build_id') == build_id and report.get('process_id') == execution['pid'], 'probe identity/PID mismatch')
     require(report.get('passed') is True and report.get('failures') == [] and report.get('headless') is True,
             'headless probe failed or reported no actual headless execution')
     require(report.get('native_verified') is False and report.get('input_verified') is False, 'probe cannot claim native/input acceptance')
-    require(report.get('executable') == str(executable), 'probe did not use the bundled engine')
+    require(report.get('fixtures_absent') is True and report.get('default_session_profile') == PROFILE_ID
+            and type(report.get('default_session_version')) in (int, float) and report['default_session_version'] == SAVE_VERSION,
+            'probe did not observe fixture-free world GameSession default')
+    require(str(report.get('executable')).replace('\\', '/') == str(executable).replace('\\', '/'),
+            'probe did not use the bundled engine')
     directory = report.get('user_data_dir')
     require(isinstance(directory, str) and directory.endswith('/' + profile), 'probe used the wrong isolated profile')
-    require(report.get('save_path') == str(Path(directory) / SAVE_PATH[7:])
+    require(str(report.get('save_path')).replace('\\', '/') == str(Path(directory) / SAVE_PATH[7:]).replace('\\', '/')
             and report.get('legacy_default_absent_in_isolated_dir') is True, 'probe used the wrong default path')
     if mode == 'player-directory':
         require(report.get('player_save_absent') is True, 'player profile was written by verification')
@@ -329,12 +354,58 @@ def validate_probe(report, execution, mode, profile, build_id, executable, main_
             and report.get('save_writes_allowed') is True,
             'actual UI/default path/assets not verified')
     for state in (report.get('snapshot'), report.get('saved_state')):
-        require(isinstance(state, dict) and state.get('profile_id') == 'rain-night-v1'
-                and type(state.get('version')) in (int, float) and state['version'] == 3 and state.get('paused') is True,
-                'probe did not observe v3 runtime state and the non-default pause marker')
+        require(isinstance(state, dict) and state.get('profile_id') == PROFILE_ID
+                and type(state.get('version')) in (int, float) and state['version'] == SAVE_VERSION and state.get('paused') is True,
+                'probe did not observe world/v4 runtime state and the non-default pause marker')
     require(same_snapshot(report['snapshot'], report['saved_state']), 'core default save differs from actual Main snapshot')
     require(all(isinstance(report.get(key), str) and re.fullmatch('[0-9a-f]{64}', report[key])
                 for key in ('save_hash', 'backup_hash')), 'missing actual primary/backup hash')
+
+
+def prepare_source_probe(repo: Path, candidate: str, project: Path, profile: str, probe: Path):
+    """Make a bound source-only test input for PROBE; no app or engine is copied."""
+    repo = safe_path(repo); project = safe_path(project); probe = safe_path(probe)
+    candidate = resolve_candidate(repo, candidate)
+    require(re.fullmatch(r'MoonlanternH07Source/[0-9a-f]{32}/verify', profile), 'invalid source probe namespace')
+    require(not project.exists() and project.parent.is_dir() and not probe.exists()
+            and probe.parent.is_dir() and not probe.is_relative_to(project), 'source probe paths must be fresh and separate')
+    archive, files, main_scene = archive_source(repo, candidate)
+    expected = {name: hashlib.sha256(raw).hexdigest() for name, (raw, _) in files.items()}
+    excluded = {name: value for name, value in expected.items() if name.startswith('tests/fixtures/')}
+    project.mkdir(mode=0o700)
+    for name, (raw, mode) in files.items():
+        if name in excluded: continue
+        path = project/name; path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('xb') as stream: stream.write(raw)
+        path.chmod(0o755 if mode == '100755' else 0o644)
+    isolation = ('[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name='
+                 +json.dumps(profile)+'\n').encode()
+    write_isolation_config(project/'override.cfg', isolation)
+    with probe.open('x', encoding='utf-8', newline='\n') as stream: stream.write(PROBE)
+    return {'kind': 'source-only Main test input; no app, engine copy or export', 'package_created': False,
+            'source_commit': candidate, 'git_archive_sha256': hashlib.sha256(archive).hexdigest(),
+            'project': str(project), 'profile': profile, 'probe': str(probe), 'probe_sha256': digest(probe),
+            'main_scene': main_scene, 'source_files_sha256': expected, 'excluded_source_files_sha256': excluded,
+            'project_files_sha256': {k: v for k, v in expected.items() if k not in excluded},
+            'isolation_text': isolation.decode(), 'isolation_sha256': hashlib.sha256(isolation).hexdigest()}
+
+
+def validate_source_probe_projection(binding):
+    project = safe_path(Path(binding['project'])); probe = safe_path(Path(binding['probe']))
+    require(digest(probe) == binding['probe_sha256'] == hashlib.sha256(PROBE.encode()).hexdigest(), 'source probe changed')
+    validate_isolation_config(project/'override.cfg', binding['isolation_text'].encode())
+    expected = binding['project_files_sha256']
+    for name, value in expected.items():
+        path = project/name
+        require(path.is_file() and not path.is_symlink() and digest(path) == value, 'source test input changed: '+name)
+    for path in project.rglob('*'):
+        require(not path.is_symlink(), 'linked source test input')
+        if not path.is_file(): continue
+        name = path.relative_to(project).as_posix()
+        require(name in expected or name == 'override.cfg' or name.startswith('.godot/')
+                or (name.endswith('.import') and name[:-7] in expected)
+                or (name.endswith('.uid') and name[:-4] in expected), 'unknown source test input: '+name)
+    require(not (project/'tests/fixtures').exists(), 'source test input leaked fixtures')
 
 
 def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeout=120):
@@ -355,35 +426,57 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
     require(not version_result['timed_out'] and not version_result['interrupted'] and version_result['exit_code'] == 0
             and not version_result['engine_error_logged'] and re.match(r'^4\.7\.2(?:\.|$)', version), 'Godot 4.7.2 version probe failed')
     archive, files, main_scene = archive_source(repo, candidate)
+    text = files['project.godot'][0].decode()
+    sections = re.search(r'(?m)^\[', text)
+    settings = configparser.ConfigParser(interpolation=None, strict=True)
+    settings.optionxform = str
+    try:
+        settings.read_string(text[sections.start():] if sections else '')
+    except configparser.Error as error:
+        raise BuildError('world source settings invalid: ' + str(error)) from error
+    require(not settings.defaults() and settings.get('application', 'config/use_custom_user_dir', fallback='') == 'true'
+            and settings.get('application', 'config/custom_user_dir_name', fallback='') == json.dumps(USER_DATA_NAME)
+            and not any(k.startswith(('config/custom_user_dir_name.', 'config/use_custom_user_dir.'))
+                        for k in settings['application']),
+            'world source must select its independent custom user-data root')
     source_hashes = {name: hashlib.sha256(content).hexdigest() for name, (content, _) in files.items()}
+    excluded = {name: sha for name, sha in source_hashes.items() if name.startswith('tests/fixtures/')}
+    packaged = {name: sha for name, sha in source_hashes.items() if name not in excluded}
     source_tree = git(repo, 'rev-parse', candidate + '^{tree}').decode().strip()
     output.mkdir(mode=0o700)  # Atomic reservation: never open, replace or delete a pre-existing output.
     manifest = {'schema_version': 1, 'status': 'building', 'package_kind': 'unsigned local source-running wrapper; not native export',
                 'source_commit': candidate, 'source_tree': source_tree, 'builder_sha256': digest(Path(__file__).resolve()),
                 'source_file_modes': {name: mode for name, (_, mode) in files.items()},
                 'git_archive_sha256': hashlib.sha256(archive).hexdigest(), 'source_files_sha256': source_hashes,
+                'packaged_source_files_sha256': packaged, 'excluded_source_files_sha256': excluded,
+                'target_profile': {'id': PROFILE_ID, 'save_version': SAVE_VERSION,
+                                   'source_user_data_name': USER_DATA_NAME, 'save_path': SAVE_PATH},
                 'candidate_launcher_sha256': source_hashes[LAUNCHER], 'engine': {'version': version, 'provided_app': str(godot_app), 'files_sha256': engine_hashes},
                 'verification': {'native_verified': False, 'launchservices_verified': False, 'Q06_verified': False,
+                                 'WS07_verified': False, 'human_verified': False,
                                  'external_legacy_hash_protection_verified': False}, 'executions': [], 'errors': []}
     try:
         resources = output / APP_NAME / 'Contents/Resources'; project = resources / 'project'
         macos = resources.parent / 'MacOS'; project.mkdir(parents=True); macos.mkdir()
         for name, (content, mode) in files.items():
+            if name in excluded:
+                continue
             path = project / name; path.parent.mkdir(parents=True, exist_ok=True)
             with path.open('xb') as stream: stream.write(content)
             path.chmod(0o755 if mode == '100755' else 0o644)
         shutil.copytree(godot_app, resources / 'Godot.app')
+        (resources / '_sc_').touch(exist_ok=False)  # Bundled editor settings/cache stay inside this new package.
         require(hashes(resources / 'Godot.app') == engine_hashes, 'copied engine differs from provided bundle')
         engine = resources / 'Godot.app/Contents/MacOS/Godot'
         entry = macos / '开始试玩'; entry.write_text(ENTRY); entry.chmod(0o755)
         command = output / '开始试玩.command'; command.write_text(COMMAND); command.chmod(0o755)
         with (resources.parent / 'Info.plist').open('xb') as stream:
-            plistlib.dump({'CFBundleName': '月灯巷质量试玩', 'CFBundleIdentifier': 'local.moonlantern.quality.' + candidate[:12],
+            plistlib.dump({'CFBundleName': '月灯巷世界试玩', 'CFBundleIdentifier': 'local.moonlantern.world.' + candidate[:12],
                           'CFBundlePackageType': 'APPL', 'CFBundleExecutable': '开始试玩', 'CFBundleVersion': '1',
                           'CFBundleShortVersionString': '0.1', 'NSHighResolutionCapable': True}, stream)
         verify = output / 'verification'; verify.mkdir(); probe = verify / 'package_probe.gd'; probe.write_text(PROBE)
         token = uuid.uuid4().hex
-        profiles = {name: 'MoonlanternDemo/quality-' + candidate[:12] + '-' + token + '/' + name for name in ('player', 'verify')}
+        profiles = {name: 'MoonlanternDemo/world-' + candidate[:12] + '-' + token + '/' + name for name in ('player', 'verify')}
         configs = {name: ('[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name="' + profile + '"\n').encode()
                    for name, profile in profiles.items()}
         manifest['isolation_configurations_sha256'] = {name: hashlib.sha256(config).hexdigest() for name, config in configs.items()}
@@ -423,9 +516,10 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
                 and all(reports['save'][key] == reports['restore'][key] for key in ('save_hash', 'backup_hash')),
                 'Main automatic restore changed the state or rewrote main/backup')
         actual = hashes(project)
-        require(all(actual.get(name) == sha for name, sha in source_hashes.items()), 'candidate source changed during packaging/import')
+        require(all(actual.get(name) == sha for name, sha in packaged.items()), 'candidate source changed during packaging/import')
+        require(not (project / 'tests/fixtures').exists(), 'runtime fixtures reappeared during packaging')
         require(all((project / name).stat().st_mode & 0o777 == (0o755 if mode == '100755' else 0o644)
-                    for name, (_, mode) in files.items()), 'candidate source permissions changed during packaging/import')
+                    for name, (_, mode) in files.items() if name in packaged), 'candidate source permissions changed during packaging/import')
         generated = {name: sha for name, sha in actual.items() if name not in source_hashes and name != 'override.cfg'}
         for name in generated:
             require(name.startswith('.godot/') or (name.endswith('.import') and name[:-7] in source_hashes)
@@ -438,13 +532,13 @@ def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeou
         manifest.update(generated_import_metadata_sha256=generated,
                         overrides=[{'path': 'override.cfg', 'sha256': manifest['isolation_configurations_sha256']['player'], 'reason': 'new isolated user directory only'}],
                         probe_reports=reports, player_save_file=reports['player-directory']['save_path'])
-        (output / '先看这里.txt').write_text('咩咩与月灯巷 · 本地质量试玩\n双击「' + APP_NAME + '」或「开始试玩.command」。自带Godot 4.7.2，离线源码运行包装，不是原生导出/公证发行包。\n'
+        (output / '先看这里.txt').write_text('咩咩与月灯巷 · 本地世界试玩\n双击「' + APP_NAME + '」或「开始试玩.command」。自带Godot 4.7.2，离线源码运行包装，不是原生导出/公证发行包。\n'
             + '候选：' + candidate + '\n独立玩家存档：' + manifest['player_save_file'] + '\n'
-            + '本包不读取、迁移旧v2玩家档。manifest记录源码、引擎、配置与诊断；headless默认保存/恢复不代表UI输入、native/Q06或人类趣味验收。\n')
+            + '本包默认 world-slice-v1，不读取或迁移旧 profile/真人活动档。manifest记录完整Git来源、明确排除的fixtures、实际包内源码/引擎/配置哈希；headless默认保存/恢复不代表UI输入、WS07或人类趣味验收。\n')
         manifest['generated_sidecars_sha256'] = {p.relative_to(output).as_posix(): digest(p) for p in output.rglob('*')
             if p.is_file() and not p.is_relative_to(project) and not p.is_relative_to(resources / 'Godot.app') and p.name != 'manifest.json'}
         check_configs(configs['player'])
-        manifest['status'] = 'headless-verified; native/Q06/legacy-external-hash acceptance pending'
+        manifest['status'] = 'world-headless-verified; WS07/human acceptance pending'
         manifest['verification']['headless_main_default_save_restore_verified'] = True
     except (Exception, KeyboardInterrupt) as error:
         manifest['status'] = 'failed; retained partial package and evidence; do not deliver'

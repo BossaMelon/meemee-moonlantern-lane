@@ -185,7 +185,102 @@ func inspect_bindings(node: Node):
 		expect(font==primary,"actual Main text uses shared packaged font: "+str(node.get_path()))
 		bindings.append({"node":str(node.get_path()),"font_path":font.resource_path,"font_instance":font.get_instance_id(),"text":node.text})
 		add_text(node.text)
+	if node.has_method("canvas_text_bindings"):
+		var actual: Array = node.canvas_text_bindings()
+		expect(not actual.is_empty(), "actual Canvas draw consumers were observed")
+		for i in range(actual.size()):
+			var row: Dictionary = actual[i]; var font: Font = row.font
+			expect(font == primary, "actual Canvas draw uses shared packaged FontFile")
+			bindings.append({"node":str(node.get_path())+"/CanvasText["+str(i)+"]","consumer":"CanvasItem.draw_string","actual_draw":true,"font_path":font.resource_path,"font_instance":font.get_instance_id(),"text":str(row.text)})
+			add_text(str(row.text))
 	for child in node.get_children(): inspect_bindings(child)
+
+func world_axes(axis: Vector2):
+	for pair in [[JOY_AXIS_LEFT_X,axis.x],[JOY_AXIS_LEFT_Y,axis.y]]:
+		var event=InputEventJoypadMotion.new();event.device=0;event.axis=pair[0];event.axis_value=pair[1]
+		viewport.push_input(event,true)
+
+func world_foot() -> Vector2:
+	var player: Dictionary=ui.game.view().world.player
+	return Vector2(player.x,player.y)
+
+func world_walk(target: Vector2) -> bool:
+	var deadline=Time.get_ticks_msec()+15000
+	while world_foot().distance_to(target)>8 and Time.get_ticks_msec()<deadline:
+		var delta=target-world_foot();world_axes((delta/8.0).limit_length());await process_frame
+	world_axes(Vector2.ZERO);await frames()
+	var arrived=world_foot().distance_to(target)<=8
+	expect(arrived,"real joypad InputEvents reach World object at "+str(target))
+	return arrived
+
+func world_anchor(id: String) -> Vector2:
+	for object in ui.game.view().world.geometry.objects:
+		if object.id==id:return Vector2(object.anchor.x,object.anchor.y)
+	expect(false,"Core geometry contains "+id);return world_foot()
+
+func world_f():
+	for down in [true,false]:
+		var event=InputEventKey.new();event.physical_keycode=KEY_F;event.pressed=down
+		viewport.push_input(event,true);await process_frame
+	await frames()
+
+func inspect_book(target: String, setup: String):
+	await world_f()
+	expect(ui.get_open_sheet()==target,"real F opens nearby production book "+target)
+	if target=="ledger":
+		expect(ui.game.view().day==2 and ui.game.view().cash!=ui.game.snapshot().initial_cash,"ledger fixture starts second night with actual non-initial wallet")
+		var button=ui.get_action_control("settle")
+		for n in range(30):
+			if viewport.gui_get_focus_owner()==button:break
+			for down in [true,false]:
+				var event=InputEventJoypadButton.new();event.button_index=JOY_BUTTON_DPAD_DOWN;event.pressed=down;viewport.push_input(event,true);await process_frame
+		expect(viewport.gui_get_focus_owner()==button,"real D-pad reaches settled-ledger action through scroll")
+		await click("settle")
+		var fresh: Dictionary=ui.game.view();var summary: Dictionary=fresh.summary;var lines: Array[String]=[]
+		for label in ui.world_controller.books.find_children("*","Label",true,false):lines.append(label.text)
+		var text="\n".join(lines)
+		expect(fresh.phase=="settled" and summary.day==2,"actual ledger button settles the real second-day fixture")
+		expect("当前余额"+str(fresh.cash)+"金" in text and "日结时余额"+str(summary.cash)+"金" in text,"ledger labels actual wallet separately from period profit")
+		expect("料理收入"+str(summary.revenue)+"金" in text and "已售食材成本"+str(summary.sold_cost)+"金" in text,"ledger labels authoritative revenue and sold ingredient cost")
+		expect("毛利润"+str(summary.gross_profit)+"金" in text and "本期利润"+str(int(summary.gross_profit)-int(summary.fee))+"金" in text,"ledger uses authoritative gross profit then deducts actual fee")
+		expect(int(summary.gross_profit)-int(summary.fee)!=int(fresh.cash) and "= 结末" not in text,"second-day fixture cannot equate period profit with wallet")
+	inspect_bindings(ui)
+	var book=ui.world_controller.books
+	expect(Rect2(Vector2.ZERO,ui.size).encloses(book.get_global_rect()),"font metrics keep actual World book inside viewport: "+target)
+	expect(book.scroll.size.y>=80,"font metrics leave usable World book scroll area: "+target)
+	layouts.append({"entry":target,"setup":setup,"ui_size":str(ui.size),"sheet_rect":str(book.get_global_rect()),"scroll_rect":str(book.scroll.get_global_rect()),"body_minimum":str(book.content.get_combined_minimum_size())})
+	await click("book_close")
+
+func closing_fixture():
+	# Font/layout fixture only, before mounting Main. This is NOT WS07 or a
+	# runtime night-completion claim: legal real-Core movement/time builds state.
+	var game=load("res://game/core/game_session.gd").new(23,"world-slice-v1")
+	for night in range(2):
+		var points=[Vector2(1160,364),Vector2(1160,580),Vector2(1120,580)] if night==0 else [Vector2(1160,606),Vector2(1160,580),Vector2(1120,580)]
+		for point in points:fixture_walk(game,point)
+		for wave in range(3):
+			var action="open_shop" if wave==0 else "start_wave"
+			var payload={} if wave==0 else {"wave_id":game.view().service.next_wave_id}
+			var result=game.command("world_interact",{"target_id":"door-bell","action":action,"payload":payload},"font-fixture-wave-%s-%s"%[night,wave])
+			expect(result.ok,"legal pre-mount font fixture starts real wave")
+			for n in range(4):
+				if game.view().phase!="trading":break
+				expect(game.advance(60000).ok,"legal pre-mount font fixture advances actual empty service")
+		expect(game.view().phase=="closing","ledger layout fixture reaches real closing phase")
+		fixture_walk(game,Vector2(580,606))
+		if night==0:
+			for action in ["settle","next_day"]:expect(game.command("world_interact",{"target_id":"ledger","action":action,"payload":{}},"font-fixture-"+action).ok,"legal pre-mount ledger fixture reaches next day")
+	return game
+
+func fixture_walk(game, target: Vector2):
+	for n in range(400):
+		var player: Dictionary=game.view().world.player
+		var delta=target-Vector2(player.x,player.y)
+		if delta.length()<1:break
+		var axis=(delta/8.0).limit_length()
+		expect(game.command("world_input",{"move_x":axis.x,"move_y":axis.y}).ok,"pre-mount font fixture held axes")
+		expect(game.advance(50).ok,"pre-mount font fixture real movement step")
+	game.command("world_input",{"move_x":0.0,"move_y":0.0})
 
 func run():
 	probe_started=true
@@ -208,12 +303,26 @@ func run():
 	viewport=SubViewport.new();viewport.size=Vector2i(844,390) if "--small" in OS.get_cmdline_user_args() else Vector2i(1440,904);root.add_child(viewport)
 	ui=load("res://scenes/main.tscn").instantiate();ui.save_path=folder+"/unused-player-save.json";viewport.add_child(ui)
 	await frames();inspect_bindings(ui)
-	for entry in ["world_journal","world_craft","world_menu","world_gear"]:
-		await click(entry);inspect_bindings(ui)
-		expect(Rect2(Vector2.ZERO,ui.size).encloses(ui.sheet_surface.get_global_rect()),"font metrics keep actual Main sheet inside viewport: "+entry)
-		expect(ui.scroll.size.y>=80,"font metrics leave usable scroll area: "+entry)
-		layouts.append({"entry":entry,"ui_size":str(ui.size),"sheet_rect":str(ui.sheet_surface.get_global_rect()),"scroll_rect":str(ui.scroll.get_global_rect()),"body_minimum":str(ui.body.get_combined_minimum_size())})
-		await click("sheet_close")
+	expect(is_instance_valid(ui.world_controller) and ui.game.view().has("world"),"default Main consumes actual production world profile")
+	if not is_instance_valid(ui.world_controller) or not ui.game.view().has("world"):finish();return
+	# Exercise actual loaded/job/ready labels as well as the four books. These
+	# physical operations use real UI events, never direct Core commands.
+	if await world_walk(world_anchor("pantry")+Vector2(0,24)):
+		await world_f();inspect_bindings(ui)
+	if await world_walk(world_anchor("prep")+Vector2(0,24)):
+		await world_f();inspect_bindings(ui)
+		await world_f();inspect_bindings(ui)
+	if await world_walk(world_anchor("recipe-book")+Vector2(0,24)):await inspect_book("recipe-book","fresh Main, actual input movement")
+	if await world_walk(world_anchor("menu-board")+Vector2(0,24)):await inspect_book("menu-board","fresh Main, actual input movement")
+	var lane_reached=await world_walk(Vector2(1160,364)) and await world_walk(Vector2(1160,580)) and await world_walk(world_anchor("shop-exit"))
+	if lane_reached:
+		await world_f();expect(ui.game.view().world.region_id=="lane","real F crosses shop portal")
+		if ui.game.view().world.region_id=="lane" and await world_walk(world_anchor("vendor")+Vector2(0,24)):await inspect_book("vendor","fresh Main, actual input portal and movement")
+	ui.queue_free();await frames()
+	var fixture=closing_fixture()
+	ui=load("res://scenes/main.tscn").instantiate();ui.game=fixture;ui.save_path=folder+"/unused-ledger-player-save.json";viewport.add_child(ui);await frames()
+	await inspect_book("ledger","legal real-Core closing fixture before Main mount; F/button input is actual, no runtime-night claim")
+	expect(layouts.size()==4,"all four actual near-object World books completed layout checks")
 	if "--missing-glyph" in OS.get_cmdline_user_args(): required[0x10ffff]=true
 	for code in required:
 		if not primary.has_char(code): missing.append({"codepoint":"U+%04X"%code,"character":String.chr(code)})
@@ -227,8 +336,8 @@ func finish():
 	var file=FileAccess.open(folder+"/font-report.json",FileAccess.WRITE)
 	if file==null: reject_output("report_write_failed");return
 	var sources={}
-	for path in ["game/ui/portable_font.gd","game/ui/main.gd","game/ui/checks/portable_font.gd","assets/fonts/font-manifest.json","assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import"]:
+	for path in ["game/ui/portable_font.gd","game/ui/main.gd","game/ui/checks/portable_font.gd","assets/fonts/font-manifest.json","assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import","game/ui/world_play.gd","game/ui/world/world_input.gd","game/ui/world/world_books.gd","game/ui/world/world_controller.gd","game/ui/world/item_group.gd","game/ui/world/world_structure.gd"]:
 		sources[path]=FileAccess.get_sha256("res://"+path) if FileAccess.file_exists("res://"+path) else "not-in-this-fixture-or-export"
-	file.store_string(JSON.stringify({"protocol":1,"output_directory":folder,"output_policy":{"fresh":true,"accepted_root":output_root},"path_cases":path_cases,"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"layouts":layouts,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual Main Label/Button font bindings via GUI InputEvents in headless SubViewport. Corpus conservatively includes production source comments; geometry only, no OS fallback, native pixels, export or platform claim."},"  "));file.close()
+	file.store_string(JSON.stringify({"protocol":1,"output_directory":folder,"output_policy":{"fresh":true,"accepted_root":output_root},"path_cases":path_cases,"checks":checks,"failures":failures,"fonts":fonts,"missing":missing,"required_characters":required.size(),"required_han":han,"bindings":bindings,"layouts":layouts,"source_sha256":sources,"engine":Engine.get_version_info().string,"claim":"Actual imported FontFile data hash and actual production Main Label/Button/Canvas draw consumers via InputEvents in headless SubViewport. Four real near-object books; ledger uses legal real-Core pre-mount closing fixture, not runtime-night/WS07 proof. Corpus conservatively includes production source comments. No OS fallback, native pixels, export or platform claim."},"  "));file.close()
 	print("PORTABLE_FONT_RESULT "+JSON.stringify({"protocol":1,"report":folder+"/font-report.json","checks":checks,"failures":failures.size(),"exit_code":0 if failures.is_empty() else 1}))
 	quit(0 if failures.is_empty() else 1)

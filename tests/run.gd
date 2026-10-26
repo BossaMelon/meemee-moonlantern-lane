@@ -18,6 +18,8 @@ func _initialize():
 		var result = {"schema_version":1,"suite":suite_id,"cases":[]}
 		if suite_id == "quality-slice":
 			result = preload("res://tests/core/quality_suite.gd").new().run(report.get_base_dir(),selected)
+		elif suite_id == "world-slice":
+			result = preload("res://tests/core/world_session_cases.gd").new().run(report.get_base_dir(),selected)
 		else: result.cases.append({"id":"runner","status":"failed","checks":1,"failures":["Unknown suite: "+suite_id]})
 		_write_report(report,result)
 		return

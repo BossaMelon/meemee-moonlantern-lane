@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import io
 import json
 import os
 import signal
 import time
+from types import SimpleNamespace
 from pathlib import Path
 import subprocess
 import sys
@@ -32,12 +34,13 @@ def commit(repo):
 
 def fixture_repo(root):
     repo = root / '源码 仓库'; repo.mkdir(); git(repo, 'init', '-q')
-    (repo / 'project.godot').write_text('[application]\nrun/main_scene="res://scenes/main.tscn"\n')
-    for folder in ('scenes', 'game', 'tools', 'assets'):
-        (repo / folder).mkdir()
+    (repo / 'project.godot').write_text('config_version=5\n[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name="moonlantern-world-slice-v1"\nrun/main_scene="res://scenes/main.tscn"\n')
+    for folder in ('scenes', 'game', 'tools', 'assets', 'tests/fixtures'):
+        (repo / folder).mkdir(parents=True)
     (repo / 'scenes/main.tscn').write_text('not a Godot scene: unit fixture only\n')
     (repo / 'game/main.gd').write_text('not game code: fixture protocol only\n')
     (repo / 'assets/texture.png').write_bytes(b'not an image: fixture only')
+    (repo / 'tests/fixtures/world-slice-scenarios.json').write_text('{"fixture_only":true}')
     launcher = repo / demo.LAUNCHER
     launcher.write_text('#!/bin/zsh\nset -eu\ntask_project="${0:A:h:h}"\n"$GODOT" --headless --path "$task_project" --import\nexec "$GODOT" --path "$task_project" "$@"\n')
     launcher.chmod(0o755)
@@ -63,22 +66,24 @@ if bad=="timeout" and mode=="restore": time.sleep(20)
 profile=re.search('custom_user_dir_name="([^"]+)"',(project/"override.cfg").read_text()).group(1)
 folder=Path(os.environ["D01_FIXTURE_USERDATA"])/profile
 folder.mkdir(parents=True,exist_ok=True)
-save=folder/"profiles/rain-night-v1/moonlantern.json"
-snapshot={"version":3,"profile_id":"rain-night-v1","paused":True,"day":1,"requests":{"unit":"complete"}}
+save=folder/"profiles/world-slice-v1/moonlantern.json"
+snapshot={"version":4,"profile_id":"world-slice-v1","paused":True,"day":1,"requests":{"unit":"complete"}}
 if mode=="save":
  save.parent.mkdir(parents=True,exist_ok=True);save.write_text(json.dumps(snapshot))
  save.with_name(save.name+".bak").write_bytes(save.read_bytes())
 if mode=="restore" and bad=="restore-reset":snapshot["paused"]=False
-report={"suite":"D01-package-headless","mode":mode,"build_id":os.environ["MOON_DEMO_BUILD_ID"],"process_id":os.getpid(),"headless":True,"native_verified":False,"input_verified":False,"executable":str(Path(sys.argv[0]).absolute()),"user_data_dir":str(folder),"save_path":str(save),"legacy_default_absent_in_isolated_dir":True,"failures":[],"passed":True}
+report={"suite":"H07-package-headless","mode":mode,"build_id":os.environ["MOON_DEMO_BUILD_ID"],"process_id":os.getpid(),"headless":True,"native_verified":False,"input_verified":False,"executable":str(Path(sys.argv[0]).absolute()),"user_data_dir":str(folder),"save_path":str(save),"legacy_default_absent_in_isolated_dir":True,"fixtures_absent":not (project/"tests/fixtures").exists(),"default_session_profile":"world-slice-v1","default_session_version":4,"failures":[],"passed":True}
 report_path=Path(os.environ["MOON_DEMO_REPORT"])
 if mode=="player-directory":report["player_save_absent"]=not save.exists()
 else:
- report.update(main_scene="res://scenes/main.tscn",main_script="res://game/main.gd",main_script_sha256=hashlib.sha256((project/"game/main.gd").read_bytes()).hexdigest(),ui_default_save_path="user://profiles/rain-night-v1/moonlantern.json",save_writes_allowed=True,snapshot=snapshot,saved_state=json.loads(save.read_text()),save_hash=hashlib.sha256(save.read_bytes()).hexdigest(),backup_hash=hashlib.sha256(save.with_name(save.name+".bak").read_bytes()).hexdigest(),assets_loaded=True)
+ report.update(main_scene="res://scenes/main.tscn",main_script="res://game/main.gd",main_script_sha256=hashlib.sha256((project/"game/main.gd").read_bytes()).hexdigest(),ui_default_save_path="user://profiles/world-slice-v1/moonlantern.json",save_writes_allowed=True,snapshot=snapshot,saved_state=json.loads(save.read_text()),save_hash=hashlib.sha256(save.read_bytes()).hexdigest(),backup_hash=hashlib.sha256(save.with_name(save.name+".bak").read_bytes()).hexdigest(),assets_loaded=True)
 if mode=="save":
  (report_path.parent/"GODOT-LICENSE.txt").write_text("unit engine fixture license, not game evidence")
  (report_path.parent/"GODOT-THIRD-PARTY-LICENSES.json").write_text("[]")
 if bad=="missing-backup" and mode!="player-directory":report["backup_hash"]=""
 if bad=="blocked-save" and mode!="player-directory":report["save_writes_allowed"]=False
+if bad=="wrong-session-default":report["default_session_profile"]="rain-night-v1"
+if bad=="fixture-leak":report["fixtures_absent"]=False
 if bad=="wrong-pid":report["process_id"]+=1
 if bad=="wrong-profile":report["user_data_dir"]=str(folder/"wrong")
 if bad=="wrong-main":report["main_scene"]="res://other.tscn"
@@ -117,7 +122,95 @@ class FixtureCase(unittest.TestCase):
                                options.pop('godot_app', self.engine), options.pop('output', self.output), **options)
 
 
+class IsolationFileGuards(unittest.TestCase):
+    def test_reparse_metadata_is_rejected_even_if_reported_as_regular(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; path.write_bytes(b'expected')
+            metadata = path.lstat()
+            linked = SimpleNamespace(st_mode=metadata.st_mode, st_file_attributes=0x400)
+            with patch.object(Path, 'lstat', return_value=linked), self.assertRaises(demo.BuildError):
+                demo.safe_path(path)
+
+    def test_private_config_works_without_optional_posix_flags(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(demo.os.__dict__):
+            demo.os.__dict__.pop('O_NOFOLLOW', None); demo.os.__dict__.pop('O_NONBLOCK', None)
+            path = Path(folder).resolve()/'override.cfg'; expected = b'[application]\nvalue=true\n'
+            path.write_bytes(expected)
+            self.assertEqual(demo.validate_isolation_config(path, expected), hashlib.sha256(expected).hexdigest())
+            path.write_bytes(expected.replace(b'\n', b'\r\n'))
+            with self.assertRaises(demo.BuildError): demo.validate_isolation_config(path, expected)
+
+    def test_hardlinked_config_is_not_private(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; path.write_bytes(b'expected')
+            os.link(path, path.with_name('second-link'))
+            with self.assertRaises(demo.BuildError): demo.validate_isolation_config(path, b'expected')
+
+    def test_replaced_file_is_rejected_before_any_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; other = path.with_name('other.cfg')
+            path.write_bytes(b'expected'); other.write_bytes(b'expected')
+            real_open = os.open; real_fdopen = os.fdopen; observed = []
+            @contextmanager
+            def watched_fdopen(fd, mode):
+                with real_fdopen(fd, mode) as stream:
+                    watched = Mock(wraps=stream); observed.append(watched); yield watched
+            with patch.object(demo.os, 'open', side_effect=lambda _path, flags: real_open(other, flags)), patch.object(demo.os, 'fdopen', side_effect=watched_fdopen):
+                with self.assertRaisesRegex(demo.BuildError, 'before reading'):
+                    demo.validate_isolation_config(path, b'expected')
+            observed[0].read.assert_not_called()
+
+
 class CandidateGuards(FixtureCase):
+    def test_archive_preserves_git_blob_bytes_with_autocrlf_enabled(self):
+        git(self.repo, 'config', 'core.autocrlf', 'true')
+        expected = demo.git(self.repo, 'show', self.sha+':project.godot')
+        _, files, _ = demo.archive_source(self.repo, self.sha)
+        self.assertEqual(files['project.godot'][0], expected)
+        self.assertEqual(git(self.repo, 'config', 'core.autocrlf'), 'true')
+
+    def test_archive_preserves_text_blob_with_crlf_native_config(self):
+        (self.repo/'.gitattributes').write_text('*.gd text\n')
+        self.sha = commit(self.repo)
+        git(self.repo, 'config', 'core.autocrlf', 'false')
+        git(self.repo, 'config', 'core.eol', 'crlf')
+        _, files, _ = demo.archive_source(self.repo, self.sha)
+        self.assertEqual(files['game/main.gd'][0], demo.git(self.repo, 'show', self.sha+':game/main.gd'))
+        self.assertEqual(git(self.repo, 'config', 'core.eol'), 'crlf')
+
+    def test_source_probe_projection_binds_bytes_and_never_creates_a_package(self):
+        fixture = self.repo/'tests/fixtures/controlled.json'
+        fixture.parent.mkdir(parents=True, exist_ok=True); fixture.write_text('{}')
+        self.sha = commit(self.repo)
+        project = self.root / 'source verification'
+        probe = self.root / 'source-probe.gd'
+        binding = demo.prepare_source_probe(self.repo, self.sha, project,
+                                           'MoonlanternH07Source/'+'a'*32+'/verify', probe)
+        self.assertFalse((project/'tests/fixtures').exists())
+        self.assertFalse((project/demo.APP_NAME).exists())
+        self.assertEqual(probe.read_text(), demo.PROBE)
+        self.assertTrue(binding['excluded_source_files_sha256'])
+        demo.validate_source_probe_projection(binding)
+        (project/'game/main.gd').write_text('modified')
+        with self.assertRaises(demo.BuildError): demo.validate_source_probe_projection(binding)
+
+    def test_source_probe_projection_rejects_unknown_files_and_reuse(self):
+        project = self.root/'source verification'; probe = self.root/'source-probe.gd'
+        profile = 'MoonlanternH07Source/'+'b'*32+'/verify'
+        binding = demo.prepare_source_probe(self.repo, self.sha, project, profile, probe)
+        (project/'unknown.json').write_text('{}')
+        with self.assertRaises(demo.BuildError): demo.validate_source_probe_projection(binding)
+        with self.assertRaises(demo.BuildError): demo.prepare_source_probe(self.repo, self.sha, project, profile, probe)
+
+    def test_probe_path_comparison_accepts_windows_separator_equivalence(self):
+        result = self.build(); report = result['probe_reports']['save']
+        profile = result['profiles']['verify']
+        report['executable'] = 'C:/pinned/Godot.exe'
+        report['user_data_dir'] = 'C:/private/'+profile
+        report['save_path'] = report['user_data_dir']+'/profiles/world-slice-v1/moonlantern.json'
+        demo.validate_probe(report, result['executions'][0], 'save', profile, report['build_id'],
+                            Path('C:\\pinned\\Godot.exe'), report['main_scene'], result['source_files_sha256'])
+
     def test_candidate_must_be_explicit_complete_immutable_commit(self):
         self.assertEqual(demo.resolve_candidate(self.repo, self.sha), self.sha)
         for value in ('HEAD', self.sha[:7], '', self.sha.upper(), 'f' * 40):
@@ -159,7 +252,7 @@ class CandidateGuards(FixtureCase):
                 member = tarfile.TarInfo(name); member.type = kind; member.size = len(payload); member.linkname = '../../outside'
                 tar.addfile(member, io.BytesIO(payload))
             def replaced(repo, *args):
-                return stream.getvalue() if args[0] == 'archive' else real_git(repo, *args)
+                return stream.getvalue() if 'archive' in args and '--format=tar' in args else real_git(repo, *args)
             with self.subTest(name=name, kind=kind), patch.object(demo, 'git', side_effect=replaced), self.assertRaises(demo.BuildError):
                 demo.archive_source(self.repo, self.sha)
         self.assertFalse((self.root / 'escaped').exists())
@@ -207,7 +300,29 @@ class OutputAndEngineGuards(FixtureCase):
 
 
 class PackagingProtocolTests(FixtureCase):
-    def test_fixture_bundle_binds_source_engine_configs_and_default_v3_path(self):
+    def test_old_default_session_or_fixture_dependency_cannot_claim_world_package(self):
+        for failure in ['wrong-session-default', 'fixture-leak']:
+            with self.subTest(failure=failure), patch.dict(os.environ, {'D01_FIXTURE_BAD': failure}), self.assertRaises(demo.BuildError):
+                self.build(output=self.root/('failure-'+failure))
+
+    def test_wrong_source_namespace_is_rejected_before_creating_package(self):
+        p=self.repo/'project.godot';p.write_text(p.read_text().replace('moonlantern-world-slice-v1','old-rain-night'))
+        self.sha=commit(self.repo)
+        with self.assertRaisesRegex(demo.BuildError,'world source'):
+            self.build()
+        self.assertFalse(self.output.exists())
+
+    def test_world_namespace_cannot_be_spoofed_in_another_section_or_feature(self):
+        original=(self.repo/'project.godot').read_text()
+        for suffix in ['\n[rendering]\nconfig/custom_user_dir_name="moonlantern-world-slice-v1"\n',
+                       '\nconfig/custom_user_dir_name.windows="old-rain-night"\n']:
+            text=original.replace('moonlantern-world-slice-v1','old-rain-night') if '[rendering]' in suffix else original
+            (self.repo/'project.godot').write_text(text+suffix);self.sha=commit(self.repo)
+            with self.subTest(suffix=suffix),self.assertRaisesRegex(demo.BuildError,'world source'):
+                self.build()
+            self.assertFalse(self.output.exists())
+
+    def test_fixture_bundle_binds_source_engine_configs_and_default_v4_path(self):
         before_source = git(self.repo, 'status', '--porcelain')
         before_engine = demo.hashes(self.engine)
         # Explicit isolated unit sentinels, never real user saves or the real old demo.
@@ -217,7 +332,10 @@ class PackagingProtocolTests(FixtureCase):
         before_legacy = demo.hashes(legacy)
         result = self.build()
         packed = self.output / demo.APP_NAME / 'Contents/Resources/project'
-        for name, sha in result['source_files_sha256'].items(): self.assertEqual(demo.digest(packed / name), sha)
+        for name, sha in result['packaged_source_files_sha256'].items(): self.assertEqual(demo.digest(packed / name), sha)
+        self.assertEqual(set(result['excluded_source_files_sha256']), {'tests/fixtures/world-slice-scenarios.json'})
+        self.assertFalse((packed / 'tests/fixtures').exists())
+        self.assertEqual(set(result['source_files_sha256']), set(result['packaged_source_files_sha256']) | set(result['excluded_source_files_sha256']))
         self.assertEqual(result['source_commit'], self.sha)
         self.assertEqual((packed / demo.LAUNCHER).read_bytes(), (self.repo / demo.LAUNCHER).read_bytes())
         self.assertEqual(result['engine']['files_sha256'], before_engine)
@@ -228,7 +346,9 @@ class PackagingProtocolTests(FixtureCase):
         self.assertTrue(result['cold_cache_initially_absent'])
         self.assertNotEqual(result['profiles']['player'], result['profiles']['verify'])
         self.assertIn(result['profiles']['player'], (packed / 'override.cfg').read_text())
-        self.assertTrue(result['player_save_file'].endswith('/profiles/rain-night-v1/moonlantern.json'))
+        self.assertIn('MoonlanternDemo/world-',result['profiles']['player'])
+        self.assertTrue((self.output/demo.APP_NAME/'Contents/Resources/_sc_').is_file())
+        self.assertTrue(result['player_save_file'].endswith('/profiles/world-slice-v1/moonlantern.json'))
         self.assertTrue(result['verification']['headless_main_default_save_restore_verified'])
         for name in ('native_verified', 'launchservices_verified', 'Q06_verified', 'external_legacy_hash_protection_verified'):
             self.assertIs(result['verification'][name], False)
@@ -289,7 +409,7 @@ class PackagingProtocolTests(FixtureCase):
     def test_saved_json_numbers_accept_godot_integral_float_version(self):
         binary = self.engine / 'Contents/MacOS/Godot'
         # Godot JSON.parse_string parses saved integer tokens as floats; a
-        # report then serializes saved_state.version as 3.0, unlike snapshot 3.
+        # report then serializes saved_state.version as 4.0, unlike snapshot 4.
         binary.write_text(binary.read_text().replace('saved_state=json.loads(save.read_text())',
                                                     'saved_state=json.loads(save.read_text(),parse_int=float)'))
         result = self.build()
@@ -298,7 +418,7 @@ class PackagingProtocolTests(FixtureCase):
 
     def test_version_guard_still_rejects_boolean_string_fraction_null_and_nonfinite(self):
         result = self.build(); original = result['probe_reports']['save']
-        for version in (True, False, '3', 3.5, None, float('nan'), float('inf'), -float('inf'), 4):
+        for version in (True, False, '4', 4.5, None, float('nan'), float('inf'), -float('inf'), 3, 5):
             report = json.loads(json.dumps(original))
             report['snapshot']['version'] = version; report['saved_state']['version'] = version
             with self.subTest(version=version), self.assertRaises(demo.BuildError):

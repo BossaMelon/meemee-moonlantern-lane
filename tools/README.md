@@ -17,15 +17,15 @@ python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
 
 **harness 通过只表示开发底座有效，不表示游戏已实现。** 它验证：
 
-- 旧 [prototype 契约](../contracts/prototype-v1.json) 与新 [quality-slice 契约](../contracts/quality-slice-v1.json) 的 schema、独立身份及必需自动集合；
-- 两套 [旧场景](../tests/fixtures/prototype-scenarios.json)/[新场景](../tests/fixtures/quality-slice-scenarios.json) 对各自必需自动 ID 的覆盖；新场景的 suite、冻结五种子和 seed_policy；
+- [prototype 契约](../contracts/prototype-v1.json)、[quality-slice 契约](../contracts/quality-slice-v1.json) 与 [world-slice 契约](../contracts/world-slice-v1.json) 的 schema、独立身份及必需自动集合；
+- 三套 [prototype 场景](../tests/fixtures/prototype-scenarios.json)/[quality 场景](../tests/fixtures/quality-slice-scenarios.json)/[world 场景](../tests/fixtures/world-slice-scenarios.json) 对各自必需自动 ID 的覆盖；新场景的 suite、冻结五种子和 seed_policy；
 - [任务归属](../harness/tasks.json) 的路径安全、跨 owner 互斥和依赖无环；
 - PR 正文 `Task-IDs: H01` 对应的实际 base/head diff 必须落在认领路径；
 - 项目上下文文件存在、Markdown 本地链接有效；
 - harness 自身的反假绿回归测试实际执行且没有失败、错误或跳过；
 - 一旦存在 `project.godot`、`.gd` 或 `.tscn`，CI 必须增加无条件 prototype job。
 
-`--stage prototype` 在同一候选上分别执行 prototype 与 quality-slice 的真实 runner；两份契约/fixture 在 harness 与 prototype 阶段都强制存在，不提供缺新文件就回退旧绿灯的分支。它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+`--stage prototype` 在同一候选上固定串行执行 prototype、quality-slice、world-slice 的真实 runner；三份契约/fixture 在 harness 与 prototype 阶段都强制存在，不提供缺新文件就回退旧绿灯的分支。它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
 当前完成程度与运行证据只维护在 [项目状态](../docs/project-status.md)。
 
 ## 渲染验收串行入口
@@ -39,11 +39,54 @@ python3 tools/with_render_lock.py -- ./tools/启动月灯巷.command --windowed 
 ```
 
 锁为同机同用户共享的 `/tmp/moonlantern-render-UID.lock`，跨工作树生效；无需删除锁文件。
-等待可 Ctrl-C 中断，命令退出（包括失败/终止）自动释放。命令原 argv、环境、stdout/stderr、
+等待可 Ctrl-C 中断，命令退出（包括失败/终止）自动释放。命令原 argv、其他环境、stdout/stderr、
 退出码保持，入口不经 shell 拼接、不打印敏感 argv，不开其他 app、不杀无关进程。
 只包完整前台命令，不后台化或只锁某个子阶段；headless 逻辑检查直接运行，**不使用此入口**。
 这是 Mac/POSIX 开发验收工具，不是游戏运行时依赖；锁不能替代当前 root 明确授予的渲染 slot，
 已在运行的旧窗口不会被接管或改变。
+
+需要验证外层锁来源的 Python supervisor 使用一次性继承交接 v1：wrapper **取得 EX 后**创建
+匿名管道，写入至多 2048 bytes、且不超过本机 `PIPE_BUF` 的 ASCII JSON，关闭写端，
+只继承只读端。`MOONLANTERN_RENDER_HANDOFF_FD` 仅定位该管道，不能作为证明。
+JSON 的精确字段为：
+
+```json
+{
+  "version": 1,
+  "pid": 12345,
+  "lock": {"fd": 3, "device": 1, "inode": 100, "uid": 501},
+  "receipt": {"fd": 4, "device": 1, "inode": 101, "uid": 501},
+  "command_sha256": "SHA256_OF_EXACT_COMMAND_JSON"
+}
+```
+
+命令摘要算法为 `sha256(json.dumps(list(command), ensure_ascii=True, separators=(",", ":")).encode("ascii"))`；
+不在回执或错误日志中披露命令参数。exec 保持 wrapper PID，锁与管道各自的 FD/dev/ino/uid 均绑定。
+消费 API 为 `tools.with_render_lock.consume_render_lock_handoff(command)`，在创建输出或子进程前
+调用一次。它检查匿名 FIFO（Darwin 为 nlink=0；Linux 核对 `/proc/self/fd/FD` 为同 inode 的
+`pipe:[inode]`，不假设 nlink=0）、只读、可继承、身份、大小、严格 JSON 与立即 EOF，随后关闭回执 FD；
+缺失、旧回执、开放写端、非管道或身份／命令不符立即失败，不等待或重试。
+必须保存返回的 `proof`，在每个子阶段及最后报告前调用
+`tools.with_render_lock.verify_render_lock_handoff(proof, command)`，保留原锁 FD 直到完整 supervisor
+结束（包括 headless restore、子进程退出和报告）。验证器不对原锁 FD 调用 `flock`，不申请 EX；
+独立只读打开的 SH|NB 诊断必须与已有 EX 冲突。SH 成功则关闭诊断 FD 并拒绝，不把它变成持有锁。
+
+Python 启动须使用与 `sys.executable` **完全相同的可执行路径拼写**，不可用 PATH 别名；
+消费端的 `command = [sys.executable, *sys.orig_argv[1:]]`，保持解释器 flags 与脚本所有参数。
+这避免 macOS Framework 启动器改写 `sys.orig_argv[0]` 导致误判，不归一化或忽略参数。
+调用形状如下；仅在 root 实际分配 slot、固定源码和验收参数后执行：
+
+```sh
+render_python=/absolute/path/reported/by/sys.executable
+"$render_python" -B tools/with_render_lock.py -- "$render_python" -B tests/runtime/world_slice.py [ROOT_APPROVED_ARGS]
+```
+
+这是受控源码间交接，不能认证能伪造全部 FD／数据或修改代码的同用户恶意启动器。
+保持一次完整外层 wrapper；已有无消费 API 的渲染命令 CLI 不变。V02 接入及实际原生验收另由其 owner 完成。
+纯工具回归：`python3 -B tools/test_with_render_lock.py -v`，仅临时锁与 Python 子进程，不触碰共享锁或窗口。
+接口依据 [Python FD/pipe 文档](https://docs.python.org/3.14/library/os.html)、
+[解释器原始参数](https://docs.python.org/3.14/library/sys.html#sys.orig_argv) 与
+[Apple flock 语义](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)。
 
 ## Mac 源码启动器
 
@@ -77,13 +120,14 @@ Godot 4.7.2 实际 `--help` 与 [官方 CLI 文档](https://docs.godotengine.org
 
 ## 游戏执行器合同
 
-gate 只支持两个固定 suite：`prototype` 对应旧契约/fixture，`quality-slice` 对应新契约/fixture。两者读取各自 `mode=automated` 且 `required=true` 的条目，不允许用一个 suite 的报告代替另一个。quality-slice 的 Q01–Q05 必须为 required automated；Q06 为 required runtime，QH 为 required human，不能降低类型或纳入自动 passed。新 JSON 的 profiles/api/field_types/rules 由游戏与真实测试消费，gate 不实现类型 DSL 或代替游戏断言。
+gate 固定三个 suite：`prototype`、`quality-slice`、`world-slice`，各消费独立契约/fixture，读取各自 `mode=automated` 且 `required=true` 的条目，不允许用一个 suite 的报告代替另一个。quality-slice 的 Q01–Q05 必须为 required automated；Q06 为 required runtime，QH 为 required human，不能降低类型或纳入自动 passed。world-slice 的 WS01–06 必须精确为 required automated，WS07 为 runtime、WSH 为 human，不能混入自动 pass。harness 校验 world 默认 profile/v4、独立 user-data/save 身份、冻结五种子、fixture layout 身份与覆盖；移动/经济规则由 Core 与真实 case 消费，gate 不实现物理/规则 DSL 或代替游戏断言。
 
 现有 `--stage prototype` 命令和 CI job 名称保持，内部先核验引擎 `--version` 为 4.7.2，再串行调用：
 
 ```sh
 Godot --headless --path REPOSITORY --script tests/run.gd -- --suite prototype --report ABSOLUTE_FRESH_PROTOTYPE_REPORT
 Godot --headless --path REPOSITORY --script tests/run.gd -- --suite quality-slice --report ABSOLUTE_FRESH_QUALITY_REPORT
+Godot --headless --path REPOSITORY --script tests/run.gd -- --suite world-slice --report ABSOLUTE_FRESH_WORLD_REPORT
 ```
 
 执行器必须以非零状态退出表示失败，并写 UTF-8 JSON：
@@ -98,15 +142,17 @@ Godot --headless --path REPOSITORY --script tests/run.gd -- --suite quality-slic
 }
 ```
 
-示例只说明一条记录的结构，不是完整原型报告。quality-slice 使用同一报告结构，但 `suite` 必须精确为 `quality-slice`、自动 cases 为 Q01–Q05。执行器兼容旧的未指定 suite 的调用由 P04 维护；gate 始终显式请求这两套，忽略 `--suite` 而重复返回旧报告必须失败。
+示例只说明一条记录的结构，不是完整原型报告。quality-slice 使用同一报告结构，但 `suite` 必须精确为 `quality-slice`、自动 cases 为 Q01–Q05。执行器兼容旧的未指定 suite 的调用由 P04 维护；gate 始终显式请求三套，忽略 `--suite` 而重复返回旧报告必须失败。
 所有必需自动 ID 必须各出现一次、状态 `passed`、整数 `checks >= 1`。
 未知、重复、人工或 runtime ID，`failed`、`skipped`、零检查、报告缺失、
-命令错误、超时或引擎/脚本 `ERROR` 日志都会失败；即使 exit 0、错误在日志保留尾部之前也不能获得绿灯。两套报告分别写入新建的绝对临时路径，旧报告不能冒用。
+命令错误、完整报告后未退出的超时、JSON 重复键/非有限值/解析错误或引擎/脚本 `ERROR` 日志都会失败；即使 exit 0、错误在日志保留尾部之前也不能获得绿灯。三套报告分别写入新建的绝对临时路径，旧报告不能冒用。
 测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
 
 gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
-命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。quality-slice 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；`runner_report_evidence` 另存每个实际报告是否存在、长度/原字节 SHA256 与文本诊断，包含 malformed、非零、完整写出后超时的失败，不把这些原件当自动 pass；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。原 gate JSON 在失败时也由现有 pinned artifact 上传，控制台只输出有界失败诊断，防止旧 suite 的大 trace 截断新错误；不跳过实际 gate 或改变失败状态。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
+
+每套临时报告目录内固定的 `world-progress.json` 可作为可选原始诊断，在 `runner_report_evidence[suite].world_progress` 保留是否存在、字节数、SHA256 和文本，包括超时、非零退出或坏 case 报告。缺失不影响验收，不解析为 case 或计入通过；只读取这个已知文件，随后临时目录正常清理，不扫描源码 `output/**`。Windows 的源码完整性守卫仍拒绝未知生成文件。
 
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，
 例如 `Task-IDs: P01,H01`。CI 直接读取 GitHub 事件 JSON 的 base/head/body，
@@ -164,10 +210,10 @@ step 上加入条件和失败吞并。更复杂的 YAML 写法应先更新并验
 Mac 原型和无显示测试可立即推进。Windows 导出、iOS 构建、触屏/实体手柄、
 人类趣味验证各有独立证据要求；当前未运行这些验证，且本机缺完整 Xcode。
 
-## D01：Mac 质量 demo 源码运行包装
+## H07：Mac world demo 源码运行包装（保留 D01 恢复点）
 
 [build_local_demo.py](build_local_demo.py) 复用现有 Godot 4.7.2 `.app`，输出可双击的
-`月灯巷质量试玩.app`、`开始试玩.command`、说明和 manifest。它是自带编辑器引擎的离线源码包装，
+`月灯巷世界试玩.app`、`开始试玩.command`、说明和 manifest。它是自带编辑器引擎的离线源码包装，
 不是 Godot 原生导出、签名/公证发行包或 Steam 发行成果。实际构建须等 root 给最终审核候选 SHA：
 
 ```sh
@@ -175,7 +221,7 @@ python3 tools/build_local_demo.py \
   --repo /absolute/source-worktree \
   --candidate ROOT_APPROVED_FULL_40_HEX_SHA \
   --godot-app "/absolute/已有 Godot.app" \
-  --output "/absolute/existing-parent/全新质量试玩"
+  --output "/absolute/existing-parent/全新世界试玩"
 ```
 
 占位符须替换；没有候选或引擎默认值，不接受 HEAD、分支、短 SHA 或 tag 对象。
@@ -185,15 +231,15 @@ python3 tools/build_local_demo.py \
 
 构建器使用 `git archive` 并逐文件对照候选 Git blob，忽略脏工作区和未跟踪文件，保留候选自己的
 可执行启动器；链接、子模块、越界路径及 export-ignore/subst 导致的遗漏/内容变化均拒绝。
-不修改游戏源码。仅新增隔离用户目录的 `override.cfg`；冷导入产生的 `.godot`、`.import`/`.uid`
+除明确排除的 `tests/fixtures/**` 外不修改游戏源码；包内该目录必须不存在，Core 须内置几何，不能补写 fixture 或偷偷恢复运行时读取。manifest 同时绑定完整原 Git archive 与实际 packaged/excluded 文件哈希；其他源文件逐字节/模式不变。源码 project.godot 必须选择 world 独立根 `moonlantern-world-slice-v1`，运行探针还检查默认 GameSession 与实际 Main 同为 world/v4。只新增隔离用户目录的 `override.cfg`；冷导入产生的 `.godot`、`.import`/`.uid`
 元数据和验证 sidecar 显式列哈希及来源，其他新增文件或候选源码/模式变化导致失败。
 manifest 记录源码 SHA/tree/archive、逐文件内容/模式、构建器、引擎、配置和生成文件哈希。
 隔离配置的预期内容与哈希由本次 player/verify 目录生成；每次探测结束和交付前都逐字节核对
 运行配置及配置 sidecar，并要求它们是单链接常规文件。篡改、链接替换或内容不符均拒收，
 阶段切换使用原子替换，不经符号链接写入外部文件。
 
-每包分配独立 player/verify 用户目录，新默认相对路径为
-`user://profiles/rain-night-v1/moonlantern.json`。构建时三次独立进程走实际 `.app` 可执行入口：
+每包分配独立 `MoonlanternDemo/world-SHA-UUID/player` 与 `/verify` 用户目录，新默认相对路径为
+`user://profiles/world-slice-v1/moonlantern.json`。引擎旁 `_sc_` 将随包 editor settings/cache 留在本包内，不改全局设置。构建时三次独立进程走实际 `.app` 可执行入口：
 冷导入后加载候选真实 Main，通过 headless Escape 输入建立非默认暂停标记并调用核心默认保存；
 第二次由 Main 自动恢复并比较完整快照/主备档哈希；第三次仅核对 player 目录与主备档仍为空。
 探针不覆盖 `scene.save_path` 或手动注入恢复状态，读取实际 profile/version/default 路径和资源。
@@ -202,9 +248,9 @@ manifest 记录源码 SHA/tree/archive、逐文件内容/模式、构建器、�
 即使父进程已退出、管道已关闭，也要核验整组退出；TERM 宽限后仍存在则发 KILL，
 退出核验失败就拒收，不向未知进程组发送信号。执行记录保留组 ID、清理信号和组退出核验结果。
 
-这些是 **headless 打包/默认核心保存及 Main 恢复诊断**。manifest 的 native、LaunchServices、Q06、
-外部旧 v2 主备档哈希保护标记保持未验证；不冒充 UI 保存退出/完整输入或人类趣味通过。
-后续实际双击入口、真实保存退出/恢复、旧档哈希保护证据和原生时段由 root/P06 按最终固定包验收，
+这些是 **headless 打包/默认核心保存及 Main 恢复诊断**。manifest 的 native、LaunchServices、WS07/human、
+外部旧档哈希保护标记保持未验证；不冒充 UI 保存退出/完整输入或人类趣味通过。
+后续实际入口、真实 UI 保存退出/恢复与 WS07 由 root/V02 在明确渲染 slot、最终固定生产候选上验收；活动 human 档允许正常变化，不能作为静态守卫或复原/删档，
 不在其它任务持有渲染 slot 时启动原生。
 
 工具守卫测试：
@@ -220,10 +266,9 @@ python3 -m unittest discover -s tools -p test_build_local_demo.py -v
 
 `windows-validation.yml` 的稳定检查名为 `windows-source`，使用 Windows 2022、Python 3.14.6
 与 UTF-8。官方 setup-python v6 已解析并固定为
-`ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 和直接双 suite gate 保留。
+`ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 保留，现有 stage prototype 内固定三 suite。
 Linux prototype 仅新增冷导入准备、exit 0 错误扫描与白名单诊断。
-现有 validator 禁止 prototype block 中出现任何 if/continue-on-error；因此 Linux 导入失败时
-把原始进程/引擎日志和结果打印到 Actions step log，成功后另存白名单 artifact，不更改该约束。
+validator 仍禁止 prototype job/执行步骤的 if 或 continue-on-error；仅固定 SHA 的 upload-artifact、无 run 命令且路径属于四项诊断白名单时允许 always()，使原报告/导入日志失败也能保全，不改变实际 gate 退出码。
 
 Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub runner 执行：
 
@@ -241,11 +286,11 @@ Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub
 `731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953`，再解压并核有效 4.7.2。
 不安装全局引擎或导出模板。首次缓存必须缺席，实际 headless import 后要求纹理资源存在；
 stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` 也拒收。
-冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，输出 leaf 为尚不存在的
-`RUNNER_TEMP/w01-font`，由探针自行创建。缺探针/字体、非零退出、缺字、空绑定、OS fallback、
-字体数据或探针五项源码哈希与本次 Git blob 不符均失败；检查 Main 实际 Label/Button 绑定的字体实例。
-仅白名单上传 `font-report.json` 和日志，不上传该目录内可能产生的存档文件。
-随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
+冷导入后无条件调用 P07 的 `game/ui/checks/portable_font.gd`，分别检查1440×904与844×390的 headless SubViewport（不冒充原生窗口像素），输出 leaf 为尚不存在的 `RUNNER_TEMP/w01-font` 与 `w01-font-small`，由探针自行创建并执行路径正负例。缺探针/字体、非零退出、缺字、空绑定、OS fallback、四本实际 World 册页缺失或尺寸不符、字体数据及十一项 World/Main/provider 源码哈希（含 `item_group.gd` 与 `world_structure.gd`；UID 另由完整源码守卫覆盖）与本次 Git blob 不符均失败。保留实际 Label/Button/Canvas 字体实例核对。
+
+Main 默认档另复用现有 H07 `PROBE`：从同一 Git archive 核验每个 blob，在额外临时源码测试输入中精确排除 `tests/fixtures/`，声明唯一 `MoonlanternH07Source/UUID/verify` override；不创建 app、EXE/PCK、引擎副本或原生窗口。先独立进程确认新 namespace 无档，再由真实默认 Main 保存暂停标记，第三进程自动恢复；默认 `save_path` 不注入，完整快照、主备哈希与所有源码字节前后核对，PID 必须在本次 Windows Job 观察集合内。生产源码副本不写 override、不删除生成文件求过关，原 source-after 守卫仍拒绝未知文件。
+只白名单上传两份字体报告、Main探针/绑定 JSON及日志，不上传测试输入源码/引擎/用户存档目录；报告中的状态仅为测试产生的隔离状态。
+随后真实调用现有 `tools/gate.py --stage prototype`，固定执行三个 suite、必需 case、默认保存/恢复与独立子进程检查。
 不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
 若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次已定位的 Q02、同 120 秒上限的诊断，
 补存控制台、独立引擎日志和实际 case 报告（若完成）；原 gate 失败始终保留，诊断不能替代验收。
