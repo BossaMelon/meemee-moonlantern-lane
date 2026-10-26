@@ -1,13 +1,15 @@
 extends RefCounted
 const Legacy = preload("res://game/core/legacy_session.gd")
+const WorldNight = preload("res://game/core/world_night_session.gd")
 const RainNight = preload("res://game/core/rain_night_session.gd")
 var _game: RefCounted
 var _profile_id: String
 
-func _init(seed_value: int = 1, profile_id: String = "rain-night-v1"):
+func _init(seed_value: int = 1, profile_id: String = "world-slice-v1"):
 	_profile_id = profile_id
 	if profile_id == "prototype-v1": _game = Legacy.new(seed_value)
 	elif profile_id == "rain-night-v1": _game = RainNight.new(seed_value)
+	elif profile_id == "world-slice-v1": _game = WorldNight.new(seed_value)
 
 func _invalid() -> Dictionary:
 	return {"ok":false,"code":"unsupported_profile","message":"不支持的游戏规则："+_profile_id,"events":[]}

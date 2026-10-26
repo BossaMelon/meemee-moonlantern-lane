@@ -4282,6 +4282,665 @@
       "sha256": "94bcbf4a437755ec88d8927e8f92d9c5b149e2e33b1e5a4205c95619fe5e97e2",
       "purpose": "movement-driven walk frame; no baked translation",
       "derived_from": "meemee_walk_ne_04"
+    },
+    "world_wall_h": {
+      "file": "sprites/world_wall_h.png",
+      "size": [
+        100,
+        92
+      ],
+      "pivot": [
+        50.0,
+        78.0
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        0,
+        0,
+        100,
+        92
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        98,
+        90
+      ],
+      "content_region": [
+        2,
+        2,
+        96,
+        88
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "73d75451c4e2f6ba117b5ea9926e854ee24f84bc5622c76876fd7431b169b59c",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "wall",
+        "ground_size": [
+          96,
+          24
+        ],
+        "elevation_px": 64,
+        "cap_region": [
+          2,
+          2,
+          96,
+          24
+        ],
+        "face_region": [
+          2,
+          26,
+          96,
+          64
+        ],
+        "ground_rect": [
+          2,
+          66,
+          96,
+          24
+        ],
+        "planes": [
+          "wall_h_cap",
+          "wall_h_face"
+        ]
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "wall_h_cap": {
+            "source_crop": [
+              78,
+              251,
+              588,
+              302
+            ],
+            "size": [
+              96,
+              24
+            ]
+          },
+          "wall_h_face": {
+            "source_crop": [
+              78,
+              309,
+              588,
+              573
+            ],
+            "size": [
+              96,
+              64
+            ]
+          }
+        }
+      },
+      "footprint": {
+        "polygon": [
+          [
+            2,
+            66
+          ],
+          [
+            97,
+            66
+          ],
+          [
+            97,
+            89
+          ],
+          [
+            2,
+            89
+          ]
+        ],
+        "meaning": "exact visible ground coverage, not a new collider"
+      }
+    },
+    "world_wall_v": {
+      "file": "sprites/world_wall_v.png",
+      "size": [
+        28,
+        164
+      ],
+      "pivot": [
+        14.0,
+        114.0
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        104,
+        0,
+        28,
+        164
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        26,
+        162
+      ],
+      "content_region": [
+        2,
+        2,
+        24,
+        160
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "ae948d7c89f537e28133cb3da97e4b3ae4ecbc0ccddf921376ad0045ef7bc484",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "wall",
+        "ground_size": [
+          24,
+          96
+        ],
+        "elevation_px": 64,
+        "cap_region": [
+          2,
+          2,
+          24,
+          96
+        ],
+        "face_region": [
+          2,
+          98,
+          24,
+          64
+        ],
+        "ground_rect": [
+          2,
+          66,
+          24,
+          96
+        ],
+        "planes": [
+          "wall_v_cap",
+          "wall_v_face"
+        ]
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "wall_v_cap": {
+            "source_crop": [
+              678,
+              54,
+              767,
+              302
+            ],
+            "size": [
+              24,
+              96
+            ]
+          },
+          "wall_v_face": {
+            "source_crop": [
+              678,
+              309,
+              767,
+              573
+            ],
+            "size": [
+              24,
+              64
+            ]
+          }
+        }
+      },
+      "footprint": {
+        "polygon": [
+          [
+            2,
+            66
+          ],
+          [
+            25,
+            66
+          ],
+          [
+            25,
+            161
+          ],
+          [
+            2,
+            161
+          ]
+        ],
+        "meaning": "exact visible ground coverage, not a new collider"
+      }
+    },
+    "world_wall_corner": {
+      "file": "sprites/world_wall_corner.png",
+      "size": [
+        28,
+        92
+      ],
+      "pivot": [
+        14.0,
+        78.0
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        136,
+        0,
+        28,
+        92
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        26,
+        90
+      ],
+      "content_region": [
+        2,
+        2,
+        24,
+        88
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "e2563f1dcd2404343118870ce3809712c808162ebd84983b9838519252fa3a32",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "wall",
+        "ground_size": [
+          24,
+          24
+        ],
+        "elevation_px": 64,
+        "cap_region": [
+          2,
+          2,
+          24,
+          24
+        ],
+        "face_region": [
+          2,
+          26,
+          24,
+          64
+        ],
+        "ground_rect": [
+          2,
+          66,
+          24,
+          24
+        ],
+        "planes": [
+          "wall_corner_cap",
+          "wall_corner_face"
+        ]
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "wall_corner_cap": {
+            "source_crop": [
+              959,
+              251,
+              1055,
+              302
+            ],
+            "size": [
+              24,
+              24
+            ]
+          },
+          "wall_corner_face": {
+            "source_crop": [
+              959,
+              309,
+              1055,
+              573
+            ],
+            "size": [
+              24,
+              64
+            ]
+          }
+        }
+      },
+      "footprint": {
+        "polygon": [
+          [
+            2,
+            66
+          ],
+          [
+            25,
+            66
+          ],
+          [
+            25,
+            89
+          ],
+          [
+            2,
+            89
+          ]
+        ],
+        "meaning": "exact visible ground coverage, not a new collider"
+      }
+    },
+    "world_wood_top": {
+      "file": "sprites/world_wood_top.png",
+      "size": [
+        36,
+        20
+      ],
+      "pivot": [
+        18.0,
+        18
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        168,
+        0,
+        36,
+        20
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        34,
+        18
+      ],
+      "content_region": [
+        2,
+        2,
+        32,
+        16
+      ],
+      "source": "source/world-wood-top-v2.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "968e43263d1859207d384ffaa442ba346298fc314fb39af10d9acd5f4118bac2",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "repeatable_top",
+        "planes": [
+          "top"
+        ],
+        "elevation_px": 24
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "top": {
+            "source_crop": [
+              200,
+              150,
+              1744,
+              702
+            ],
+            "size": [
+              32,
+              16
+            ]
+          }
+        },
+        "repeat": "whole quiet surface crop; matching opposing edge pixels, no mirroring"
+      }
+    },
+    "world_wood_front": {
+      "file": "sprites/world_wood_front.png",
+      "size": [
+        36,
+        28
+      ],
+      "pivot": [
+        18.0,
+        26
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        168,
+        24,
+        36,
+        28
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        34,
+        26
+      ],
+      "content_region": [
+        2,
+        2,
+        32,
+        24
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "ef09f3b4af0844db123d1b9f4ed02529fb34efc5f5df8e855e36158753435d10",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "fixed_height_front",
+        "planes": [
+          "front"
+        ],
+        "elevation_px": 24
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "front": {
+            "source_crop": [
+              175,
+              773,
+              406,
+              927
+            ],
+            "size": [
+              32,
+              24
+            ]
+          }
+        }
+      }
+    },
+    "world_wood_end": {
+      "file": "sprites/world_wood_end.png",
+      "size": [
+        12,
+        28
+      ],
+      "pivot": [
+        6.0,
+        26
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        208,
+        24,
+        12,
+        28
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        10,
+        26
+      ],
+      "content_region": [
+        2,
+        2,
+        8,
+        24
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "e63c0856542c37554b623d58d988d0e63c510cf8ef51177a265f57c12b2f88f0",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "end_post",
+        "planes": [
+          "end"
+        ],
+        "elevation_px": 24
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "end": {
+            "source_crop": [
+              608,
+              771,
+              656,
+              927
+            ],
+            "size": [
+              8,
+              24
+            ]
+          }
+        }
+      }
+    },
+    "world_wood_foot": {
+      "file": "sprites/world_wood_foot.png",
+      "size": [
+        12,
+        28
+      ],
+      "pivot": [
+        6.0,
+        26
+      ],
+      "atlas": "atlases/world_building_kit.png",
+      "region": [
+        224,
+        24,
+        12,
+        28
+      ],
+      "opaque_bounds": [
+        2,
+        2,
+        10,
+        26
+      ],
+      "content_region": [
+        2,
+        2,
+        8,
+        24
+      ],
+      "source": "source/world-building-kit-v1.png",
+      "asset_set": "world_building_kit_v1",
+      "sha256": "e783df1c23ad735b7ac4b2b45ffe99a8c16c66f73c1413b68317c6ee91dd6d2f",
+      "export_palette_subset": [
+        "#25283f",
+        "#332d36",
+        "#70483c",
+        "#a5714f",
+        "#d2a06d",
+        "#f0c18b",
+        "#f8e4b6",
+        "#374568",
+        "#596a88",
+        "#8796aa"
+      ],
+      "construction": {
+        "role": "shelf_foot",
+        "planes": [
+          "foot"
+        ],
+        "elevation_px": 24
+      },
+      "export": {
+        "filter": "nearest",
+        "alpha_threshold": 128,
+        "planes": {
+          "foot": {
+            "source_crop": [
+              887,
+              771,
+              926,
+              927
+            ],
+            "size": [
+              8,
+              24
+            ]
+          }
+        }
+      }
     }
   },
   "backgrounds": {
@@ -4804,6 +5463,24 @@
       ],
       "mode": "RGBA",
       "sha256": "c19945252ce058de7f2838856cce4b475c57c81754cdb3fe072f3271eb873ba5",
+      "runtime": false
+    },
+    "world-building-kit-v1.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "sha256": "f1519976035217121af98df33913d73a9c1f527da9130035bd8adeddf22ea4a7",
+      "runtime": false
+    },
+    "world-wood-top-v2.png": {
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "1dc706a9961b645b8bb85f6cf30b3f934e3c16db648d38a4d476420ca43fd30f",
       "runtime": false
     }
   },
