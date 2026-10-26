@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import errno
-import fcntl
 import hashlib
 import io
 import json
@@ -19,7 +17,6 @@ import math
 import os
 from pathlib import Path
 import re
-import stat
 import struct
 import subprocess
 import sys
@@ -33,10 +30,11 @@ from quality_support import file_states, snapshot_differences, _validate_json
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop_owned_group
+from with_render_lock import consume_render_lock_handoff, verify_render_lock_handoff
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
-CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
-UI_CHECKPOINT = "8347bcaeff7d8cd8593d71911072a8efc688da5e"
+CORE_CHECKPOINT = "d1d6d5497f62e94c0bc27fdd63ea1c75f8a39f0f"
+UI_CHECKPOINT = "a1ba3f4a30dbb53a04a9ddc8736651dc48efb8b5"
 UI_REQUIRED = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
@@ -222,53 +220,15 @@ def error_free(path):
 
 @contextmanager
 def render_lock(path=None):
-    """Verify the wrapper's inherited lock; never acquire a new owning lock."""
-    path = Path(path) if path is not None else Path(f"/tmp/moonlantern-render-{os.getuid()}.lock")
-    require(path.exists(), "native supervisor requires outer tools/with_render_lock.py")
-    identity = path.lstat()
-    require(stat.S_ISREG(identity.st_mode) and identity.st_uid == os.getuid(), "render lock is not this user's regular file")
-    matches = []
-    for name in os.listdir("/dev/fd"):
-        try:
-            fd = int(name); current = os.fstat(fd)
-            if (current.st_dev,current.st_ino) == (identity.st_dev,identity.st_ino) and os.get_inheritable(fd): matches.append(fd)
-        except OSError:
-            continue  # /dev/fd's own enumeration descriptor may already be closed.
-    require(len(matches) == 1, "native supervisor requires exactly one inherited wrapper lock descriptor")
-    proof = {"path":str(path),"fd":matches[0],"device":identity.st_dev,"inode":identity.st_ino,"uid":identity.st_uid}
-    verify_render_lock(proof)
+    """Consume the tool owner's one-shot exec receipt before any output/child."""
+    proof = consume_render_lock_handoff([sys.executable, *sys.orig_argv[1:]], lock_path=path)
     yield proof
-    # Do not unlock/close it: the outer exec-inherited descriptor lasts until
-    # the complete supervisor exits, including headless restore and reporting.
+    # The helper consumes/closes only the receipt; the inherited lock FD remains
+    # open until the entire supervisor exits, including restore and reporting.
 
 
-def verify_render_lock(proof):
-    path = Path(proof["path"]); fd = proof["fd"]
-    identity = path.lstat(); current = os.fstat(fd)
-    expected = (proof["device"],proof["inode"],proof["uid"])
-    require(stat.S_ISREG(identity.st_mode) and (identity.st_dev,identity.st_ino,identity.st_uid) == expected
-            and (current.st_dev,current.st_ino,current.st_uid) == expected and os.get_inheritable(fd), "inherited render lock identity changed")
-    # A separate shared-lock probe must conflict with an already-held EX lock.
-    # This probe is never used as the owning lock and never waits.
-    probe = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        require((os.fstat(probe).st_dev,os.fstat(probe).st_ino) == expected[:2], "render lock path changed during probe")
-        try:
-            fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        except OSError as error:
-            if error.errno not in (errno.EACCES,errno.EAGAIN): raise
-        else:
-            fcntl.flock(probe, fcntl.LOCK_UN)
-            raise ValueError("inherited render lock was not already exclusively held")
-        try:
-            # Same open-file description: succeeds for the wrapper's own lock,
-            # refuses a foreign holder without reopening/relocking against self.
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as error:
-            if error.errno not in (errno.EACCES,errno.EAGAIN): raise
-            raise ValueError("render lock occupied by another holder; no native launch") from error
-    finally:
-        os.close(probe)
+def verify_render_lock(proof, path=None):
+    return verify_render_lock_handoff(proof, [sys.executable, *sys.orig_argv[1:]], lock_path=path)
 
 
 def frontmost_observation(output, label, index):
@@ -303,15 +263,16 @@ def run_native(command, cwd, timeout, log, output, observations):
         observations.append(row)
         require_safe_foreground(row)
         return row
-    with render_lock():
-        observe("before-launch")
-        process = run_owned(command,cwd,timeout,log,monitor=lambda _pid: observe("during-window"))
-        try:
-            observe("after-exit")
-            require(any(row.get("pid") == process["pid"] and row["label"] == "during-window" for row in observations), "owned native PID never observed foreground")
-        except (ValueError, OSError) as error:
-            process["frontmost_error"] = str(error)
-        return process
+    # The outer supervisor consumed the receipt exactly once; launch() rechecks
+    # its retained proof before this stage. Never consume again or acquire here.
+    observe("before-launch")
+    process = run_owned(command,cwd,timeout,log,monitor=lambda _pid: observe("during-window"))
+    try:
+        observe("after-exit")
+        require(any(row.get("pid") == process["pid"] and row["label"] == "during-window" for row in observations), "owned native PID never observed foreground")
+    except (ValueError, OSError) as error:
+        process["frontmost_error"] = str(error)
+    return process
 
 
 def validate_native_startup(obs, output, pid):

@@ -1,5 +1,6 @@
 """V02 supervisor unit/owned-child checks; never WS07 gameplay evidence."""
 import copy
+import fcntl
 import contextlib
 import io
 from contextlib import nullcontext
@@ -195,8 +196,7 @@ class SupervisorTests(unittest.TestCase):
     def test_native_protected_or_unavailable_foreground_never_starts_process(self):
         # Synthetic command responses only; no AppKit/osascript call in tests.
         for raw in ['{"pid":46285}', '{"pid":80978}', 'null', 'bad-json']:
-            with self.subTest(raw=raw), patch.object(w, "render_lock", return_value=nullcontext()), \
-                 patch.object(w.subprocess, "run", return_value=subprocess.CompletedProcess([],0,raw,"")), \
+            with self.subTest(raw=raw), patch.object(w.subprocess, "run", return_value=subprocess.CompletedProcess([],0,raw,"")), \
                  patch.object(w, "run_owned") as launch:
                 with self.assertRaises(ValueError):
                     w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
@@ -207,20 +207,19 @@ class SupervisorTests(unittest.TestCase):
         fd = os.open(path,os.O_CREAT|os.O_RDWR,0o600)
         original = w.render_lock; other = None
         try:
-            with self.assertRaisesRegex(ValueError,"inherited wrapper"):
+            with self.assertRaisesRegex(ValueError,"missing render handoff"):
                 with original(path): self.fail("non-inherited fd accepted")
             os.set_inheritable(fd,True)
             for mode in ["unlocked","shared","foreign"]:
-                if mode == "shared": w.fcntl.flock(fd,w.fcntl.LOCK_SH)
+                if mode == "shared": fcntl.flock(fd,fcntl.LOCK_SH)
                 if mode == "foreign":
-                    w.fcntl.flock(fd,w.fcntl.LOCK_UN)
+                    fcntl.flock(fd,fcntl.LOCK_UN)
                     other = os.open(path,os.O_RDWR)
-                    w.fcntl.flock(other,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
-                message = "another holder" if mode == "foreign" else "not already exclusively held"
-                with self.subTest(mode=mode),patch.object(w,"render_lock",side_effect=lambda: original(path)), \
-                     patch.object(w,"frontmost_observation") as observe,patch.object(w,"run_owned") as launch:
-                    with self.assertRaisesRegex(ValueError,message):
-                        w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
+                    fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                with self.subTest(mode=mode),patch.object(w,"frontmost_observation") as observe,patch.object(w,"run_owned") as launch:
+                    with self.assertRaisesRegex(ValueError,"missing render handoff"):
+                        with original(path):
+                            w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
                     observe.assert_not_called();launch.assert_not_called()
         finally:
             if other is not None: os.close(other)
@@ -228,31 +227,29 @@ class SupervisorTests(unittest.TestCase):
 
     def test_real_wrapper_exec_keeps_lock_through_child_and_supervisor_exit(self):
         path = self.root / "fixture-render.lock"
-        # Execute the unchanged real wrapper, remapping only its global lock
-        # pathname to this isolated fixture. No render lock or app is disturbed.
+        # Execute the exact owner wrapper using its public temporary lock-path
+        # fixture argument. No global render lock or app is disturbed.
         child = f'''import sys,subprocess
 sys.path.insert(0,{str(Path(w.__file__).parent)!r})
 import world_slice as w
 with w.render_lock(sys.argv[1]) as proof:
  print(w.json.dumps(proof),flush=True)
  subprocess.run([sys.executable,"-c","print('child-ready',flush=True); input()"],check=True)
- w.verify_render_lock(proof)
+ w.verify_render_lock(proof,sys.argv[1])
  print('child-exited',flush=True)
  input()
-w.verify_render_lock(proof)
+w.verify_render_lock(proof,sys.argv[1])
 print('context-exited',flush=True)
 input()
 '''
         wrapper = str(w.ROOT / "tools/with_render_lock.py")
-        launcher = '''import os,sys,runpy
-original_open=os.open
+        launcher = '''import sys
+from pathlib import Path
 fixture=sys.argv[1]; wrapper=sys.argv[2]; child=sys.argv[3]
-def fixture_open(path,*args,**kwargs):
- if path == f"/tmp/moonlantern-render-{os.getuid()}.lock": path=fixture
- return original_open(path,*args,**kwargs)
-os.open=fixture_open
+sys.path.insert(0,str(Path(wrapper).parent))
+import with_render_lock as render
 sys.argv=[wrapper,"--",sys.executable,"-c",child,fixture]
-runpy.run_path(wrapper,run_name="__main__")
+raise SystemExit(render.main(lock_path=fixture))
 '''
         process = subprocess.Popen([sys.executable,"-c",launcher,str(path),wrapper,child],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,start_new_session=True)
         try:
@@ -262,18 +259,18 @@ runpy.run_path(wrapper,run_name="__main__")
                 self.assertTrue(select.select([process.stdout],[],[],5)[0],"wrapper child response timed out")
                 return process.stdout.readline().decode().strip()
             proof=json.loads(line())
-            self.assertEqual((proof["device"],proof["inode"]),(path.stat().st_dev,path.stat().st_ino))
+            self.assertEqual((proof["lock"]["device"],proof["lock"]["inode"]),(path.stat().st_dev,path.stat().st_ino))
             for phase in ["child-ready","child-exited","context-exited"]:
                 self.assertEqual(line(),phase)
                 probe=os.open(path,os.O_RDWR)
                 try:
-                    with self.assertRaises(BlockingIOError): w.fcntl.flock(probe,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
+                    with self.assertRaises(BlockingIOError): fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
                 finally: os.close(probe)
                 process.stdin.write(b"continue\n");process.stdin.flush()
             process.wait(timeout=5)
             self.assertEqual(process.returncode,0,process.stderr.read())
             probe=os.open(path,os.O_RDWR)
-            try: w.fcntl.flock(probe,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
+            try: fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
             finally: os.close(probe)
         finally:
             w.stop_owned_group(process);process.wait(timeout=5)
@@ -284,8 +281,68 @@ runpy.run_path(wrapper,run_name="__main__")
         command=[sys.executable,str(Path(w.__file__)),"--candidate","a"*40,"--godot","/must-not-start","--output",str(output),"--mode","mouse","--stage","first-auto","--fullscreen","--native-slot","not-authority"]
         result=subprocess.run(command,capture_output=True,text=True,timeout=5)
         self.assertEqual(result.returncode,2)
-        self.assertIn("wrapper",result.stderr)
+        self.assertIn("missing render handoff",result.stderr)
         self.assertFalse(output.exists())
+
+    def test_foreign_release_between_probes_never_acquires_inherited_lock(self):
+        # Deterministic reviewer regression: a real foreign EX owner releases
+        # only after the child's real SH probe got EWOULDBLOCK. No syscall
+        # result is faked. A fixed verifier may reject before any such probe.
+        child = f'''import sys,os,json,fcntl,errno
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0,{str(Path(w.__file__).parent)!r})
+import world_slice as w
+path=Path(sys.argv[1]); inherited=int(sys.argv[2]); actual=fcntl.flock
+mutations=[]
+def scheduled(fd,operation):
+ if fd==inherited and operation & (fcntl.LOCK_EX|fcntl.LOCK_SH|fcntl.LOCK_UN): mutations.append(operation)
+ if fd!=inherited and operation==fcntl.LOCK_SH|fcntl.LOCK_NB:
+  try: return actual(fd,operation)
+  except OSError as error:
+   if error.errno not in (errno.EAGAIN,errno.EACCES): raise
+   print('REAL_PROBE_BLOCKED',flush=True)
+   assert input()=='CONTINUE'
+   raise
+ return actual(fd,operation)
+try:
+ with patch.object(fcntl,'flock',side_effect=scheduled):
+  with w.render_lock(path): result={{'accepted':True}}
+except ValueError as error: result={{'accepted':False,'error':str(error)}}
+result.update(inherited_fd_mutations=mutations,inherited=os.get_inheritable(inherited))
+probe=os.open(path,os.O_RDONLY)
+try:
+ try: actual(probe,fcntl.LOCK_SH|fcntl.LOCK_NB); result['exclusive_held_after']=False
+ except BlockingIOError: result['exclusive_held_after']=True
+finally: os.close(probe)
+print(json.dumps(result),flush=True)
+'''
+        import select
+        for release in [False,True]:
+            path=self.root/("foreign-release-%s.lock" % release)
+            inherited=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+            foreign=os.open(path,os.O_RDWR)
+            fcntl.flock(foreign,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            process=subprocess.Popen([sys.executable,"-c",child,str(path),str(inherited)],pass_fds=(inherited,),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,start_new_session=True)
+            try:
+                self.assertTrue(select.select([process.stdout],[],[],5)[0],"lock regression child timed out")
+                first=process.stdout.readline()
+                if first.strip()==b"REAL_PROBE_BLOCKED":
+                    if release: fcntl.flock(foreign,fcntl.LOCK_UN)
+                    output,error=process.communicate(b"CONTINUE\n",timeout=5)
+                else:
+                    output,error=process.communicate(timeout=5);output=first+output
+                self.assertEqual(process.returncode,0,error.decode())
+                result=json.loads(output)
+                with self.subTest(foreign_released=release):
+                    self.assertTrue(result["inherited"])
+                    self.assertFalse(result["accepted"],result)
+                    self.assertEqual(result["inherited_fd_mutations"],[],result)
+                    if release and first.strip()==b"REAL_PROBE_BLOCKED": self.assertFalse(result["exclusive_held_after"],result)
+            finally:
+                w.stop_owned_group(process);process.wait(timeout=5)
+                process.stdin.close();process.stdout.close();process.stderr.close()
+                os.close(foreign);os.close(inherited)
 
     def test_monitor_rejection_stops_only_its_owned_child(self):
         def reject(_pid): raise ValueError("synthetic foreground rejection")
