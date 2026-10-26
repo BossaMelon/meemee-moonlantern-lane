@@ -216,6 +216,10 @@ func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		if is_instance_valid(world_controller): _world_save(true)
 		else: _save(true)
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(world_controller):
+		world_controller.clear_inputs()
+		game.set_paused(true)
+		_world_refresh()
 
 func _configure_input():
 	Input.emulate_mouse_from_touch = true
