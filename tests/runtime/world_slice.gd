@@ -335,8 +335,14 @@ func interact(target: String, action: String) -> Dictionary:
 	send_event(confirm_event(true))
 	# Catch the real 50ms reservation before yielding to another service step.
 	if action == "serve" and request.save_boundary == "manual-reservation":
+		# parse_input_event may buffer the event. Flush through the real input loop;
+		# never advance time or create/pause a reservation through a product API.
+		Input.flush_buffered_events()
+		report.manual_reservation_flush = {"method":"Input.flush_buffered_events","confirmation_input_count":report.inputs.size(),"tick":view().world.tick}
 		if check(view().service.reservations.any(func(r): return r.channel == "manual" and r.remaining_ms == 50 and r.order_id == option.payload.order_id), "manual reservation was not synchronously observable before service step"):
 			send_event(pause_event(true)); send_event(pause_event(false))
+			Input.flush_buffered_events()
+			check(view().paused and view().service.reservations.any(func(r): return r.channel == "manual" and r.remaining_ms == 50 and r.order_id == option.payload.order_id),"actual pause input did not preserve the 50ms manual reservation")
 	send_event(confirm_event(false))
 	await get_tree().process_frame
 	return option
@@ -634,16 +640,22 @@ func configure_menu() -> bool:
 	for id in view().service.menu_priority.duplicate():
 		if id in desired: continue
 		var items = view().service.menu_priority.duplicate(); items.erase(id)
-		if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+		if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":menu_tiers(items)}): return false
 	for id in desired:
 		if id not in view().service.menu_priority:
 			var items = view().service.menu_priority.duplicate(); items.append(id)
-			if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":view().tiers.duplicate()}): return false
+			if not await book_action("menu_toggle_"+id,"menu",{"item_ids":items,"tiers":menu_tiers(items)}): return false
 		if view().tiers.get(id,"standard") != request.tier:
-			var tiers = view().tiers.duplicate(); tiers[id] = request.tier
+			var tiers = menu_tiers(view().service.menu_priority); tiers[id] = request.tier
 			if not await book_action("menu_price_"+id+"_"+request.tier,"menu",{"item_ids":view().service.menu_priority.duplicate(),"tiers":tiers}): return false
 	if not check(same(view().service.menu_priority,desired),"actual menu differs from route"): return false
 	return await close_book()
+
+func menu_tiers(items: Array) -> Dictionary:
+	# UI emits only selected items, including each implicit standard price.
+	var tiers: Dictionary = {}
+	for id in items: tiers[id] = view().tiers.get(id,"standard")
+	return tiers
 
 func travel(region: String) -> bool:
 	if view().world.region_id == region: return true
