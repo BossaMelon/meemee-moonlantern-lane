@@ -4,6 +4,21 @@
 
 **Steam 可售品质目标未完成。** 用户实际反馈是“不好玩、地图和战斗单调”，这是下一阶段第一优先级。三日原型保留为技术基线；功能、画面局部修正或自动检查通过，均不能推导为人类趣味、续玩意愿或商品品质合格。
 
+**下一阶段：原生包 harness 与首次指引（仅登记，尚未实现）。** 基线为 `b65f6a37c1e3345f0332be14bcdbb86a80bf656e`，本轮只追加 H06/P09/D02/P08 任务和技术路线，不下载 TPZ、不导出正式 release 包或启动窗口。owner/模型/路径权限与依赖以 [任务清单](../harness/tasks.json) 为准：
+
+| 新任务 | owner | 依赖概览 | 当前边界 |
+|---|---|---|---|
+| H06 | runtime_verification | H03、W01、V01 | 待派实施：contract/schema、fixtures、宿主及 Node QA autoload 源先验收；不假称 release 已运行。 |
+| P09 | ui_implementation | P07 | 待派实施：只修既有阶段句被物件 caption/focus 持续抑制的可见性，不加教程/新玩法。 |
+| D02 | engineering_delivery | H03、W01、E03、V01、E04、H06、P09 | 未实现：H06/P09 验收后构建 Mac/Windows 标准 release player/verification 配对包。 |
+| P08 | runtime_verification | D02、H06 | 未开始：只对固定实际包执行 10 基础＋1 Mac 渲染 case；不新增源码写权限。 |
+
+P09 定位证据 `/private/tmp/p09-first-entry-diagnosis-63cb48a5/report.md`：首次 deferred 店门 focus 后阶段句常态隐藏，等待/鼠标移开或触摸、手柄合页返回仍被 caption 抑制；不是欢迎 toast 到期问题。诊断保留其 sandbox CA/editor-settings ERROR 边界，不当作干净 native 或保存/恢复验收。原生契约建议见 `/private/tmp/p08-native-acceptance-proposal-20261026-b65f6a3.txt`；H06 固定协议后才交 D02，P08 不反向阻塞 harness 源交付。
+
+已选择 staging-only `editor/export/convert_text_resources_to_binary=false`，不创建 E05、不改生产 scene/UID。两 fresh Git archive 的同机 Windows-preset PCK 均为 8,257,292 bytes、SHA256 `25ad401748b6e762c45d40ca63a804572189532c3a8434269f0ec168999d542d`，221 包内文件/98 导入映射逐项相同，文本 Main/Expedition 仍可加载且等于原 Git 字节。配置精准 delta、命令/probe/log/whole-PCK 证据见 `/private/tmp/moonlantern-native-policy-text-b65-bt9wlooh/policy-result.txt` 及同目录 `evidence-index.json`（SHA256 `e02e3d0f334d97bb58387321ebac27f0a34e26614bbf8f01639f1bdd2e961d9c`）；原 SCN root ID 导致两包不同的 RED 保留 `/private/tmp/moonlantern-native-capability-b65-6_9xm09t/`（索引 `f4b37277dfc3be437075e281bd4525dbab9cdd66325f9493065848123f44eb26`）。这仅证明同机 editor/PCK 能力，不证明跨 OS 或 standard release。
+
+H06 固定 PR 候选先由 root 实读/fixtures 验为 harness-ready，D02 可消费冻结候选，不强求 H06 先合 main。P09 做定向自检及真实全屏/窄屏像素检查，加入 H06/P09/D02 最终固定组合的一次独立主审；之后按真实 PR 依赖集成，必要最多一次有具体范围理由的 scoped 复审，不因新 SHA 重置预算。旧 portability 预算已闭合，不重开。QH/商业 IP/真实设备与 Steam 可售品质仍未完成；先改善现有指引与验收交付，不扩七日、大地图或技能树，不授权购买或发布。
+
 **本轮可移植性技术链已集成。** root 已依次原生合并 [E04 #43](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/43) → [V01 #41](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/41) → [E03 #38](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/38) → [P07 #39](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/39) → [W01 #40](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/40)。已验产品集成落点为 `8b922839507b3e5e75a7ff76521aea347acc7f8e`，tree `40194d3e65e5391c64f829ff9d94774446c4e073`；最新元数据 HEAD 以 Git 为准。PR #40 最终 head `68b8b355b61e5c1c878909bd215d0698a445dc33` 对 base `3f0` 的 31 条实际路径归属五项任务，三项必需检查均通过：[Linux 40246520090](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40246520090)、[Windows 40246519983](https://github.com/BossaMelon/meemee-moonlantern-lane/actions/runs/40246519983)。main push 自动触发的 CI 与上述 PR 证据分开记录，本页不冒充其已完成。
 
 最终 Windows 实际 source `154ec8023c9213ec9ffad11644cb9a2284147a3f`：冷导入 97 个纹理，20 个 required case 全 passed、gate 80,251 checks；字体 226 checks、754 字符/645 汉字、200 处绑定、4 布局、缺字零，**Windows source editor 整项通过**。327 个 tracked 文件的字节/模式均匹配 Git `68b8b35`，运行前后无改写；gate 的 dirty=true 仅来自生成的 `.import`/`.uid`，不当作源码修改。9 个实际命令 exit 0、无引擎错误，所属 job 全空；守卫 fixture 的预期失败与实际产品通过分别记录。
@@ -36,7 +51,7 @@
 | V01 | runtime_verification | [PR #41](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/41) 已集成字体原生定向 driver 与隔离支持；原全屏661/窄屏683、20 PNG、旧档/包 guard 和释放证据保持各原 SHA，不代替 QH。 |
 | E04 | expedition_implementation | [PR #43](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/43) 已集成可移植测试输出、结构化失败与明确退出；原 `/tmp` 故障及写入截断 P2 已定向关闭，`8399e6f` 读回修复和 root 六 entry 证据见顶部；不改 E02 历史玩法验收。 |
 
-Windows 后续边界：W01 已验 source editor，完整 Windows 原生 EXE/窗口与导出 harness 仍需单独交付验收。Windows job 冷导入，仅上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；保留真实失败、不削检查或跳 case。本轮 H03 只更新状态，不改实现或任务权限；D02/P08 尚未登记，后续独立原生导出 harness 须另行派工并依据真实 CLI 能力冻结，不能用 release `--script` 冒充可用诊断入口。Mac r2 与旧档保持原件，真人 QH 可与上述独立 harness 准备并行推进。
+Windows 后续边界：W01 已验 source editor，完整 Windows 原生 EXE/窗口与导出 harness 仍需单独交付验收。Windows job 冷导入，仅上传报告、日志、版本与哈希，不上传游戏源码副本、EXE/PCK 或存档；保留真实失败、不削检查或跳 case。本轮 H03 仅登记 H06/P09/D02/P08 及路线，不改实现；后续独立原生导出 harness 按新依赖由 root 派工，不能用 release `--script` 冒充可用诊断入口。Mac r2 与旧档保持原件，真人 QH 可与上述独立 harness 准备并行推进。
 
 110 取舍机制已实际闭合：root 复算 20 个热锅双买分支，现金账差额均为 0；标准档双买余 16 后可合法购买 3 份缩小篮，高价档余 52 后可购买正式 10 份篮并继续次晚。40 个正常模拟覆盖两价、两路、五种子和探索/不探索，均未依赖应急恢复。该证据来自真实命令与正式 `512bd72` 报告，替代旧 60/100 数值的缺口声明；不据此宣称全局平衡、人类趣味或 Steam 品质合格。
 
@@ -98,8 +113,8 @@ P03 [PR #16](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/16) 已�
 
 ## 下一步与交付边界
 
-1. **真人玩一晚，再决定品质修订。** 游戏全链与工具修复已合 main，正式 `13e5c50` 产品 Q06、主审三 P2/F04/F05、r2 headless 与实际包两原生入口已接受。下一步 QH 具体观察两条路线、风咒清孢子、撞桩、三波补餐，以及玩家是否愿意继续营业，再决定修订；可并行准备独立 Windows 原生导出 harness（D02/P08 尚未登记，需另行派工与验收）；不自动扩七日，不按地图/菜谱/敌人数扩量，不称 Steam 品质或趣味完成。
+1. **真人玩一晚，再决定品质修订。** 游戏全链与工具修复已合 main，正式 `13e5c50` 产品 Q06、主审三 P2/F04/F05、r2 headless 与实际包两原生入口已接受。下一步 QH 具体观察两条路线、风咒清孢子、撞桩、三波补餐，以及玩家是否愿意继续营业，再决定修订；可并行准备独立 Windows 原生导出 harness（已登记 H06/P09 → D02 → P08，仍需另行派工与实际验收）；不自动扩七日，不按地图/菜谱/敌人数扩量，不称 Steam 品质或趣味完成。
 2. **保留已完成的三日技术基线。** H02 [PR #9](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/9)、P01 [#13](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/13)、E01 [#10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10)、P02 [#15](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/15)、P03 #16 均已按依赖合入 main。docs05、旧契约与 PR #9 保持技术基线记录，新阶段设计另起分支。旧功能原型里程碑已完成，Steam 品质目标仍未完成。
-3. **平台与商业边界保持待验。** Windows source editor 已验，Windows 原生 EXE/窗口、iOS 实机、实体手柄/触屏、Xcode 打包和发行包验证未完成；本机缺完整 Xcode/`simctl`。人类趣味尚未合格。HP 商业 IP 授权/替换方案待决定，购买资源、开付费服务、Steam 上架与实际游戏发布均未授权；公开源码不等于发布。本 H03 仅文档变更，部署不适用。
+3. **平台与商业边界保持待验。** Windows source editor 已验，Windows 原生 EXE/窗口、iOS 实机、实体手柄/触屏、Xcode 打包和发行包验证未完成；本机缺完整 Xcode/`simctl`。人类趣味尚未合格。HP 商业 IP 授权/替换方案待决定，购买资源、开付费服务、Steam 上架与实际游戏发布均未授权；公开源码不等于发布。本 H03 为任务登记/技术与状态文档变更，部署不适用。
 
 root 已实际查询并启用 main 服务器保护：required `harness`、`prototype`、`windows-source`（均 app_id=15368），strict=true、enforce_admins=true、required reviews=0 原字段保持，禁止 force-push/delete；实际 before/after 快照与字节哈希见最终交付索引；集成仍守 exact-head，不绕失败 gate。实施仅用现有可见 chat、指定模型与 Standard，不建 sub-agent 或擅自转派；本 H03 文档候选由总协调审阅并合并。每小时 issue 巡检依 app 调度，无变化安静，不宣称外部常驻保证。
