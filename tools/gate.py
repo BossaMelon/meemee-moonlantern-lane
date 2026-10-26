@@ -385,8 +385,25 @@ def validate_runtime_workflow(root: Path) -> int:
     match = re.search(r"^  prototype:\s*\n((?:[ \t]*\n| {4}.+\n?)*)", source, re.M)
     require(match is not None, "runtime files require unconditional prototype job")
     block = match.group(1)
-    require(not re.search(r"^\s*(?:- )?(?:if|continue-on-error):", block, re.M),
-            "prototype job may not use if or continue-on-error")
+    checked = []
+    for step in re.split(r'(?m)(?=^      - )', block):
+        uses = [row.split('#', 1)[0].strip() for row in re.findall(r'^        uses: (.+)$', step, re.M)]
+        path = re.search(r'^          path: ([^\n]+)', step, re.M)
+        paths = []
+        if path:
+            if path.group(1).strip() == '|':
+                rows = re.search(r'^          path: \|\s*\n((?: {12}[^\n]+\n?)*)', step, re.M)
+                paths = [row.strip() for row in rows.group(1).splitlines()] if rows else []
+            else:
+                paths = [path.group(1).strip()]
+        diagnostic_paths = {'output/gate-report.json', 'output/linux-cold-import/result.json',
+                            'output/linux-cold-import/process.log', 'output/linux-cold-import/engine.log'}
+        if (uses == ['actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02']
+                and paths and set(paths) <= diagnostic_paths and not re.search(r'^\s*(?:- )?run:', step, re.M)):
+            step = re.sub(r'^        if: always\(\)\s*\n', '', step, flags=re.M)
+        checked.append(step)
+    require(not re.search(r"^\s*(?:- )?(?:if|continue-on-error):", ''.join(checked), re.M),
+            "prototype execution may not use if or continue-on-error; only pinned diagnostic upload may use always()")
     require(re.search(r"^\s*(?:- )?run: python3 tools/gate\.py --stage prototype(?: --godot [^\n]+)?\s*$", block, re.M)
             is not None, "prototype job must directly run python3 tools/gate.py --stage prototype")
     require(not re.search(r"(?:\|\||&&|;|\|)", next(
@@ -542,8 +559,9 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
                         if evidence['present']:
                             require(not case_report.is_symlink(), 'runner report must not be linked')
                             raw = case_report.read_bytes()
-                            evidence.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(),
-                                            text=raw.decode('utf-8', errors='replace'))
+                            evidence.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+                            if suite not in result['case_reports']:
+                                evidence['text'] = raw.decode('utf-8', errors='replace')
                         result['runner_report_evidence'][suite] = evidence
         result["status"] = "passed"
     except (GateError, OSError, UnicodeError) as exc:
@@ -572,10 +590,18 @@ def main() -> int:
                           "checks_executed": result["checks_executed"], "errors": result["errors"],
                           "report": str(args.report)}, ensure_ascii=False))
         if result['status'] != 'passed':
-            # Failed Linux steps do not reach success-only artifact uploads.
-            # Keep the actual structured failure (including prior suite reports
-            # and original process exit/error evidence) in that step's own log.
-            print(args.report.read_text(encoding='utf-8'), end='')
+            # Full reports go to the explicit diagnostic artifact. Keep console
+            # output bounded so a successful large trace cannot hide the failure.
+            diagnostic = {k: result[k] for k in ('candidate', 'errors')}
+            diagnostic['validated_suites'] = list(result.get('case_reports', {}))
+            diagnostic['runner_report_evidence'] = {}
+            for suite, original in result.get('runner_report_evidence', {}).items():
+                evidence = dict(original)
+                if 'text' in evidence:
+                    evidence['text_truncated'] = len(evidence['text']) > 8000
+                    evidence['text'] = evidence['text'][:8000]
+                diagnostic['runner_report_evidence'][suite] = evidence
+            print(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         return 0 if result["status"] == "passed" else 1
     except Exception as exc:
         print(f"gate infrastructure failure: {type(exc).__name__}: {exc}", file=sys.stderr)

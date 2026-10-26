@@ -432,6 +432,19 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(gate.GateError):
             self.check_workflow(WORKFLOW.replace("--stage prototype", "--stage prototype || true"))
 
+    def test_always_upload_is_only_for_pinned_whitelisted_diagnostics(self):
+        upload = ('      - name: Preserve failure report\n        if: always()\n'
+                  '        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\n'
+                  '        with:\n          path: output/gate-report.json\n')
+        self.assertEqual(self.check_workflow(WORKFLOW + upload), 1)
+        for value in [upload.replace('always()', 'success()'), upload.replace('output/gate-report.json', 'project.godot'),
+                      upload.replace('@ea165f8d65b6e75b540449e92b4886f43607fa02', '@main'),
+                      upload + '        run: echo bypass\n', upload + '        continue-on-error: true\n']:
+            with self.subTest(value=value), self.assertRaises(gate.GateError):
+                self.check_workflow(WORKFLOW + value)
+        with self.assertRaises(gate.GateError):
+            self.check_workflow(WORKFLOW.replace('      - run:', '      - if: always()\n        run:') + upload)
+
     def test_runtime_code_without_project_still_requires_job(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -106,7 +106,7 @@ Godot --headless --path REPOSITORY --script tests/run.gd -- --suite world-slice 
 测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
 
 gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
-命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；`runner_report_evidence` 另存每个实际报告是否存在、长度/原字节 SHA256 与文本诊断，包含 malformed、非零、完整写出后超时的失败，不把这些原件当自动 pass；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。Linux 失败 step 将原 gate JSON 直接输出到该 step log，保留已完成 suite 与进程退出/错误证据；不跳过失败，也不增加条件运行框架。
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；`runner_report_evidence` 另存每个实际报告是否存在、长度/原字节 SHA256 与文本诊断，包含 malformed、非零、完整写出后超时的失败，不把这些原件当自动 pass；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。原 gate JSON 在失败时也由现有 pinned artifact 上传，控制台只输出有界失败诊断，防止旧 suite 的大 trace 截断新错误；不跳过实际 gate 或改变失败状态。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
 
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，
@@ -223,8 +223,7 @@ python3 -m unittest discover -s tools -p test_build_local_demo.py -v
 与 UTF-8。官方 setup-python v6 已解析并固定为
 `ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 保留，现有 stage prototype 内固定三 suite。
 Linux prototype 仅新增冷导入准备、exit 0 错误扫描与白名单诊断。
-现有 validator 禁止 prototype block 中出现任何 if/continue-on-error；因此 Linux 导入失败时
-把原始进程/引擎日志和结果打印到 Actions step log，成功后另存白名单 artifact，不更改该约束。
+validator 仍禁止 prototype job/执行步骤的 if 或 continue-on-error；仅固定 SHA 的 upload-artifact、无 run 命令且路径属于四项诊断白名单时允许 always()，使原报告/导入日志失败也能保全，不改变实际 gate 退出码。
 
 Windows 入口是 `tools/run_windows_gate.ps1`。实际验证仅在本次 GitHub runner 执行：
 
