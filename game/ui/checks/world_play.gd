@@ -250,6 +250,7 @@ func _button_input(id: String) -> bool:
 				await touch(start, true, 0)
 				for step in range(1, 9):
 					var drag = InputEventScreenDrag.new(); drag.index = 0; drag.position = start+Vector2(0, direction*step*16); drag.relative = Vector2(0, direction*16); await send(drag)
+				await create_timer(0.25).timeout
 				await touch(start+Vector2(0, direction*128), false, 0); await frames(12)
 			expect(scroll.get_global_rect().has_point(button.get_global_rect().get_center()), "real touch drag reaches book button "+id)
 		var at = button.get_global_rect().get_center(); await touch(at, true, 3); await touch(at, false, 3)
@@ -345,6 +346,7 @@ func _wave() -> bool:
 	while ui.game.view().phase == "trading" and Time.get_ticks_msec() < deadline: await process_frame
 	var ok = ui.game.view().phase in ["intermission", "closing"]
 	expect(ok, "Main real-time service completes wave without time-scale or test advance")
+	print("WORLD_UI_WAVE_COMPLETED day=", ui.game.view().day, " wave=", ui.game.view().service.wave_index)
 	_projection("wave "+str(ui.game.view().service.wave_index)+" complete"); return ok
 
 func run_night():
