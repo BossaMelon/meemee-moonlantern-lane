@@ -15,10 +15,12 @@ var _held = Vector2.ZERO
 var save_roundtrip = false
 var night_run = false
 var batch_outputs: Array = []
+var clarity_run = false
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
 	if args.size() == 2 and args[0] == "--input-only": folder = args[1]
+	elif args.size() == 2 and args[0] == "--clarity": execution = "income"; clarity_run = true; folder = args[1]
 	elif args.size() in [4,5] and args[0] == "--first-income" and args[1] in ["keyboard", "pad", "touch"] and args[2] in ["manual", "automatic"]:
 		execution = "income"; input_mode = args[1]; route = args[2]; folder = args[3]
 		if args.size() == 5:
@@ -73,7 +75,9 @@ func run_case(mode: String):
 	expect(ui.find_children("*", "CollisionObject2D", true, false).is_empty(), "production renderer owns no physical bodies")
 	expect(ui.viewport.size == Vector2i(640, 360), "reference viewport stays640x360 independently of screen size")
 	var canvas_bindings: Array = ui.canvas_text_bindings()
-	expect(canvas_bindings.size() == 2, "actual Canvas draw executed for touch F and pause text")
+	expect(not canvas_bindings.is_empty(), "actual lightweight Canvas control hint was drawn")
+	var touch_layer = ui.find_child("TouchControls", false, false)
+	expect(touch_layer != null and not touch_layer.is_visible_in_tree(), "unbound desktop has no visible touch overlay")
 	for binding in canvas_bindings: expect(binding.font == load("res://game/ui/portable_font.gd").get_font(), "actual Canvas draw uses shared packaged FontFile")
 	if mode == "keyboard":
 		await key(KEY_D, true); await key(KEY_W, true)
@@ -114,7 +118,8 @@ func run_case(mode: String):
 func run():
 	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED; root.content_scale_size = Vector2i.ZERO; root.size = Vector2i(844, 390)
 	if execution == "income":
-		if night_run: await run_night()
+		if clarity_run: await run_clarity()
+		elif night_run: await run_night()
 		else: await run_income()
 		return
 	Input.emulate_mouse_from_touch = true
@@ -197,6 +202,13 @@ func _projection(stage: String):
 		expect(not seen.has(node.uid), stage+": one visual per authoritative UID")
 		seen[node.uid] = true
 		expect(items.has(node.uid) and str(items.get(node.uid, {}).get("location", "")) != "cooking", stage+": visual UID resolves to actual non-cooking item")
+	if not ui.game.view().world.carried_uids.is_empty():
+		var carried: Array = []
+		for node in ui.world_controller.world._carried.values():
+			carried.append_array(node.get_meta("item_uids", []))
+			expect(node.position.distance_to(_foot()) < 52 and node.position.y >= _foot().y-32, stage+": real carried stack follows hands, not a head-side grid")
+		carried.sort(); var expected: Array = ui.game.view().world.carried_uids.duplicate(); expected.sort()
+		expect(carried == expected, stage+": grouped tray retains every actual carried UID")
 	income_trace.append({"case": "uid_projection", "stage": stage, "nodes": nodes})
 	_check_fonts(ui)
 
@@ -206,6 +218,58 @@ func _check_fonts(node: Node):
 	if node.has_method("canvas_text_bindings"):
 		for row in node.canvas_text_bindings(): expect(row.font == primary, "actual live Canvas draw uses packaged FontFile")
 	for child in node.get_children(): _check_fonts(child)
+
+func _book_text() -> String:
+	var lines: Array[String] = []
+	for label in ui.world_controller.books.find_children("*", "Label", true, false): lines.append(label.text)
+	return "\n".join(lines)
+
+func run_clarity():
+	ui = load("res://scenes/main.tscn").instantiate(); ui.save_path = folder+"/unused-clarity-save.json"; root.add_child(ui); await frames(12)
+	ui.action_completed.connect(func(kind,args,result): income_actions.append({"kind":kind,"args":args.duplicate(true),"ok":result.ok}))
+	var world = ui.world_controller.world
+	var touch_controls = world.find_child("TouchControls", false, false)
+	expect(touch_controls != null and not touch_controls.is_visible_in_tree(), "desktop starts without visible touch stick or F frame")
+	var pad = InputEventJoypadButton.new(); pad.button_index = JOY_BUTTON_DPAD_DOWN; pad.pressed = true; await send(pad); pad.pressed = false; await send(pad)
+	expect("左摇杆" in world.prompt.text and "WASD" not in world.prompt.text, "real pad event changes lightweight movement hint")
+	await touch(Vector2(500,120), true); await touch(Vector2(500,120), false); await frames()
+	expect(touch_controls != null and touch_controls.is_visible_in_tree(), "actual touch reveals adequate world controls, emulated mouse does not hide them")
+	var motion = InputEventMouseMotion.new(); motion.position = Vector2(500,120); motion.relative = Vector2(1,0); await send(motion)
+	expect(touch_controls != null and not touch_controls.is_visible_in_tree(), "real mouse motion removes touch overlay again")
+	expect(income_actions.is_empty(), "input presentation switching submits no world transaction")
+	var before = ui.game.view()
+	if not await _open_book("recipe-book"): finish_income(); return
+	var text = _book_text(); var forecast: Dictionary = ui.game.view().forecast
+	expect(str(forecast.text) in text, "recipe book displays actual Core rain forecast")
+	for wave in forecast.waves:
+		for pair in [["quick","快餐"],["hearty","正餐"],["warm","暖身保温"]]:
+			if int(wave.get(pair[0],0)) > 0: expect(pair[1]+"×"+str(wave[pair[0]]) in text, "forecast exposes actual wave demand "+pair[0])
+	for recipe in ui.game.view().recipes:
+		if not await _book_action("plan_recipe_"+str(recipe.recipe_id), "plan"): finish_income(); return
+		if not await _book_action("plan_quantity_6", "plan"): finish_income(); return
+		text = _book_text(); var fresh = ui.game.view()
+		for id in recipe.inputs:
+			var item: Dictionary = {}
+			for row in fresh.inventory:
+				if row.item_id == id: item = row
+			var needed = int(recipe.inputs[id])*6; var available = int(item.bag)+int(item.carried)+int(item.station_input)
+			expect(str(item.name)+" · 每份"+str(recipe.inputs[id])+"；6份需"+str(needed) in text, "selected batch displays real ingredient requirement for "+str(id))
+			if available < needed: expect(str(item.name)+"×"+str(needed-available) in text, "missing ingredient amount is explicit for "+str(id))
+		if str(recipe.requires_device) != "":
+			for item in fresh.inventory:
+				if item.item_id == recipe.requires_device: expect(str(item.name) in text and "已装配" in text, "required real installed device is named")
+		expect("魔法：" in text and "适合：" in text, "selected dish explains actual effect and demand tags")
+		expect(fresh.world.plan.recipe_id == recipe.recipe_id and int(fresh.world.plan.quantity) == 6, "missing materials never block legal future batch planning")
+	expect(ui.game.view().cash == before.cash and ui.game.view().items == before.items, "readable planning consumes no cash or material UID")
+	if not await _book_action("plan_recipe_floating_pie", "plan") or not await _book_action("plan_quantity_3", "plan") or not await _button_input("book_close"): finish_income(); return
+	if not await _open_book("menu-board") or not await _book_action("menu_price_floating_pie_premium", "menu"): finish_income(); return
+	expect("当前售价" in _book_text() and str(ui.game.view().prices.floating_pie)+"金" in _book_text(), "menu shows actual updated sale price after real tier choice")
+	if not await _button_input("book_close"): finish_income(); return
+	if not await _near("pantry") or not await _f("take") or not await _near("prep") or not await _f("put") or not await _f("cook"): finish_income(); return
+	expect("料理中" in world.prompt.text and "只能放置实际携带物" not in world.prompt.text, "live Core job replaces irrelevant empty-hand refusal")
+	expect(world.surface.get_global_rect().encloses(world.prompt.get_global_rect()), "near-target prompt stays inside the actual world surface")
+	_check_fonts(ui)
+	finish_income()
 
 func _pause_control():
 	if input_mode == "keyboard": await key(KEY_ESCAPE, true); await key(KEY_ESCAPE, false)
@@ -405,6 +469,7 @@ func run_income():
 	expect(ui.game.view().world.stations[0].input_uids.size() == 6, "real ingredients are loaded at station")
 	_projection("loaded ingredients")
 	if not await _f("cook"): finish_income(); return
+	expect("料理中" in ui.world_controller.world.prompt.text and "只能放置实际携带物" not in ui.world_controller.world.prompt.text, "live cooking prompt explains actual job instead of irrelevant refusal")
 	_projection("cooking, not ready food")
 	var stopped_phase = ui.world_controller.world.walk.phase_ms
 	var stopped_frame = ui.world_controller.world.walk.frame_id
@@ -479,8 +544,12 @@ func finish_income():
 	var view: Dictionary = ui.game.view() if is_instance_valid(ui) else {}
 	var dump = FileAccess.open(folder+"/actual-view.json", FileAccess.WRITE); dump.store_string(JSON.stringify(view, "  ")); dump.close()
 	var sources = {}
-	for path in ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world/world_input.gd", "game/ui/world/walk_animation.gd", "game/ui/world/world_controller.gd", "game/ui/world/world_books.gd", "game/ui/checks/world_play.gd", "game/core/world_night_session.gd"]: sources[path] = FileAccess.get_sha256("res://"+path)
+	for path in ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world/world_input.gd", "game/ui/world/walk_animation.gd", "game/ui/world/world_controller.gd", "game/ui/world/world_books.gd", "game/ui/world/item_group.gd", "game/ui/checks/world_play.gd", "game/core/world_night_session.gd"]: sources[path] = FileAccess.get_sha256("res://"+path)
 	var file = FileAccess.open(folder+"/world-income.json", FileAccess.WRITE)
-	file.store_string(JSON.stringify({"suite": "world-production-night" if night_run else "world-production-first-income", "checks": checks, "failures": failures, "mode": input_mode, "route": route, "save_roundtrip": save_roundtrip or night_run, "actions": income_actions, "inputs": income_inputs, "trace": income_trace, "cash": view.get("cash"), "sales": view.get("sales", []), "source_sha256": sources, "engine": Engine.get_version_info().string, "claim": "Actual default Main and real P10 Core through InputEvents only. Fresh temporary profile path; optional same-process GUI save/restore, no test Core command/position/UID injection. Headless night-to-second-morning check." if night_run else "Actual default Main and real P10 Core through InputEvents only. Fresh temporary profile path; optional same-process GUI save/restore, no test Core command/position/UID injection. First-loop headless only; not full WS, native, default-path/independent-process save proof or human fun proof."}, "  ")); file.close()
+	var suite = "world-production-clarity" if clarity_run else ("world-production-night" if night_run else "world-production-first-income")
+	var claim = "Actual default Main and real Core through InputEvents only. Fresh temporary path, no test Core command/position/UID injection. "
+	claim += "Input-adaptive controls and actual forecast/recipe/batch/stock/price/job readability; headless only." if clarity_run else ("Headless night-to-second-morning check with GUI save/restore." if night_run else "First-loop and optional same-process GUI save/restore; headless only.")
+	claim += " No native, independent-process, full WS07 or human fun claim."
+	file.store_string(JSON.stringify({"suite": suite, "checks": checks, "failures": failures, "mode": input_mode, "route": route, "save_roundtrip": save_roundtrip or night_run, "actions": income_actions, "inputs": income_inputs, "trace": income_trace, "cash": view.get("cash"), "sales": view.get("sales", []), "source_sha256": sources, "engine": Engine.get_version_info().string, "claim": claim}, "  ")); file.close()
 	print("WORLD_INCOME ", checks, " checks, ", failures.size(), " failures")
 	quit(0 if failures.is_empty() else 1)
