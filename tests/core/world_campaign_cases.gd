@@ -12,6 +12,7 @@ func campaign(h) -> Dictionary:
 	h.walk_to(g,"recipe-book"); h.act(g,"recipe-book","equip_weapon",{"weapon_id":"fan_wand"})
 	var first_node_uids = []
 	for day in range(2,7):
+		h.progress("campaign-day-"+str(day))
 		h.expect(g.snapshot().day == day and g.snapshot().phase == "preparation","campaign day comes from actual next_day: "+str(day))
 		if day == 3:
 			h.buy(g,{"flour":1,"pumpkin":1}); h.cook_batch(g,"floating_pie",1,false)
@@ -33,15 +34,16 @@ func campaign(h) -> Dictionary:
 		h.expect(start.pending_meal_effect == null and start.expedition_meals[start.expedition.run_id] == before.pending_meal_effect,"successful start transfers the original meal exactly once")
 		if day in [3,6]: evidence.starts[str(day)] = start
 		var driver = Driver.new("shelf",true); var restored = []; var captured = {}; var cast_seen = false
+		var observed = g.snapshot()
 		for tick in range(5000):
-			if g.snapshot().phase != "expedition": break
-			var input = driver.next_input(g.snapshot().expedition)
+			if observed.phase != "expedition": break
+			var input = driver.next_input(observed.expedition)
 			h.expect(g.command("expedition_input",input).ok,"campaign real action input")
 			var advanced = g.advance(50); h.expect(advanced.ok,"campaign single E tick")
 			if advanced.events.any(func(e): return e.type == "cast" and e.weapon_id == "fan_wand" and e.projectile_count == 3): cast_seen = true
 			for branch in restored:
 				h.expect(branch.command("expedition_input",input).ok and branch.advance(50).ok,"restored campaign follows identical action inputs")
-			var s = g.snapshot()
+			observed = g.snapshot(); var s = observed
 			if day in [3,6] and s.phase == "expedition":
 				var boundary = ""
 				if tick == 30: boundary = "combat_in_progress"
