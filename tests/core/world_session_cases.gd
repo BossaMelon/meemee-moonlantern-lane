@@ -451,6 +451,14 @@ func test_save_and_expedition():
 		var main_hash = FileAccess.get_sha256(path); var backup_hash = FileAccess.get_sha256(path+".bak"); var clone = Session.new(1)
 		expect(g.validate_snapshot(bad) != "" and clone.load_from(path).code == "recovered_backup" and clone.snapshot() == original,"malformed world section falls back atomically: "+section)
 		expect(main_hash == FileAccess.get_sha256(path) and backup_hash == FileAccess.get_sha256(path+".bak"),"damaged primary and backup bytes preserved")
+	for key in ["version","profile_id","rules_version","world.version","world.map_id","world.map_revision"]:
+		var bad = original.duplicate(true)
+		if key.begins_with("world."): bad.world[key.trim_prefix("world.")] = "unknown-map" if key.ends_with("map_id") else 99
+		else: bad[key] = "unknown-profile" if key == "profile_id" else 99
+		var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(bad,"\t",true,true)); file.close()
+		var hashes = [FileAccess.get_sha256(path),FileAccess.get_sha256(path+".bak")]; var branch = Session.new(23); var before = branch.snapshot()
+		expect(not branch.load_from(path).ok and branch.snapshot() == before,"unsupported rule/map identity does not silently roll back to a different backup: "+key)
+		expect(hashes == [FileAccess.get_sha256(path),FileAccess.get_sha256(path+".bak")],"unsupported identity preserves both files: "+key)
 	for profile in ["prototype-v1","rain-night-v1"]:
 		var old = Session.new(7,profile); var old_path = output_dir+"/controlled-old-"+profile+".json"; expect(old.save_to(old_path).ok,"isolated old test copy created")
 		var hashes = [FileAccess.get_sha256(old_path),FileAccess.get_sha256(old_path+".bak")]
