@@ -292,7 +292,7 @@ func _update_message_visibility():
 	feedback.visible=toast_remaining>0 and not sheet_open
 	if is_instance_valid(sheet_feedback): sheet_feedback.visible=toast_remaining>0 and sheet_open and tab!="craft"
 	if is_instance_valid(craft_feedback): craft_feedback.visible=toast_remaining>0 and sheet_open and tab=="craft" and last_ui_action=="craft" and last_ui_args.get("recipe_id","")==recipe_selected
-	phase_hint.visible=not sheet_open and not feedback.visible and not focus_caption.visible
+	phase_hint.visible=not sheet_open and not feedback.visible
 
 func _activate_hotspot(id: String):
 	return_hotspot=id
