@@ -1,14 +1,15 @@
 # 项目状态
 
-更新：2026-10-26。本文件是唯一进度与证据台账；owner、聊天、模型、路径和依赖以 [任务清单](../harness/tasks.json) 为准，平台与系统边界见 [技术决定](04-technical-decisions.md)。
+更新：2026-10-27。本文件是唯一进度与证据台账；owner、聊天、模型、路径和依赖以 [任务清单](../harness/tasks.json) 为准，平台与系统边界见 [技术决定](04-technical-decisions.md)。
 
 **Steam 可售品质目标仍 active、未完成，玩法改进为第一优先级。** 用户本次实际打开 r2（human PID `46285`）后原话：“不好玩，空间太小，主角都不能动，交互也很无聊”。这证明首屏/店内空间交互评价失败；未测整晚经营或当前新战斗，不能据此补造那些范围的结论。旧三日/雨夜代码与 gate 保留，不删不降；源码 CI、runtime、人类反馈、商业 IP 与发布分别记录，自动检查通过不能推导为好玩。
 
-**当前主线：冻结 World 候选已验到 INTERNAL 真实性／隔离保存；H08 只读观察工具正在准备，真实像素与游戏验收仍未完成。**
+**当前主线：冻结 World 候选已验到 INTERNAL 真实性／隔离保存及一条 headless 鼠标快餐整夜／成长／恢复；H08 源码已交付，真实像素与完整游戏验收仍未完成。**
 
 - 代码／包仍固定 `dbb458709518556ab588d05b8b31b5ea797d6978`，状态 head `8ae478f` 三required全绿、root已亲核，PR #57仍Draft／未merge，main仍639ea8。root接受INTERNAL包的923文件树、425 Git archive／422打包源码／80引擎及三进程保存恢复证据，不代表用户成品。原227件索引 `/private/tmp/h07-final-world-dbb4587/index.json` SHA `8889933fb73096e07bc18dd11256721bf7d0e2590efe2f1fe1f68564e75a2cd9`，仅状态107件索引 `/private/tmp/h07-status-8ae478f/index.json` SHA `d098dd402be7a040ac424bbc829215872ba24cc3982d043825f6dc0765adc149` 与原manifest／旧a6禁推广结论保持。
-- H08由同engineering_delivery承担，在新的native managed工作树 `h08-ci-source-view`／分支 `codex/h08-ci-source-view` 从冻结8ae起步，H03已按任务清单登记路径。约200行只读观察入口和四项精确诊断白名单已准备，本地Python解析、四个入口／交接前置边界、固定白名单正负及249 harness checks／66tests已过；固定4.7.2真实check-only首轮exit0仍有driver API ParseError，RED保留，已修为公开get_current_rendering_driver_name并复验exit0／全日志无ERROR。尚无真实绘制、PNG或渲染CI结果。新增CI执行与PNG／日志／报告外部上传被自动审批拒绝，理由为worker可见的人类授权未明确覆盖这些载荷／目的地；workflow尚未写入，待审patch在 `/private/tmp/h08-pending-workflow.patch`，Root核既有授权／目标，不换工具绕过。当前无有效远端执行／上传许可，也无Mac slot；初次能力尝试＋一轮具体修复预算尚未用，目标不得自行切换。本地现有隔离Linux替代经Root核查不可用，不启动VM／安装依赖或更改context。Root准许仅其余源码提交真实Draft PR、只跑原有CI，不含待审workflow。
-- World原primary＋唯一scoped预算继续关闭；H08一次独立review完成，仅P2 H08-R01：预期源码删除／目录替换可漏检。已最小修为逐项presence/type/digest/mode核验并先清成功标记，真实guard AST四case RED／GREEN原件在 `/private/tmp/h08-r01-red-_wfs7x9_/`、`/private/tmp/h08-r01-green-j2zste87/`；Root已核原件并接受定向闭合，不重开review。修前641971e的原有Linux harness／prototype及Windows CI均成功，新修复CI另核；均非H08渲染证据。无Mac native slot；实际全屏、视觉／美术、WS07、实体设备、真人趣味及Steam品质仍待验。没有新包、发布或付费，human46285／80978、r2档和旧包保持保护，不以活动档hash必须静止为守卫。
+- V02：Root已接受最终dbb源码的单条headless `mouse/night-quick/shelf/standard/growth` 整夜与独立restore；实核31件索引／28件host原件、425 Git源码字节与canonical modes、59 UI／7 helper、487＋3个真实InputEvent及5个自有进程exit0／组清空，9笔付费成交＋2离店（sales共11条），三波收入36＋24＋60＝120、现金60＋120－32食材－4费用－110升级－15次晨备料＝19，37个料理UID无重用／重复移除、末4 UID与库存一致且settle／next各唯一commit，挣得shelf后同3份浮空饼手搬1→0并实际relay出菜。两个零输入restore checkpoint的完整state和primary／backup哈希与前进程相同；正常保存退出后主档50631→50627字节，仅player x/y的320.0／348.0写为320／348，四份JSON完整数值状态、RNG／ledger／UID相同，backup原字节保持，不能称四份raw全相同或据此报新产品bug。原件 `/private/tmp/v02-final-night-quick-dbb4587-handoff.json` SHA `c88b00259eb117261a01d11facceb74c725e7cd78a07ac4ca1f253801c7f1558`；旧7054／8f原件与SHA不改，本次不覆盖三输入、热食、动作、native、WS07、视觉／设备或人类好玩。
+- H08由engineering_delivery在隔离工作树 `h08-ci-source-view`／分支 `codex/h08-ci-source-view` 交付至Draft PR #62；恢复点 `fac7dd44af9cf96770d789c0b6c1ad2fc49ae085` 的harness／prototype／windows-source均SUCCESS，新状态提交只跑原有CI并单独核结果。约200行观察入口、本地解析／前置边界／固定白名单、249 harness checks／66tests及Godot4.7.2公开driver API解析修复证据保留；一次独立review的唯一P2 H08-R01已由逐项presence/type/digest/mode与guard AST四case RED／GREEN闭合，Root已核，不重开review，World原primary＋唯一scoped预算亦关闭。
+- H08尚无绘制／PNG，初次能力尝试＋一轮具体修复预算未用；新增CI取图及PNG／JSON／log上传同仓库Actions保留7天、Mac前台15分钟两项授权仍pending／ROOT_PENDING，无有效slot。此前新增执行／上传被自动审批拒绝，理由为明确人类授权未覆盖具体载荷／目的地，待审 `/private/tmp/h08-pending-workflow.patch`（SHA前缀9532fc7）未应用，不换工具绕过、不启动VM／安装／改context；不重包／发布／付费，human46285／80978、r2档与旧包继续保护，活动档正常变化不作静态hash守卫。
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
