@@ -112,7 +112,11 @@ def consume_render_lock_handoff(command, *, lock_path=None):
         fd = int(locator)
         _require(fd >= 3, "invalid render handoff descriptor")
         info = os.fstat(fd)
-        _require(stat.S_ISFIFO(info.st_mode) and info.st_nlink == 0 and os.get_inheritable(fd)
+        # Linux pipefs keeps nlink=1; its procfs target identifies an anonymous
+        # pipe without accepting a named FIFO. Darwin anonymous pipes use nlink=0.
+        anonymous = (os.readlink(f"/proc/self/fd/{fd}") == f"pipe:[{info.st_ino}]"
+                     if sys.platform.startswith("linux") else info.st_nlink == 0)
+        _require(stat.S_ISFIFO(info.st_mode) and anonymous and os.get_inheritable(fd)
                  and fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY,
                  "render handoff must be an inherited read-only pipe")
     except OSError as error:

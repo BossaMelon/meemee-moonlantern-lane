@@ -63,7 +63,8 @@ JSON 的精确字段为：
 命令摘要算法为 `sha256(json.dumps(list(command), ensure_ascii=True, separators=(",", ":")).encode("ascii"))`；
 不在回执或错误日志中披露命令参数。exec 保持 wrapper PID，锁与管道各自的 FD/dev/ino/uid 均绑定。
 消费 API 为 `tools.with_render_lock.consume_render_lock_handoff(command)`，在创建输出或子进程前
-调用一次。它检查匿名 FIFO、只读、可继承、身份、大小、严格 JSON 与立即 EOF，随后关闭回执 FD；
+调用一次。它检查匿名 FIFO（Darwin 为 nlink=0；Linux 核对 `/proc/self/fd/FD` 为同 inode 的
+`pipe:[inode]`，不假设 nlink=0）、只读、可继承、身份、大小、严格 JSON 与立即 EOF，随后关闭回执 FD；
 缺失、旧回执、开放写端、非管道或身份／命令不符立即失败，不等待或重试。
 必须保存返回的 `proof`，在每个子阶段及最后报告前调用
 `tools.with_render_lock.verify_render_lock_handoff(proof, command)`，保留原锁 FD 直到完整 supervisor

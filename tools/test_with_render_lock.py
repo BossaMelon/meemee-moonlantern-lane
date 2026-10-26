@@ -18,6 +18,7 @@ IMPORT = "import sys; sys.path.insert(0, %r); import with_render_lock as r; " % 
 
 
 class RenderHandoffTests(unittest.TestCase):
+    maxDiff = None
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="render-lock-test-")
         self.addCleanup(self.temp.cleanup)
@@ -89,7 +90,7 @@ class RenderHandoffTests(unittest.TestCase):
         self.assertEqual((p.returncode, out, err), (0, "one-shot\n", ""))
 
     def test_invalid_receipts_reject_bounded_before_any_work(self):
-        for kind in ["regular-file", "write-end", "open-writer", "oversized", "invalid-json",
+        for kind in ["regular-file", "named-fifo", "write-end", "open-writer", "oversized", "invalid-json",
                      "duplicate-key", "empty", "wrong-pipe-identity"]:
             with self.subTest(kind=kind):
                 reader, writer = os.pipe()
@@ -98,6 +99,9 @@ class RenderHandoffTests(unittest.TestCase):
                     fd = reader
                     if kind == "regular-file":
                         extra = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600); fd = extra
+                    elif kind == "named-fifo":
+                        os.mkfifo(self.path + ".fifo", 0o600)
+                        extra = os.open(self.path + ".fifo", os.O_RDONLY | os.O_NONBLOCK); fd = extra
                     elif kind == "write-end": fd = writer
                     elif kind == "oversized": os.write(writer, b"x" * (render._MAX_HANDOFF_BYTES + 1))
                     elif kind == "invalid-json": os.write(writer, b"not-json")
