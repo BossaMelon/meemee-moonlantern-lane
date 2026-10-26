@@ -16,12 +16,14 @@ var save_roundtrip = false
 var night_run = false
 var batch_outputs: Array = []
 var clarity_run = false
+var construction_run = false
 
 func _initialize():
 	var args = OS.get_cmdline_user_args()
 	if args.size() == 2 and args[0] == "--input-only": folder = args[1]
 	elif args.size() == 2 and args[0] == "--clarity": execution = "income"; clarity_run = true; folder = args[1]
 	elif args.size() == 3 and args[0] == "--clarity" and args[1] in ["keyboard", "pad", "touch"]: execution = "income"; clarity_run = true; input_mode = args[1]; folder = args[2]
+	elif args.size() == 2 and args[0] == "--construction": execution = "income"; construction_run = true; folder = args[1]
 	elif args.size() in [4,5] and args[0] == "--first-income" and args[1] in ["keyboard", "pad", "touch"] and args[2] in ["manual", "automatic"]:
 		execution = "income"; input_mode = args[1]; route = args[2]; folder = args[3]
 		if args.size() == 5:
@@ -119,7 +121,8 @@ func run_case(mode: String):
 func run():
 	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED; root.content_scale_size = Vector2i.ZERO; root.size = Vector2i(844, 390)
 	if execution == "income":
-		if clarity_run: await run_clarity()
+		if construction_run: await run_construction()
+		elif clarity_run: await run_clarity()
 		elif night_run: await run_night()
 		else: await run_income()
 		return
@@ -224,6 +227,75 @@ func _book_text() -> String:
 	var lines: Array[String] = []
 	for label in ui.world_controller.books.find_children("*", "Label", true, false): lines.append(label.text)
 	return "\n".join(lines)
+
+func _array_rect(value: Array) -> Rect2: return Rect2(value[0],value[1],value[2],value[3])
+
+func _covered_area(rect: Rect2, draws: Array) -> float:
+	var pieces: Array = []; var edges: Array = [rect.position.y,rect.end.y]
+	for draw in draws:
+		var cut = _array_rect(draw.target).intersection(rect)
+		if cut.has_area(): pieces.append(cut); edges.append(cut.position.y); edges.append(cut.end.y)
+	edges.sort(); var area = 0.0
+	for n in range(edges.size()-1):
+		if edges[n] == edges[n+1]: continue
+		var middle = (edges[n]+edges[n+1])/2; var spans: Array = []
+		for piece in pieces:
+			if middle >= piece.position.y and middle < piece.end.y: spans.append([piece.position.x,piece.end.x])
+		spans.sort_custom(func(a,b): return a[0] < b[0])
+		var right = rect.position.x; var width = 0.0
+		for span in spans:
+			width += maxf(0,span[1]-maxf(right,span[0])); right = maxf(right,span[1])
+		area += width*(edges[n+1]-edges[n])
+	return area
+
+func _verify_structure() -> bool:
+	var world = ui.world_controller.world; var geometry: Dictionary = ui.game.view().world.geometry
+	if not world.has_method("construction_bindings"): expect(false,"production structures expose actual kit draw bindings"); return false
+	var rows: Array = world.construction_bindings()
+	expect(not rows.is_empty(),"actual kit was drawn in production Main")
+	for row in rows:
+		expect(row.elevation == (64 if row.wall else 24),"wall/low-front height stays fixed instead of scaling with collider width")
+		for draw in row.draws:
+			expect(Vector2(draw.target[2],draw.target[3]) == Vector2(draw.source[2],draw.source[3]),"kit uses native source texels with edge cropping, no stretching")
+		var own = _array_rect(row.ground); var belongs = false
+		for collider in geometry.colliders:
+			var rect = Rect2(collider.x-collider.width/2.0,collider.y-collider.height/2.0,collider.width,collider.height)
+			if str(collider.id) in row.collider_ids and rect.encloses(own): belongs = true
+		expect(belongs,"each constructed ground base is part of actual Core obstacle geometry")
+	for collider in geometry.colliders:
+		var draws: Array = []
+		for row in rows:
+			if str(collider.id) in row.collider_ids: draws.append_array(row.draws)
+		var rect = Rect2(collider.x-collider.width/2.0,collider.y-collider.height/2.0,collider.width,collider.height)
+		expect(is_equal_approx(_covered_area(rect,draws),rect.get_area()),"visible kit covers full real footprint without invisible obstacle: "+str(collider.id))
+	if ui.game.view().world.region_id == "shop":
+		var opening = Rect2(1256,520,24,120)
+		for row in rows:
+			if row.wall: expect(not _array_rect(row.ground).intersects(opening),"real 120px east opening has no extra wall base")
+		for pair in [["recipe-body","world_recipe_book"],["ledger-body","world_ledger"],["menu-body","world_menu_board"]]:
+			var support = world._props.get(pair[0]); var found = false
+			for child in support.get_children():
+				if child is Sprite2D and child.texture == load("res://game/ui/pixel_assets.gd").sprite(pair[1]): found = child.scale == Vector2.ONE*0.5
+			expect(found,"book/board has native half-scale decoration on actual supported base: "+pair[0])
+	else:
+		expect(world._props["lane-home"].position == Vector2(24,256),"home portal leaf attaches to existing west wall, Core anchor stays80/256")
+	expect(world.find_children("*","CollisionObject2D",true,false).is_empty(),"kit creates no UI collision authority")
+	income_trace.append({"case":"construction","region":ui.game.view().world.region_id,"rows":rows})
+	return true
+
+func run_construction():
+	ui = load("res://scenes/main.tscn").instantiate(); ui.save_path = folder+"/unused-construction-save.json"; root.add_child(ui); await frames(12)
+	ui.action_completed.connect(func(kind,args,result): income_actions.append({"kind":kind,"args":args.duplicate(true),"ok":result.ok}))
+	if not _verify_structure(): finish_income(); return
+	for target in ["pantry","prep","seat-1","seat-4","shop-exit"]:
+		if not await _near(target): finish_income(); return
+	if not await _f("enter"): finish_income(); return
+	await frames(5)
+	if not _verify_structure(): finish_income(); return
+	for target in ["vendor","garden-gate","lane-home"]:
+		if not await _near(target): finish_income(); return
+	expect(ui.game.view().cash == 60 and income_actions.size() == 1,"architecture navigation changes no economy and only submits the real portal action")
+	finish_income()
 
 func run_clarity():
 	ui = load("res://scenes/main.tscn").instantiate(); ui.save_path = folder+"/unused-clarity-save.json"; root.add_child(ui); await frames(12)
@@ -545,11 +617,11 @@ func finish_income():
 	var view: Dictionary = ui.game.view() if is_instance_valid(ui) else {}
 	var dump = FileAccess.open(folder+"/actual-view.json", FileAccess.WRITE); dump.store_string(JSON.stringify(view, "  ")); dump.close()
 	var sources = {}
-	for path in ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world/world_input.gd", "game/ui/world/walk_animation.gd", "game/ui/world/world_controller.gd", "game/ui/world/world_books.gd", "game/ui/world/item_group.gd", "game/ui/checks/world_play.gd", "game/core/world_night_session.gd"]: sources[path] = FileAccess.get_sha256("res://"+path)
+	for path in ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world/world_input.gd", "game/ui/world/walk_animation.gd", "game/ui/world/world_controller.gd", "game/ui/world/world_books.gd", "game/ui/world/item_group.gd", "game/ui/world/world_structure.gd", "game/ui/checks/world_play.gd", "game/core/world_night_session.gd", "assets/pixel/manifest.json"]: sources[path] = FileAccess.get_sha256("res://"+path)
 	var file = FileAccess.open(folder+"/world-income.json", FileAccess.WRITE)
-	var suite = "world-production-clarity" if clarity_run else ("world-production-night" if night_run else "world-production-first-income")
+	var suite = "world-production-construction" if construction_run else ("world-production-clarity" if clarity_run else ("world-production-night" if night_run else "world-production-first-income"))
 	var claim = "Actual default Main and real Core through InputEvents only. Fresh temporary path, no test Core command/position/UID injection. "
-	claim += "Input-adaptive controls and actual forecast/recipe/batch/stock/price/job readability; headless only." if clarity_run else ("Headless night-to-second-morning check with GUI save/restore." if night_run else "First-loop and optional same-process GUI save/restore; headless only.")
+	claim += "Actual kit draw geometry, native texel cropping and real Core footprint coverage/navigation; headless only." if construction_run else ("Input-adaptive controls and actual forecast/recipe/batch/stock/price/job readability; headless only." if clarity_run else ("Headless night-to-second-morning check with GUI save/restore." if night_run else "First-loop and optional same-process GUI save/restore; headless only."))
 	claim += " No native, independent-process, full WS07 or human fun claim."
 	file.store_string(JSON.stringify({"suite": suite, "checks": checks, "failures": failures, "mode": input_mode, "route": route, "save_roundtrip": save_roundtrip or night_run, "actions": income_actions, "inputs": income_inputs, "trace": income_trace, "cash": view.get("cash"), "sales": view.get("sales", []), "source_sha256": sources, "engine": Engine.get_version_info().string, "claim": claim}, "  ")); file.close()
 	print("WORLD_INCOME ", checks, " checks, ", failures.size(), " failures")

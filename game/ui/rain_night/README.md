@@ -16,6 +16,8 @@ WASD/方向键、左摇杆与触摸摇杆发送 held 轴；F、手柄 A 和屏�
 
 `world/item_group.gd` 将同种真实物品显示为图标与计数，metadata 保留完整 item_uids；携带组跟随手边浮盘，台内/成菜组及状态读取真实台面和 job。`visual_uid_bindings()` 展开这些 UID 供验收，不把一张组图当作新增库存。新 helper 属运行时源码集合；不能沿用未包含它的旧 source hash 集合。
 
+`world/world_structure.gd` 按 Core 的实际墙/家具矩形消费 A01 建筑 kit。沿用 Art.entry/sprite，读取每个 sprite 的 content_region/construction；台面和墙 cap/face 分平面原像素重复、边缘裁切，柜前脸24px、墙立面64px，不缩放整件家具。墙角单独归属真实矩形重叠处，地面开口不增加墙或窄门框；前景墙的穿透显示只改 opacity。菜谱/菜单/账本半尺度放在原底座上，墙上巷道门叶与 Core 交互锚点分别投影，操作点不动。`-- --construction ABS_EMPTY_DIR` 检查实际draw区域、完整footprint覆盖与真实输入行走；不替代原生遮挡和审美验收。新helper及.uid须纳入实际运行源集合。
+
 以下 `panels.gd` 与 `world_*` 定位协议仅适用于明确注入 `rain-night-v1` 的旧雨夜入口。
 
 随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。
