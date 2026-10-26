@@ -192,7 +192,7 @@ class SupervisorTests(unittest.TestCase):
 
     def test_native_protected_or_unavailable_foreground_never_starts_process(self):
         # Synthetic command responses only; no AppKit/osascript call in tests.
-        for raw in ['{"pid":46285,"bundle":"fixture"}', '{"pid":80978,"bundle":"fixture"}', 'null', 'bad-json']:
+        for raw in ['{"pid":46285}', '{"pid":80978}', 'null', 'bad-json']:
             with self.subTest(raw=raw), patch.object(w, "render_lock", return_value=nullcontext()), \
                  patch.object(w.subprocess, "run", return_value=subprocess.CompletedProcess([],0,raw,"")), \
                  patch.object(w, "run_owned") as launch:

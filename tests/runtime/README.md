@@ -8,9 +8,9 @@
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
 窗口/控件布局，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
-world view、P11 world_play/world_input。已消费固定 P11 `d3a0b9da4c564372e2e2ea27bc04731d231fbe76`；
+world view、P11 world_play/world_input。已消费固定 P11 `ba4d2674940429cbcab1ea16cd8606aedea17c1c`；
 **V02 首次产品路线仍待总协调为固定组合候选分配运行时段**。
-后续候选必须包含 Core `a060e920ec12de15af38d9cfc389cc566deef931`（或其后继），入口
+后续候选必须包含 Core `6b5ac7909d08643140ca78c8efcabe098109ac10`（或其后继），入口
 检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
 
 ```sh
@@ -37,9 +37,10 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /abso
 
 原生监督器非阻塞取得现有 `/tmp/moonlantern-render-UID.lock`；占用时直接退出，不等待后
 擅自启动。随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
-`processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/bundle，留原始输出、
+`processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/是否保护，留本地原始输出、
 命令和时间。读取失败或前台为受保护46285/80978时不启动/不继续新渲染；运行中只结束自己
 创建的进程组。引擎自然获得焦点后才分发内部 InputEvent，失焦即失败，不重新激活任何app。
+不读取其他app名字或bundle；公开汇总仅保留PID/保护判定及时间，原始stdout/stderr留本地。
 不使用System Events、CUA、系统截图、OS键鼠输入或权限设置。原生进程默认150秒，上限180秒；
 超时/清理不得计为成功，暂停/保存/退出仍走真实控件。
 

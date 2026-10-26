@@ -33,8 +33,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop_owned_group
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
-CORE_CHECKPOINT = "a060e920ec12de15af38d9cfc389cc566deef931"
-UI_CHECKPOINT = "d3a0b9da4c564372e2e2ea27bc04731d231fbe76"
+CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
+UI_CHECKPOINT = "ba4d2674940429cbcab1ea16cd8606aedea17c1c"
 UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
@@ -45,7 +45,7 @@ UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd
               "game/ui/world/walk_animation.gd.uid"]
 PROTECTED_PIDS = {46285, 80978}
 FRONTMOST_COMMAND = ["/usr/bin/osascript", "-l", "JavaScript", "-e",
-                    'ObjC.import("AppKit"); var front = $.NSWorkspace.sharedWorkspace.frontmostApplication; JSON.stringify({pid:Number(front.processIdentifier),bundle:ObjC.unwrap(front.bundleIdentifier)})']
+                    'ObjC.import("AppKit"); var front = $.NSWorkspace.sharedWorkspace.frontmostApplication; JSON.stringify({pid:Number(front.processIdentifier)})']
 MAIN_SCENE = "res://scenes/main.tscn"
 MAIN_SCRIPT = "res://game/ui/main.gd"
 SAVE_RELATIVE = "profiles/world-slice-v1/moonlantern.json"
@@ -209,13 +209,15 @@ def frontmost_observation(output, label, index):
         row.update(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
         require(result.returncode == 0, "read-only frontmost command failed")
         value = strict_json(result.stdout)
-        require(isinstance(value,dict) and type(value.get("pid")) is int and value["pid"] > 0 and isinstance(value.get("bundle"), str), "invalid frontmost PID/bundle")
+        require(isinstance(value,dict) and set(value) == {"pid"} and type(value["pid"]) is int and value["pid"] > 0, "invalid frontmost PID")
         row.update(value)
+        row["protected"] = value["pid"] in PROTECTED_PIDS
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         row["error"] = str(error)
     row["finished_unix_ns"] = time.time_ns()
     write_json(output / ("frontmost-%02d-%s.json" % (index,label)), row)
-    return row
+    # Public aggregate needs only PID/protection and timing; raw stdout/stderr stay local.
+    return {key:row[key] for key in ["label","observed_unix_ns","finished_unix_ns","pid","protected","error"] if key in row}
 
 
 def require_safe_foreground(row):
