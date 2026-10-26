@@ -115,6 +115,7 @@ def main():
         return row
 
     def guard():
+        report['source_conserved'] = False
         report['tracked_after'] = {name:digest(repo/name) for name in tracked}
         require(report['tracked_after'] == tracked, 'tracked checkout changed')
         require(all(not (repo/n).is_symlink() and stat.S_IMODE((repo/n).stat().st_mode) == (0o755 if files[n][1] == '100755' else 0o644)
@@ -122,14 +123,16 @@ def main():
         if source is None: return
         require(set(expected) == set(tracked), 'incomplete source projection')
         validate_isolation_config(source/'override.cfg', isolation)
+        for name, item in expected.items():
+            path = source/name
+            require(not path.is_symlink() and path.is_file() and digest(path) == item['sha256']
+                    and stat.S_IMODE(path.stat().st_mode) == item['mode'],
+                    'missing/nonregular/changed source: '+name)
         for path in source.rglob('*'):
             require(not path.is_symlink(), 'linked observation source')
             if not path.is_file(): continue
             name = path.relative_to(source).as_posix()
-            if name in expected:
-                require(digest(path) == expected[name]['sha256'] and stat.S_IMODE(path.stat().st_mode)
-                        == expected[name]['mode'], 'source bytes/mode changed: '+name)
-            else:
+            if name not in expected:
                 require(name == 'override.cfg' or name.startswith('.godot/') or
                         (name.endswith('.import') and name[:-7] in expected) or
                         (name.endswith('.uid') and name[:-4] in expected), 'unknown generated source: '+name)
