@@ -10,6 +10,7 @@ func _initialize():
 	expect(g.snapshot().get("profile_id") == "world-slice-v1","world profile must be implemented")
 	if failures.is_empty():
 		var suite = load("res://tests/core/world_session_cases.gd").new()
+		suite.output_dir = "/private/tmp/p10-world-first-%d" % OS.get_process_id()
 		var result = suite.first_income_report()
 		checks += result.checks; failures.append_array(result.failures)
 		var file = FileAccess.open(suite.output_dir+"/first-income-report.json",FileAccess.WRITE)

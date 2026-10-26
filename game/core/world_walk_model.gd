@@ -69,8 +69,9 @@ static func move(region: String, p: Vector2, axes: Vector2, delta_ms: int = 50) 
 		for c in LAYOUT.regions[region].colliders:
 			var hit = sweep(p,d,rect(c))
 			if hit.t < best.t: best = hit
+		if best.normal == Vector2.ZERO:
+			p += d; break
 		p += d*maxf(0,best.t-EPS)
-		if best.normal == Vector2.ZERO: break
 		d *= 1-best.t; d -= best.normal*minf(0,d.dot(best.normal))
 	var region_data = LAYOUT.regions[region]
 	return p.clamp(Vector2(RADIUS,RADIUS),Vector2(region_data.width-RADIUS,region_data.height-RADIUS))
