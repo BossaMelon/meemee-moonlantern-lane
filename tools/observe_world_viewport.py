@@ -38,7 +38,7 @@ func finish(message = ""):
 func observe():
  data.display = DisplayServer.get_name()
  data.renderer = RenderingServer.get_current_rendering_method()
- data.driver = RenderingServer.get_current_rendering_driver()
+ data.driver = RenderingServer.get_current_rendering_driver_name()
  data.adapter = RenderingServer.get_video_adapter_name()
  data.engine = Engine.get_version_info()
  data.user_dir = OS.get_user_data_dir()

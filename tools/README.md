@@ -103,6 +103,8 @@ XDG data/config/cache/TMPDIR 都在本次控制目录，不读旧 player/r2。�
 Xvfb 启动正常绘制（≤45秒）；必须实际报告 X11、非 dummy renderer/adapter 和两个递增绘制帧。
 帧后用 root viewport `get_texture().get_image().save_png` 保存原PNG，并记录模式／尺寸／DPI、
 帧计数和原始 paused 状态。失败保留全部日志／部分帧，关闭本次进程组，不安装依赖或 fallback dummy。
+固定4.7.2的 driver 读取 API 为 `RenderingServer.get_current_rendering_driver_name()`；
+解析检查同时扫描完整日志，不能把 `--check-only` 的 exit0 单独当作通过。
 
 拟接入现有 prototype job 的一次执行及精确诊断上传，原三suite／120秒和四诊断路径不变。
 新增诊断仅为 `output/world-viewport/report.json`、`process.log`、`frame-1.png`、`frame-2.png`；
