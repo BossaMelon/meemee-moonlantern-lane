@@ -245,6 +245,9 @@ try {
         try { $null = Invoke-Owned $python @($sourceGuard,$fixtureRepo,$fixtureSha,(Join-Path $ownedRoot 'fixture-source-invalid.json')) $ownedRoot 20 'fixture-source-changed' }
         catch { if ($_.Exception.Message -notmatch 'Nonzero exit') { throw }; $rejected=$true }
         if (-not $rejected) { throw 'Changed Git blob fixture accepted.' }
+        $null = Invoke-Owned $python @('-m','unittest','discover','-s',(Join-Path $checkout 'tools'),'-p','test_build_local_demo.py','-k','IsolationFileGuards') $checkout 30 'fixture-config-portability'
+        $configFixtureLog=Read-Log (Join-Path $ReportDirectory 'fixture-config-portability-stderr.log')
+        if ($configFixtureLog -notmatch '(?m)^Ran 4 tests in ' -or $configFixtureLog -notmatch '(?m)^OK\r?$') { throw 'Portable private-config fixtures did not pass all four tests without skips.' }
         $fake = Join-Path $ownedRoot 'fixture import.ps1'
         [IO.File]::WriteAllText($fake, @'
 param($Channel,$Log)
@@ -276,7 +279,7 @@ exit 0
         if (-not $rejected) { throw 'Child-process timeout fixture accepted.' }
         $childResult=$executions[$executions.Count-1].process
         if ($childResult.ExitCode -ne 0 -or $childResult.ObservedPids.Count -lt 2) { throw 'Fixture did not observe a normally exited parent and its remaining child.' }
-        $summary.fixture_cases = @('wrong archive hash refused','changed Git blob refused','clean exit-zero import accepted','stdout/stderr/engine-log exit-zero errors refused','closed-parent owned child terminated and job empty')
+        $summary.fixture_cases = @('wrong archive hash refused','changed Git blob refused','four portable private-config identity/link/byte fixtures passed','clean exit-zero import accepted','stdout/stderr/engine-log exit-zero errors refused','closed-parent owned child terminated and job empty')
         $summary.status='passed; fixtures only, no game or Windows source acceptance'
     } else {
         if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Actual download/source validation is restricted to this GitHub runner invocation.' }

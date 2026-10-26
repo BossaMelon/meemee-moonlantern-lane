@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import io
 import json
 import os
 import signal
 import time
+from types import SimpleNamespace
 from pathlib import Path
 import subprocess
 import sys
@@ -118,6 +120,45 @@ class FixtureCase(unittest.TestCase):
     def build(self, **options):
         return demo.build_demo(self.repo, options.pop('candidate', self.sha),
                                options.pop('godot_app', self.engine), options.pop('output', self.output), **options)
+
+
+class IsolationFileGuards(unittest.TestCase):
+    def test_reparse_metadata_is_rejected_even_if_reported_as_regular(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; path.write_bytes(b'expected')
+            metadata = path.lstat()
+            linked = SimpleNamespace(st_mode=metadata.st_mode, st_file_attributes=0x400)
+            with patch.object(Path, 'lstat', return_value=linked), self.assertRaises(demo.BuildError):
+                demo.safe_path(path)
+
+    def test_private_config_works_without_optional_posix_flags(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(demo.os.__dict__):
+            demo.os.__dict__.pop('O_NOFOLLOW', None); demo.os.__dict__.pop('O_NONBLOCK', None)
+            path = Path(folder).resolve()/'override.cfg'; expected = b'[application]\nvalue=true\n'
+            path.write_bytes(expected)
+            self.assertEqual(demo.validate_isolation_config(path, expected), hashlib.sha256(expected).hexdigest())
+            path.write_bytes(expected.replace(b'\n', b'\r\n'))
+            with self.assertRaises(demo.BuildError): demo.validate_isolation_config(path, expected)
+
+    def test_hardlinked_config_is_not_private(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; path.write_bytes(b'expected')
+            os.link(path, path.with_name('second-link'))
+            with self.assertRaises(demo.BuildError): demo.validate_isolation_config(path, b'expected')
+
+    def test_replaced_file_is_rejected_before_any_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder).resolve()/'override.cfg'; other = path.with_name('other.cfg')
+            path.write_bytes(b'expected'); other.write_bytes(b'expected')
+            real_open = os.open; real_fdopen = os.fdopen; observed = []
+            @contextmanager
+            def watched_fdopen(fd, mode):
+                with real_fdopen(fd, mode) as stream:
+                    watched = Mock(wraps=stream); observed.append(watched); yield watched
+            with patch.object(demo.os, 'open', side_effect=lambda _path, flags: real_open(other, flags)), patch.object(demo.os, 'fdopen', side_effect=watched_fdopen):
+                with self.assertRaisesRegex(demo.BuildError, 'before reading'):
+                    demo.validate_isolation_config(path, b'expected')
+            observed[0].read.assert_not_called()
 
 
 class CandidateGuards(FixtureCase):

@@ -55,8 +55,14 @@ def resolve_candidate(repo: Path, candidate: str) -> str:
 def safe_path(value: Path) -> Path:
     path = value.expanduser().absolute()
     require('..' not in path.parts, 'parent traversal is not accepted; supply the canonical absolute path')
-    require(not any(p.is_symlink() for p in (path, *path.parents)),
-            'symlink path is not accepted; supply its canonical absolute path')
+    for part in (path, *path.parents):
+        try:
+            metadata = part.lstat()
+        except FileNotFoundError:
+            continue
+        require(not stat.S_ISLNK(metadata.st_mode)
+                and not getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400),
+                'symlink/reparse path is not accepted; supply its canonical absolute path')
     return path
 
 
@@ -67,12 +73,20 @@ def digest(path):
 def validate_isolation_config(path, expected):
     """Accept only the intended bytes in a private regular file, never a link."""
     safe_path(path)
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as stream:
+    def private_file(metadata):
+        return (stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1 and metadata.st_ino != 0
+                and not getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+    before = path.lstat()
+    require(private_file(before), 'isolation config must be a private regular file')
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0)
+    with os.fdopen(os.open(path, flags), 'rb') as stream:
         opened = os.fstat(stream.fileno())
-        require(stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1, 'isolation config must be a private regular file')
-        actual = stream.read()
+        require(private_file(opened), 'isolation config must be a private regular file')
+        require((before.st_dev, before.st_ino) == (opened.st_dev, opened.st_ino), 'isolation config changed before reading')
+        actual = stream.read(len(expected) + 1)
         current = path.lstat()
-        require((opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino), 'isolation config changed while checked')
+        require(private_file(current) and (opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino),
+                'isolation config changed while checked')
     expected_hash = hashlib.sha256(expected).hexdigest()
     require(actual == expected and hashlib.sha256(actual).hexdigest() == expected_hash,
             'isolation config differs from the expected configuration: ' + str(path))
