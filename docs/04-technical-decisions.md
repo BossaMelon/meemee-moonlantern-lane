@@ -77,7 +77,7 @@ runner 报告协议：
 
 ## 7. Mac / Windows 原生配对包路线（2026-10-26）
 
-原生阶段按 H06 → D02 → P08 交接，D02 另等待 P09 首次进入阶段指引可见性修复；完整依赖/owner/精确路径只以 [任务清单](../harness/tasks.json) 为准。H06 先交固定 contract/schema、受控协议与子进程 fixtures、宿主校验器和独立 Node QA autoload 源，验收通过后才进入实际包工作。fixture 或 QA 源通过不证明其已在标准 release 编译/运行；缺实际包时真实 native 模式必须失败。 H06 固定 PR 候选经 root 实读与 fixtures 验收达到 harness-ready 后，D02 可从该冻结候选开展，不要求 H06 先合 main。H06/P09/D02 形成最终固定组合候选，做一次 combined 独立主审，再按真实 PR 依赖逐项集成；必要最多一次有具体范围理由的 scoped 复审，不按新 SHA 重置预算。P09 做小范围定向自检与真实全屏/窄屏像素检查，其差异纳入最终组合。
+原生阶段按 H06 → D02 → P08 交接，D02 另等待 P09 首次进入阶段指引可见性修复；完整依赖/owner/精确路径只以 [任务清单](../harness/tasks.json) 为准。H06 先交固定 contract/schema、受控协议与子进程 fixtures、宿主校验器和独立 Node QA autoload 源，验收通过后才进入实际包工作。fixture 或 QA 源通过不证明其已在标准 release 编译/运行；缺实际包时真实 native 模式必须失败。 H06 固定 PR 候选经 root 实读与 fixtures 验收达到 harness-ready 后，D02 可从该冻结候选开展，不要求 H06 先合 main。H06/D02 等非平凡候选不提前合 main；H06/P09/D02 形成最终固定组合候选后做一次 combined 独立主审，再按真实 PR 依赖逐项集成。P09 的一行低风险修复可经 root 定向自检与真实全屏/窄屏像素验收先交付，其差异仍纳入同一最终组合；必要最多一次有具体范围理由的 scoped 复审，不按新 SHA 重置预算。
 
 D02 使用匹配的 Godot 4.7.2 标准 release 模板，目标为 Mac 与 Windows；先校验版本/模板归档及成员哈希，再只在本任务临时目录使用公开 `custom_template/release` 路径，不安装或替换全局模板。本次登记不启动模板下载、正式导出、签名或窗口。导出固定脚本文本 mode 0，staging 仅显式设置 `editor/export/convert_text_resources_to_binary=false`，原 Git snapshot/scene/UID 不改，记录原字节及精确配置 delta；同机两 fresh PCK 已能字节相等，跨 OS 及真实 Windows 相等仍须分别实证。此设置保留文本场景，`project.godot` 仍导出为 `project.binary`。[ProjectSettings](https://docs.godotengine.org/en/4.7/classes/class_projectsettings.html#class-projectsettings-property-editor-export-convert-text-resources-to-binary)、[Windows 自定义模板](https://docs.godotengine.org/en/4.7/classes/class_editorexportplatformwindows.html)、[Mac 自定义模板](https://docs.godotengine.org/en/4.7/classes/class_editorexportplatformmacos.html)。
 
