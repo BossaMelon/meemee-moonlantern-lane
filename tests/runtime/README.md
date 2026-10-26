@@ -73,7 +73,8 @@ UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现�
 自然完成一次成交，或制作完成既定3个UID并真实取走。随后实际暂停、Save、Load两次，
 再次Resume并等待至少原剩余时长加200ms（至少1秒），最后保存退出。每阶段核对现金、
 UID/next_uid、冻结报价/小费/订单、账本或原料/成菜成本；加载重试前后另完整比较快照
-与主备档。输入、原始任务/预留及成本、重试次数和墙钟观察时长均保留。未指定时原有
+与主备档。只读观察各实际按钮的 `pressed` 次数，不能发射该信号。输入、原始任务/预留
+及成本、重试次数和墙钟观察时长均保留。未指定时原有
 恢复后退出语义不变；原生入口拒绝此选项。这不扩大为完整三输入夜间矩阵或WS07通过。
 manual-reservation 在确认/暂停 InputEvent 后各调用一次官方
 [`Input.flush_buffered_events()`](https://docs.godotengine.org/en/4.7/classes/class_input.html#class-input-method-flush-buffered-events)，

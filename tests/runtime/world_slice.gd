@@ -273,7 +273,7 @@ func continue_restored_boundary():
 	var costs: Dictionary = {}
 	for item in baseline.items:
 		if item.uid in expected_uids: costs[str(item.uid)] = item.cost
-	report.restore_continuation = {"boundary":boundary,"original":original,"initial_cash":baseline.cash,"item_costs":costs,"load_retries":[],"completed":false}
+	report.restore_continuation = {"boundary":boundary,"original":original,"initial_cash":baseline.cash,"item_costs":costs,"gui_presses":[],"load_retries":[],"completed":false}
 	write_report() # Preserve pending UID/order/cost facts before any new input.
 	await click_control("resume")
 	if not await wait_for(func(): return not view().paused,1000,"restore continuation real Resume"): return
@@ -539,7 +539,18 @@ func save_at(boundary: String) -> bool:
 func click_control(id: String, exiting: bool = false):
 	if not check(ui.has_method("get_action_control"), "P11 control locator unavailable"): return
 	var control = ui.get_action_control(id)
+	var observe_press = request.stage == "restore-exit" and request.get("continue_after_restore",false) and not exiting
+	var presses = {"count":0}
+	var on_press = func():
+		presses.count += 1
+		report.restore_continuation.gui_presses.append({"id":id,"input_count":report.inputs.size()})
+	if observe_press:
+		if not check(is_instance_valid(control) and control is Button,"continuation GUI control unavailable: "+id): return
+		control.pressed.connect(on_press) # Observe real input delivery; never emit.
 	await activate_control(control,id,exiting)
+	if observe_press:
+		if is_instance_valid(control) and control.pressed.is_connected(on_press): control.pressed.disconnect(on_press)
+		check(presses.count == 1,"continuation GUI input did not press exactly once: "+id)
 
 func activate_control(control: Variant, id: String, exiting: bool = false):
 	if not check(is_instance_valid(control) and control is Button and control.is_visible_in_tree() and not control.disabled, "actual enabled control missing: " + id): return
@@ -551,7 +562,8 @@ func activate_control(control: Variant, id: String, exiting: bool = false):
 			var key = str(focus.get_instance_id()) if focus != null else "none"
 			if not check(not visited.has(key), "pad focus cycle cannot reach " + id): return
 			visited[key] = true
-			await dispatch_event(pad_button(JOY_BUTTON_DPAD_DOWN,true)); await dispatch_event(pad_button(JOY_BUTTON_DPAD_DOWN,false))
+			var direction = JOY_BUTTON_DPAD_UP if focus != null and control.get_global_rect().get_center().y < focus.get_global_rect().get_center().y else JOY_BUTTON_DPAD_DOWN
+			await dispatch_event(pad_button(direction,true)); await dispatch_event(pad_button(direction,false))
 		if not check(get_window().gui_get_focus_owner() == control, "pad control not focused"): return
 		await dispatch_event(pad_button(JOY_BUTTON_A,true)); send_event(pad_button(JOY_BUTTON_A,false))
 	else:

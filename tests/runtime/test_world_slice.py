@@ -274,17 +274,18 @@ class SupervisorTests(unittest.TestCase):
             with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"manual-reservation")
 
     def test_restored_cooking_rejects_extra_output_cost_drift_and_restart(self):
-        outputs=[{"uid":uid,"cost":cost,"location":"cooking"} for uid,cost in [(8,2),(9,3),(10,4)]]
+        outputs=[{"uid":uid,"cost":cost,"location":"cooking","prepared_wave_id":None} for uid,cost in [(8,2),(9,3),(10,4)]]
         job={"remaining_ms":2000,"output_uids":[8,9,10]}
         craft={"kind":"craft","created":outputs,"removed":[{"uid":2,"cost":9}]}
-        before={"paused":True,"next_uid":11,"cash":60,"items":outputs,"sales":[],"ledger":[craft],"world":{"stations":[{"job":job}]}}
-        after={**before,"items":[{**i,"location":"carried"} for i in outputs],"world":{"stations":[{"job":None,"input_uids":[],"output_uids":[]}],"carried_uids":[8,9,10]}}
+        before={"paused":True,"next_uid":11,"cash":60,"phase":"preparation","service":{"next_wave_id":"n1-w1"},"items":outputs,"sales":[],"ledger":[craft],"world":{"stations":[{"job":job}]}}
+        after={**before,"items":[{**i,"location":"carried","prepared_wave_id":"n1-w1"} for i in outputs],"world":{"stations":[{"job":None,"input_uids":[],"output_uids":[]}],"carried_uids":[8,9,10]}}
         w.validate_restored_effect(before,after,"cooking")
-        for fault in ["duplicate-uid","new-uid","cost","restart","recrafted"]:
+        for fault in ["duplicate-uid","new-uid","cost","wave","restart","recrafted"]:
             bad=copy.deepcopy(after)
             if fault == "duplicate-uid": bad["items"].append(copy.deepcopy(bad["items"][0]))
             elif fault == "new-uid": bad["next_uid"]+=1
             elif fault == "cost": bad["items"][0]["cost"]+=1
+            elif fault == "wave": bad["items"][0]["prepared_wave_id"]="wrong-wave"
             elif fault == "restart": bad["world"]["stations"][0]["job"]=job
             else: bad["ledger"].append(craft)
             with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"cooking")

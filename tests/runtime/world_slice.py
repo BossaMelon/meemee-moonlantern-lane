@@ -353,7 +353,8 @@ def validate_restored_effect(before, after, boundary):
         require(len(crafts) == 1, "original craft cost history missing")
         craft = crafts[0]; outputs = [i for i in after["items"] if i["uid"] in expected]
         require(sum(i["cost"] for i in craft["removed"]) == sum(i["cost"] for i in craft["created"]) == sum(i["cost"] for i in outputs), "restored cooking cost not conserved")
-        expected_items = [{**i,"location":"carried"} if i["uid"] in expected else i for i in before["items"]]
+        require(before["phase"] == "preparation" and before["service"]["next_wave_id"] is not None, "original cooking preparation wave missing")
+        expected_items = [{**i,"location":"carried","prepared_wave_id":before["service"]["next_wave_id"]} if i["uid"] in expected else i for i in before["items"]]
         require(after["items"] == expected_items and after["world"]["carried_uids"] == expected, "restored cooking did not take exactly the original three UIDs")
         station = after["world"]["stations"][0]
         require(station["job"] is None and station["input_uids"] == [] and station["output_uids"] == [], "restored cooking restarted or left duplicate output")
@@ -393,6 +394,7 @@ def validate_observation(obs, request, process):
             require(proof.get("completed") is True and proof.get("boundary") == request["save_boundary"]
                     and len(proof.get("load_retries",[])) == 2 and all(r["after_input_count"] > r["before_input_count"] for r in proof["load_retries"])
                     and proof.get("post_reload_elapsed_ms",0) >= (2200 if request["save_boundary"] == "cooking" else 1000), "restore continuation/retry evidence incomplete")
+            require([p["id"] for p in proof.get("gui_presses",[])] == ["resume","save","load","load","resume","save"], "actual continuation GUI presses missing/duplicated")
             require(not snapshot_differences(rows["continued-saved"]["snapshot"],rows["continued-reloaded"]["snapshot"])
                     and rows["continued-saved"]["files"] == rows["continued-reloaded"]["files"], "GUI reload changed completed state/files")
             for name in ["continued-complete","continued-saved","continued-reloaded","continued-stable","pre-quit"]:
