@@ -121,6 +121,39 @@ class FixtureCase(unittest.TestCase):
 
 
 class CandidateGuards(FixtureCase):
+    def test_source_probe_projection_binds_bytes_and_never_creates_a_package(self):
+        fixture = self.repo/'tests/fixtures/controlled.json'
+        fixture.parent.mkdir(parents=True, exist_ok=True); fixture.write_text('{}')
+        self.sha = commit(self.repo)
+        project = self.root / 'source verification'
+        probe = self.root / 'source-probe.gd'
+        binding = demo.prepare_source_probe(self.repo, self.sha, project,
+                                           'MoonlanternH07Source/'+'a'*32+'/verify', probe)
+        self.assertFalse((project/'tests/fixtures').exists())
+        self.assertFalse((project/demo.APP_NAME).exists())
+        self.assertEqual(probe.read_text(), demo.PROBE)
+        self.assertTrue(binding['excluded_source_files_sha256'])
+        demo.validate_source_probe_projection(binding)
+        (project/'game/main.gd').write_text('modified')
+        with self.assertRaises(demo.BuildError): demo.validate_source_probe_projection(binding)
+
+    def test_source_probe_projection_rejects_unknown_files_and_reuse(self):
+        project = self.root/'source verification'; probe = self.root/'source-probe.gd'
+        profile = 'MoonlanternH07Source/'+'b'*32+'/verify'
+        binding = demo.prepare_source_probe(self.repo, self.sha, project, profile, probe)
+        (project/'unknown.json').write_text('{}')
+        with self.assertRaises(demo.BuildError): demo.validate_source_probe_projection(binding)
+        with self.assertRaises(demo.BuildError): demo.prepare_source_probe(self.repo, self.sha, project, profile, probe)
+
+    def test_probe_path_comparison_accepts_windows_separator_equivalence(self):
+        result = self.build(); report = result['probe_reports']['save']
+        profile = result['profiles']['verify']
+        report['executable'] = 'C:/pinned/Godot.exe'
+        report['user_data_dir'] = 'C:/private/'+profile
+        report['save_path'] = report['user_data_dir']+'/profiles/world-slice-v1/moonlantern.json'
+        demo.validate_probe(report, result['executions'][0], 'save', profile, report['build_id'],
+                            Path('C:\\pinned\\Godot.exe'), report['main_scene'], result['source_files_sha256'])
+
     def test_candidate_must_be_explicit_complete_immutable_commit(self):
         self.assertEqual(demo.resolve_candidate(self.repo, self.sha), self.sha)
         for value in ('HEAD', self.sha[:7], '', self.sha.upper(), 'f' * 40):

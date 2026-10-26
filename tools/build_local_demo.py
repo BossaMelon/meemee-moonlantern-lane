@@ -324,10 +324,11 @@ def validate_probe(report, execution, mode, profile, build_id, executable, main_
     require(report.get('fixtures_absent') is True and report.get('default_session_profile') == PROFILE_ID
             and type(report.get('default_session_version')) in (int, float) and report['default_session_version'] == SAVE_VERSION,
             'probe did not observe fixture-free world GameSession default')
-    require(report.get('executable') == str(executable), 'probe did not use the bundled engine')
+    require(str(report.get('executable')).replace('\\', '/') == str(executable).replace('\\', '/'),
+            'probe did not use the bundled engine')
     directory = report.get('user_data_dir')
     require(isinstance(directory, str) and directory.endswith('/' + profile), 'probe used the wrong isolated profile')
-    require(report.get('save_path') == str(Path(directory) / SAVE_PATH[7:])
+    require(str(report.get('save_path')).replace('\\', '/') == str(Path(directory) / SAVE_PATH[7:]).replace('\\', '/')
             and report.get('legacy_default_absent_in_isolated_dir') is True, 'probe used the wrong default path')
     if mode == 'player-directory':
         require(report.get('player_save_absent') is True, 'player profile was written by verification')
@@ -345,6 +346,52 @@ def validate_probe(report, execution, mode, profile, build_id, executable, main_
     require(same_snapshot(report['snapshot'], report['saved_state']), 'core default save differs from actual Main snapshot')
     require(all(isinstance(report.get(key), str) and re.fullmatch('[0-9a-f]{64}', report[key])
                 for key in ('save_hash', 'backup_hash')), 'missing actual primary/backup hash')
+
+
+def prepare_source_probe(repo: Path, candidate: str, project: Path, profile: str, probe: Path):
+    """Make a bound source-only test input for PROBE; no app or engine is copied."""
+    repo = safe_path(repo); project = safe_path(project); probe = safe_path(probe)
+    candidate = resolve_candidate(repo, candidate)
+    require(re.fullmatch(r'MoonlanternH07Source/[0-9a-f]{32}/verify', profile), 'invalid source probe namespace')
+    require(not project.exists() and project.parent.is_dir() and not probe.exists()
+            and probe.parent.is_dir() and not probe.is_relative_to(project), 'source probe paths must be fresh and separate')
+    archive, files, main_scene = archive_source(repo, candidate)
+    expected = {name: hashlib.sha256(raw).hexdigest() for name, (raw, _) in files.items()}
+    excluded = {name: value for name, value in expected.items() if name.startswith('tests/fixtures/')}
+    project.mkdir(mode=0o700)
+    for name, (raw, mode) in files.items():
+        if name in excluded: continue
+        path = project/name; path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('xb') as stream: stream.write(raw)
+        path.chmod(0o755 if mode == '100755' else 0o644)
+    isolation = ('[application]\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name='
+                 +json.dumps(profile)+'\n').encode()
+    write_isolation_config(project/'override.cfg', isolation)
+    with probe.open('x', encoding='utf-8', newline='\n') as stream: stream.write(PROBE)
+    return {'kind': 'source-only Main test input; no app, engine copy or export', 'package_created': False,
+            'source_commit': candidate, 'git_archive_sha256': hashlib.sha256(archive).hexdigest(),
+            'project': str(project), 'profile': profile, 'probe': str(probe), 'probe_sha256': digest(probe),
+            'main_scene': main_scene, 'source_files_sha256': expected, 'excluded_source_files_sha256': excluded,
+            'project_files_sha256': {k: v for k, v in expected.items() if k not in excluded},
+            'isolation_text': isolation.decode(), 'isolation_sha256': hashlib.sha256(isolation).hexdigest()}
+
+
+def validate_source_probe_projection(binding):
+    project = safe_path(Path(binding['project'])); probe = safe_path(Path(binding['probe']))
+    require(digest(probe) == binding['probe_sha256'] == hashlib.sha256(PROBE.encode()).hexdigest(), 'source probe changed')
+    validate_isolation_config(project/'override.cfg', binding['isolation_text'].encode())
+    expected = binding['project_files_sha256']
+    for name, value in expected.items():
+        path = project/name
+        require(path.is_file() and not path.is_symlink() and digest(path) == value, 'source test input changed: '+name)
+    for path in project.rglob('*'):
+        require(not path.is_symlink(), 'linked source test input')
+        if not path.is_file(): continue
+        name = path.relative_to(project).as_posix()
+        require(name in expected or name == 'override.cfg' or name.startswith('.godot/')
+                or (name.endswith('.import') and name[:-7] in expected)
+                or (name.endswith('.uid') and name[:-4] in expected), 'unknown source test input: '+name)
+    require(not (project/'tests/fixtures').exists(), 'source test input leaked fixtures')
 
 
 def build_demo(repo: Path, candidate: str, godot_app: Path, output: Path, timeout=120):

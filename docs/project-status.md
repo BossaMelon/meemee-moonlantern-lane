@@ -4,7 +4,7 @@
 
 **Steam 可售品质目标仍 active、未完成，玩法改进为第一优先级。** 用户本次实际打开 r2（human PID `46285`）后原话：“不好玩，空间太小，主角都不能动，交互也很无聊”。这证明首屏/店内空间交互评价失败；未测整晚经营或当前新战斗，不能据此补造那些范围的结论。旧三日/雨夜代码与 gate 保留，不删不降；源码 CI、runtime、人类反馈、商业 IP 与发布分别记录，自动检查通过不能推导为好玩。
 
-**当前主线：P10/P11/H07/V02 已由 root 正式派发并行实施，新完整 demo 未完成。** H03 登记 [PR #54](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/54) 已合 main `d907ff46939c2e7e93668e1348107c5888362a68`；各 owner 按既定依赖推进。H07 仅工具实现/单元检查，生产组合与完整三-suite/runtime 尚待 P10/P11 和固定候选，不因合同或工具绿灯宣称玩法已运行或好玩。 Root 已在原 E02/chat959c 与原允许路径重启 world-only 第3日薄适配，Core hook 仍归 P10；旧 rain/prototype 不改，不新增地图/敌人或宣称成长完成。
+**当前主线：固定源码组合的 source 验证与联合独审准备，新完整 demo 未完成。** H03 登记 [PR #54](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/54) 已合 main；[PR #57](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/57) 的 `0e457b0` 已有真实 Linux/Windows 三套 source gate 与原源码守卫全过证据（两平台各 120344 checks），仅绑定该源。engineering_delivery 现原样消费 Core `a8144a6`、E02 `3804174`、P11 `ba4d267` 与 V02 `50b1022`，负责新 World Main/字体两视口/默认档独立进程恢复的有界源码复验；UI/Core/E/V02 文件仍归原 owner，本轮不出包或新增 native slot。V02 的首单与已关闭原生时段证据保持 `50b1022` 绑定；root 核图认为新世界视觉仍不合格（地板、比例与建筑围合），UI 定向返工及 QA headless 整夜由原 owner 推进，WS07、真人趣味与 Steam 目标仍未完成。下一步以 PR57 固定 head 的实际 CI、报告和 source 绑定交 root 一次联合独审，之后再决定视觉返工及完整包候选。
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
