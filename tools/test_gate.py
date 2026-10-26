@@ -660,6 +660,8 @@ class WorldGateTests(unittest.TestCase):
                  {'raw_reports':{'world-slice':json.dumps(world_report()).replace('"checks": 1','"checks": 0, "checks": 1',1)}},
                  {'raw_reports':{'world-slice':json.dumps(world_report())[:-1]+', "invalid": NaN}'}},
                  {'errors_by_suite':{'world-slice':'ERROR: fixture with complete report'}},
+                 {'errors_by_suite':{'world-slice':'\x1b[31mERROR: colored fixture\x1b[0m'}},
+                 {'errors_by_suite':{'world-slice':'Parse Error: fixture with complete report'}},
                  {'hang_suite':'world-slice','_timeout':1}]
         for extra in options:
             with self.subTest(extra=extra):

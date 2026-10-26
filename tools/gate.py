@@ -404,12 +404,12 @@ def run_command(command: list[str], cwd: Path, timeout: float) -> dict:
         raise GateError(f"command timed out after {timeout}s: {command}") from exc
     except OSError as exc:
         raise GateError(f"cannot execute command {command}: {exc}") from exc
+    plain_output = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', completed.stdout + '\n' + completed.stderr)
     result = {"command": command, "exit_code": completed.returncode,
               "elapsed_seconds": round(time.monotonic() - started, 3),
               "stdout_sha256": hashlib.sha256(completed.stdout.encode()).hexdigest(),
               "stdout": completed.stdout[-16000:], "stderr": completed.stderr[-16000:],
-              "engine_error_logged": bool(re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR):",
-                                                     completed.stdout + "\n" + completed.stderr))}
+              "engine_error_logged": bool(re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR|Parse Error):", plain_output))}
     return result
 
 
