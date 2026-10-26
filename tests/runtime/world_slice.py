@@ -308,10 +308,10 @@ def validate_geometry(obs, request):
     if logical is not None:
         require(not native and obs.get("display") == "headless" and request["stage"] != "inspect", "logical preparation requires headless inputs")
         require(isinstance(preparation, dict) and preparation.get("role") == "headless-input-only"
-                and preparation.get("target") == "/root" and preparation.get("before_main") is True
+                and preparation.get("target") == "/root" and preparation.get("timing") == "after-main-ready-before-input" and preparation.get("input_count") == 0
                 and preparation.get("requested") == logical, "headless preparation record missing")
-        require(preparation.get("main_before", {}).get("inside_tree") is False
-                and preparation.get("main_before", {}).get("ready") is False, "headless preparation followed Main entry")
+        require(preparation.get("main_before", {}).get("inside_tree") is True
+                and preparation.get("main_before", {}).get("ready") is True, "headless preparation requires natural Main ready")
         physical = preparation["before"]["window"]
         for geometry in [preparation["after"], obs["geometry"]]:
             require(geometry["window"] == physical and geometry["viewport"] == [0,0,*logical]
@@ -522,7 +522,7 @@ def main():
     parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
     parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
-    parser.add_argument("--headless-logical-size", type=int, nargs=2, help="explicit headless-only Root content scaling before Main; physical dummy size is retained and recorded")
+    parser.add_argument("--headless-logical-size", type=int, nargs=2, help="explicit headless-only Root content scaling after Main.ready and before input; physical dummy size is retained and recorded")
     display = parser.add_mutually_exclusive_group()
     display.add_argument("--fullscreen", action="store_true", help="native first-loop visual diagnostic only; separately authorized slot required")
     display.add_argument("--windowed", action="store_true", help="native first-loop diagnostic at explicit --resolution")

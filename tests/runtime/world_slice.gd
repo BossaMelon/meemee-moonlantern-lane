@@ -1,7 +1,7 @@
 extends Node
 ## V02 real-input source driver. Execution awaits a fixed P10/P11 candidate.
 ## Never replace Main, set control/map geometry/time/save_path, or mutate Session.
-## Explicit headless-only Root content scaling is recorded before natural Main.
+## Explicit headless-only Root content scaling is recorded after Main.ready, before input.
 const MAIN_SCENE = "res://scenes/main.tscn"
 const MAIN_SCRIPT = "res://game/ui/main.gd"
 const SAVE_PATH = "user://profiles/world-slice-v1/moonlantern.json"
@@ -64,19 +64,6 @@ func _enter_tree():
 	elif FileAccess.file_exists(SAVE_PATH) or FileAccess.file_exists(SAVE_PATH + ".bak"):
 		fail("fresh inspection already contains a save")
 		return
-	var logical_size = request.get("headless_logical_size")
-	if logical_size != null:
-		if native or request.stage == "inspect" or not logical_size is Array or logical_size.size() != 2 or logical_size[0] < 640 or logical_size[1] < 360 or request.get("window_size") != null:
-			fail("invalid explicit headless logical preparation"); return
-		var root = get_tree().root
-		var before = observe_geometry()
-		var current = get_tree().current_scene
-		var main_before = {"exists":current != null,"inside_tree":current.is_inside_tree() if current != null else false,"ready":current.is_node_ready() if current != null else false,"scene":current.scene_file_path if current != null else ""}
-		if main_before.inside_tree or main_before.ready:
-			fail("headless logical preparation must precede natural Main entry: "+JSON.stringify(main_before)); return
-		root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-		root.content_scale_size = Vector2i(logical_size[0],logical_size[1])
-		report.headless_preparation = {"role":"headless-input-only","target":"/root","before_main":true,"main_before":main_before,"requested":logical_size,"before":before,"after":observe_geometry()}
 	input_trace = FileAccess.open(request.output.path_join(request.stage + "-inputs.jsonl"), FileAccess.WRITE)
 	if input_trace == null:
 		fail("cannot create input trace")
@@ -116,6 +103,19 @@ func inspect_main():
 	if ui.get_script().resource_path != MAIN_SCRIPT or ui.save_path != SAVE_PATH:
 		fail("P11 natural world Main/default save path is not ready")
 		return
+	var logical_size = request.get("headless_logical_size")
+	if logical_size != null:
+		if native or request.stage == "inspect" or not logical_size is Array or logical_size.size() != 2 or logical_size[0] < 640 or logical_size[1] < 360 or request.get("window_size") != null:
+			fail("invalid explicit headless logical preparation"); return
+		var root = get_tree().root
+		var before = observe_geometry()
+		var current = get_tree().current_scene
+		var main_before = {"exists":current != null,"inside_tree":current.is_inside_tree() if current != null else false,"ready":current.is_node_ready() if current != null else false,"scene":current.scene_file_path if current != null else ""}
+		if not main_before.inside_tree or not main_before.ready or report.inputs.size() != 0:
+			fail("headless logical preparation requires ready Main and no inputs: "+JSON.stringify(main_before)); return
+		root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		root.content_scale_size = Vector2i(logical_size[0],logical_size[1])
+		report.headless_preparation = {"role":"headless-input-only","target":"/root","timing":"after-main-ready-before-input","input_count":report.inputs.size(),"main_before":main_before,"requested":logical_size,"before":before,"after":observe_geometry()}
 	for i in range(3): await get_tree().process_frame
 	if failed: return
 	var snapshot: Dictionary = ui.game.snapshot()

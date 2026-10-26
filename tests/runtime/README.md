@@ -22,7 +22,8 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolu
 `--headless-logical-size 1280 720`，即可执行 headless 输入路线与第二进程恢复。
 原 `--window-size` 仍只通过官方 `--resolution` 请求物理尺寸并严格核对；Godot 4.7.2
 在本机产品 Main 实测返回64×64，原始失败保留，不能据此声称原生窗口正确。
-新选项只在 headless 输入模式、自然 Main 加载前设置 Root Window 的
+Main 会在 ready 时重设缩放基准，因此新选项只在 headless 输入模式、自然 Main ready
+之后且任何输入之前设置 Root Window 的
 `content_scale_mode=CANVAS_ITEMS` 与 `content_scale_size`，记录设置前后物理/逻辑尺寸、
 变换和准备时机。物理 dummy 尺寸必须保持，实际逻辑 viewport 必须等于请求，实际
 world Control 至少640×360。不写 Control/地图几何、产品状态或时钟；原生模式和只读

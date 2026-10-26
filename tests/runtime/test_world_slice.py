@@ -230,8 +230,8 @@ class SupervisorTests(unittest.TestCase):
         request = {"stage":"first-manual","headless_logical_size":[1280,720],"window_size":None}
         geometry = {"window":[64,64],"viewport":[0,0,1280,720],"content_scale_size":[1280,720],"content_scale_mode":1}
         obs = {"display":"headless","geometry":geometry,"headless_preparation":{
-            "role":"headless-input-only","target":"/root","before_main":True,"requested":[1280,720],
-            "main_before":{"inside_tree":False,"ready":False},
+            "role":"headless-input-only","target":"/root","timing":"after-main-ready-before-input","input_count":0,"requested":[1280,720],
+            "main_before":{"inside_tree":True,"ready":True},
             "before":{"window":[64,64],"viewport":[0,0,64,64]},"after":copy.deepcopy(geometry)}}
         w.validate_geometry(obs,request)
         for change in ["native","missing","physical","logical","timing","ready","undeclared"]:
@@ -240,8 +240,8 @@ class SupervisorTests(unittest.TestCase):
             elif change == "missing": del bad["headless_preparation"]
             elif change == "physical": bad["geometry"]["window"]=[1280,720]
             elif change == "logical": bad["geometry"]["viewport"]=[0,0,64,64]
-            elif change == "timing": bad["headless_preparation"]["before_main"]=False
-            elif change == "ready": bad["headless_preparation"]["main_before"]["ready"]=True
+            elif change == "timing": bad["headless_preparation"]["input_count"]=1
+            elif change == "ready": bad["headless_preparation"]["main_before"]["ready"]=False
             else: req["headless_logical_size"]=None
             with self.subTest(change=change), self.assertRaises(ValueError):
                 w.validate_geometry(bad,req)
