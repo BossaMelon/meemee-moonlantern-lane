@@ -70,11 +70,13 @@ func _enter_tree():
 			fail("invalid explicit headless logical preparation"); return
 		var root = get_tree().root
 		var before = observe_geometry()
-		if get_tree().current_scene != null:
-			fail("headless logical preparation must precede natural Main"); return
+		var current = get_tree().current_scene
+		var main_before = {"exists":current != null,"inside_tree":current.is_inside_tree() if current != null else false,"ready":current.is_node_ready() if current != null else false,"scene":current.scene_file_path if current != null else ""}
+		if main_before.inside_tree or main_before.ready:
+			fail("headless logical preparation must precede natural Main entry: "+JSON.stringify(main_before)); return
 		root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 		root.content_scale_size = Vector2i(logical_size[0],logical_size[1])
-		report.headless_preparation = {"role":"headless-input-only","target":"/root","before_main":true,"requested":logical_size,"before":before,"after":observe_geometry()}
+		report.headless_preparation = {"role":"headless-input-only","target":"/root","before_main":true,"main_before":main_before,"requested":logical_size,"before":before,"after":observe_geometry()}
 	input_trace = FileAccess.open(request.output.path_join(request.stage + "-inputs.jsonl"), FileAccess.WRITE)
 	if input_trace == null:
 		fail("cannot create input trace")

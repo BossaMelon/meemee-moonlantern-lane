@@ -310,6 +310,8 @@ def validate_geometry(obs, request):
         require(isinstance(preparation, dict) and preparation.get("role") == "headless-input-only"
                 and preparation.get("target") == "/root" and preparation.get("before_main") is True
                 and preparation.get("requested") == logical, "headless preparation record missing")
+        require(preparation.get("main_before", {}).get("inside_tree") is False
+                and preparation.get("main_before", {}).get("ready") is False, "headless preparation followed Main entry")
         physical = preparation["before"]["window"]
         for geometry in [preparation["after"], obs["geometry"]]:
             require(geometry["window"] == physical and geometry["viewport"] == [0,0,*logical]
