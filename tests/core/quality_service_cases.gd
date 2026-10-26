@@ -29,7 +29,7 @@ func fixture(s: Dictionary, label: String):
 	serial += 1
 	var path = output_dir+"/boundary-%s-%d.json" % [label,serial]
 	var file = FileAccess.open(path,FileAccess.WRITE); file.store_string(JSON.stringify(s,"\t",true,true)); file.close()
-	var g = Session.new(1)
+	var g = Session.new(1,"rain-night-v1")
 	expect(g.load_from(path).ok,"controlled boundary fixture loads: "+label); audit(g)
 	return g
 
@@ -37,7 +37,7 @@ func roundtrip(g, label: String):
 	serial += 1
 	var path = output_dir+"/save-%s-%d.json" % [label,serial]
 	expect(g.save_to(path).ok,"actual save "+label)
-	var clone = Session.new(1)
+	var clone = Session.new(1,"rain-night-v1")
 	expect(clone.load_from(path).ok and clone.snapshot() == g.snapshot(),"exact roundtrip "+label)
 	return clone
 
@@ -47,7 +47,7 @@ func advance_wave(g):
 	expect(g.snapshot().service.remainder_ms == 0,"wave boundary clears all excess time")
 
 func prepare_quick(extra: int = 0):
-	var g = Session.new(1)
+	var g = Session.new(1,"rain-night-v1")
 	act(g,"buy",{"item_id":"flour","quantity":5+extra})
 	act(g,"buy",{"item_id":"pumpkin","quantity":8+extra})
 	act(g,"buy",{"item_id":"ember_herb","quantity":3})
@@ -61,7 +61,7 @@ func prepare_quick(extra: int = 0):
 	return g
 
 func test_profile():
-	var g = Session.new(1); var s = g.snapshot()
+	var g = Session.new(1,"rain-night-v1"); var s = g.snapshot()
 	expect(s.version == 3 and s.profile_id == "rain-night-v1","new default enters actual v3 rain-night profile")
 	expect(s.night.day == 1 and s.night.weather == "rain" and s.night.event_id == "rain_return","first-night rain independent of day3")
 	expect(s.supply.has("ember_herb") and s.progression.skills == ["gust"],"first-night herbs and gust ready")
@@ -143,7 +143,7 @@ func test_guards_and_waves():
 	act(g,"settle"); reject(g,"settle")
 
 func heat_origin():
-	var g = Session.new(7)
+	var g = Session.new(7,"rain-night-v1")
 	act(g,"buy",{"item_id":"pumpkin","quantity":4}); act(g,"buy",{"item_id":"cream","quantity":4})
 	act(g,"finish_shopping"); act(g,"install",{"uid":1}); act(g,"open_shop"); advance_wave(g)
 	var boundary = g.snapshot(); boundary.next_uid = 101
@@ -190,7 +190,7 @@ func test_heat():
 	for g in [hot,no_pot]: traces.append({"scenario":"heat-capacity","service":g.snapshot().service,"items":g.snapshot().items,"sales":g.snapshot().sales,"ledger":g.snapshot().ledger})
 
 func test_menu_priority():
-	var a = Session.new(23)
+	var a = Session.new(23,"rain-night-v1")
 	for purchase in [["pumpkin",2],["cream",1],["ember_herb",1]]: act(a,"buy",{"item_id":purchase[0],"quantity":purchase[1]})
 	act(a,"finish_shopping"); act(a,"install",{"uid":1})
 	for id in ["moon_stew","ember_soup"]:
@@ -231,7 +231,7 @@ func test_cooling_and_day_boundary():
 	expect(g.snapshot().sales.filter(func(s): return s.day == 2 and s.revenue > 0).size() == 4,"all four cooled meals remain sellable to hearty customers")
 
 func test_save_identity():
-	var g = Session.new(1); var legacy = Session.new(1,"prototype-v1")
+	var g = Session.new(1,"rain-night-v1"); var legacy = Session.new(1,"prototype-v1")
 	var path = output_dir+"/legacy-preserved.json"
 	expect(legacy.save_to(path).ok,"real legacy v2 fixture saved")
 	var main_bytes = FileAccess.get_file_as_bytes(path); var backup_bytes = FileAccess.get_file_as_bytes(path+".bak")
@@ -257,7 +257,7 @@ func test_save_identity():
 	expect(g.validate_snapshot(corrupt) != "","only actual stew may carry temperature")
 	corrupt = underway.snapshot(); corrupt.service.orders[0].budget += 1
 	expect(underway.validate_snapshot(corrupt) != "","current-wave order cannot diverge from committed immutable queue")
-	var expedition = Session.new(1); act(expedition,"start_expedition")
+	var expedition = Session.new(1,"rain-night-v1"); act(expedition,"start_expedition")
 	path = output_dir+"/model-identity.json"; expect(expedition.save_to(path).ok,"model identity primary and backup created")
 	for field in ["version","ruleset","map_id","map_revision"]:
 		corrupt = expedition.snapshot(); corrupt.expedition[field] = "wrong"
@@ -266,7 +266,7 @@ func test_save_identity():
 		expect(not expedition.load_from(path).ok and expedition.snapshot() == unchanged,"wrong model identity cannot silently restore backup: "+field)
 
 func test_optional_hagrid():
-	var g = Session.new(7); act(g,"finish_shopping"); act(g,"open_shop"); advance_wave(g)
+	var g = Session.new(7,"rain-night-v1"); act(g,"finish_shopping"); act(g,"open_shop"); advance_wave(g)
 	for wave in [2,3]: act(g,"start_wave",{"wave_id":"n1-w%d" % wave}); advance_wave(g)
 	act(g,"settle"); act(g,"next_day")
 	act(g,"buy",{"item_id":"pumpkin","quantity":1}); act(g,"buy",{"item_id":"ember_herb","quantity":1})
@@ -333,7 +333,7 @@ func _check_metadata_recovery(source: Dictionary, corrupt: Dictionary, label: St
 	var damaged_hash = FileAccess.get_sha256(path)
 	var validation = original.validate_snapshot(corrupt)
 	expect(validation != "","malformed forecast metadata rejected: "+label)
-	var restored = Session.new(99); var result = restored.load_from(path)
+	var restored = Session.new(99,"rain-night-v1"); var result = restored.load_from(path)
 	expect(result.ok and result.code == "recovered_backup","damaged forecast metadata falls back to valid backup: "+label)
 	var identical = restored.snapshot() == source
 	expect(identical,"recovery preserves complete state including cash, inventory and requests: "+label)
@@ -344,7 +344,7 @@ func _check_metadata_recovery(source: Dictionary, corrupt: Dictionary, label: St
 	return {"mutation":label,"validation":validation,"load_code":result.code,"restored_original":identical,"files_unchanged":files_unchanged}
 
 func test_saved_forecast_metadata():
-	var initial = Session.new(23); roundtrip(initial,"metadata-initial"); expect(initial.view().demand_board.size() == 26,"initial forecast view is usable")
+	var initial = Session.new(23,"rain-night-v1"); roundtrip(initial,"metadata-initial"); expect(initial.view().demand_board.size() == 26,"initial forecast view is usable")
 	var g = prepare_quick(); roundtrip(g,"metadata-preparation")
 	act(g,"open_shop",{},"metadata-open-first"); act(g,"advance",{"delta_ms":1500})
 	var source = g.snapshot(); var rows = []
