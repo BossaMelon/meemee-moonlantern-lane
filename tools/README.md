@@ -39,11 +39,53 @@ python3 tools/with_render_lock.py -- ./tools/启动月灯巷.command --windowed 
 ```
 
 锁为同机同用户共享的 `/tmp/moonlantern-render-UID.lock`，跨工作树生效；无需删除锁文件。
-等待可 Ctrl-C 中断，命令退出（包括失败/终止）自动释放。命令原 argv、环境、stdout/stderr、
+等待可 Ctrl-C 中断，命令退出（包括失败/终止）自动释放。命令原 argv、其他环境、stdout/stderr、
 退出码保持，入口不经 shell 拼接、不打印敏感 argv，不开其他 app、不杀无关进程。
 只包完整前台命令，不后台化或只锁某个子阶段；headless 逻辑检查直接运行，**不使用此入口**。
 这是 Mac/POSIX 开发验收工具，不是游戏运行时依赖；锁不能替代当前 root 明确授予的渲染 slot，
 已在运行的旧窗口不会被接管或改变。
+
+需要验证外层锁来源的 Python supervisor 使用一次性继承交接 v1：wrapper **取得 EX 后**创建
+匿名管道，写入至多 2048 bytes、且不超过本机 `PIPE_BUF` 的 ASCII JSON，关闭写端，
+只继承只读端。`MOONLANTERN_RENDER_HANDOFF_FD` 仅定位该管道，不能作为证明。
+JSON 的精确字段为：
+
+```json
+{
+  "version": 1,
+  "pid": 12345,
+  "lock": {"fd": 3, "device": 1, "inode": 100, "uid": 501},
+  "receipt": {"fd": 4, "device": 1, "inode": 101, "uid": 501},
+  "command_sha256": "SHA256_OF_EXACT_COMMAND_JSON"
+}
+```
+
+命令摘要算法为 `sha256(json.dumps(list(command), ensure_ascii=True, separators=(",", ":")).encode("ascii"))`；
+不在回执或错误日志中披露命令参数。exec 保持 wrapper PID，锁与管道各自的 FD/dev/ino/uid 均绑定。
+消费 API 为 `tools.with_render_lock.consume_render_lock_handoff(command)`，在创建输出或子进程前
+调用一次。它检查匿名 FIFO、只读、可继承、身份、大小、严格 JSON 与立即 EOF，随后关闭回执 FD；
+缺失、旧回执、开放写端、非管道或身份／命令不符立即失败，不等待或重试。
+必须保存返回的 `proof`，在每个子阶段及最后报告前调用
+`tools.with_render_lock.verify_render_lock_handoff(proof, command)`，保留原锁 FD 直到完整 supervisor
+结束（包括 headless restore、子进程退出和报告）。验证器不对原锁 FD 调用 `flock`，不申请 EX；
+独立只读打开的 SH|NB 诊断必须与已有 EX 冲突。SH 成功则关闭诊断 FD 并拒绝，不把它变成持有锁。
+
+Python 启动须使用与 `sys.executable` **完全相同的可执行路径拼写**，不可用 PATH 别名；
+消费端的 `command = [sys.executable, *sys.orig_argv[1:]]`，保持解释器 flags 与脚本所有参数。
+这避免 macOS Framework 启动器改写 `sys.orig_argv[0]` 导致误判，不归一化或忽略参数。
+调用形状如下；仅在 root 实际分配 slot、固定源码和验收参数后执行：
+
+```sh
+render_python=/absolute/path/reported/by/sys.executable
+"$render_python" -B tools/with_render_lock.py -- "$render_python" -B tests/runtime/world_slice.py [ROOT_APPROVED_ARGS]
+```
+
+这是受控源码间交接，不能认证能伪造全部 FD／数据或修改代码的同用户恶意启动器。
+保持一次完整外层 wrapper；已有无消费 API 的渲染命令 CLI 不变。V02 接入及实际原生验收另由其 owner 完成。
+纯工具回归：`python3 -B tools/test_with_render_lock.py -v`，仅临时锁与 Python 子进程，不触碰共享锁或窗口。
+接口依据 [Python FD/pipe 文档](https://docs.python.org/3.14/library/os.html)、
+[解释器原始参数](https://docs.python.org/3.14/library/sys.html#sys.orig_argv) 与
+[Apple flock 语义](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)。
 
 ## Mac 源码启动器
 

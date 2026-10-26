@@ -24,6 +24,8 @@ jobs:
           fetch-depth: 0
       - name: Validate harness infrastructure
         run: python3 tools/gate.py --stage harness
+      - name: Verify render wrapper handoff
+        run: python3 -B tools/test_with_render_lock.py -v
       - name: Preserve gate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
