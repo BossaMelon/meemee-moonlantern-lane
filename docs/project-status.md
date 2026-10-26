@@ -4,11 +4,11 @@
 
 **Steam 可售品质目标仍 active、未完成，玩法改进为第一优先级。** 用户本次实际打开 r2（human PID `46285`）后原话：“不好玩，空间太小，主角都不能动，交互也很无聊”。这证明首屏/店内空间交互评价失败；未测整晚经营或当前新战斗，不能据此补造那些范围的结论。旧三日/雨夜代码与 gate 保留，不删不降；源码 CI、runtime、人类反馈、商业 IP 与发布分别记录，自动检查通过不能推导为好玩。
 
-**当前主线：登记 P10/P11/H07/V02，合同与组件 PR 仍待验收合入。** H03 状态转向 [PR #50](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/50) 已由 root 合入 main `afd8e5c035de0cf80b8b7c51987df06de045b5cc`。本轮从该 main 登记有限实现范围，仅改任务清单与本状态；不实现 gate、launcher 或游戏，不新增 chat/sub-agent，不因登记把依赖候选写成已合入。
+**当前主线：登记 P10/P11/H07/V02，H02 合同已合入，组件 PR 仍待验收。** H03 状态转向 [PR #50](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/50) 已由 root 合入 main `afd8e5c035de0cf80b8b7c51987df06de045b5cc`。本轮从该起点登记有限实现范围，并同步下述最新 main，仅改任务清单与本状态；不实现 gate、launcher 或游戏，不新增 chat/sub-agent，不因登记把依赖候选写成已合入。
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
-| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | [PR #52](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/52) 当前候选 `1731e99073da50d33c82d0da7a9017e744f30056`，root 已收敛接口，作者已同步当前 main；该候选已收尾暂停白名单/三原料 batch6 两趟完整束，最终 CI 进行中，尚未验收合入。 |
+| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | [PR #52](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/52) 最终 head `1731e99073da50d33c82d0da7a9017e744f30056` 经 root 实读接受、三项 required 通过后已原生合入 main `de1a78245b3e6e940311cc9540c0edd59cea85c5`。规格与接口已交付，不代表 world 玩法已实现或好玩。 |
 | P02 有限运动/拿放 probe | 月灯巷｜像素界面与交互；9807 工作树 `codex/p02-walk-world-probe`；Sol high / Standard | [PR #51](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/51) 候选 `1370a419f116b99b696cb1ecbf0ec72f59439d04`；不含经济或保存，不冒充新经营实现，仍待验收合入。 |
 | A01 行走动画 | 月灯巷｜像素魔法世界与资产；`codex/a01-meemee-walk-cycle`；Astra high / Standard | [PR #53](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/53) 固定候选 `d521d04cb9c610421f00ac8c227274f5d08261b1`；四向动画待验收合入，P11 可消费固定候选，不争写 pixel。 |
 
