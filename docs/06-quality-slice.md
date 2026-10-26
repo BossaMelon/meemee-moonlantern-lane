@@ -4,7 +4,7 @@
 
 r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交互也很无聊”。实际 Main 是固定384×256画布、静态主角和打开册页的热点，没有店内移动核心状态。这足以否定入口体验；没有测完一晚/战斗，不能据此宣称所有环节都经真人验证。旧自动 Q、构建与操作说明不能替代这次玩法修正。
 
-旧雨夜规格恢复点：[13e5c50 的原 docs06](https://github.com/BossaMelon/meemee-moonlantern-lane/blob/13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29/docs/06-quality-slice.md)。旧 `quality-slice-v1.json`、旧 fixture、docs05 与 r2 包/活跃档保留原字节；旧契约中 design_source 的历史路径应在该 revision 读取。新事实源为 [world-slice-v1.json](../contracts/world-slice-v1.json) 与 [world fixture](../tests/fixtures/world-slice-scenarios.json)。仍是私人 HP 题材、离线本地存档；商业 IP 路线待用户决定，不购买、不发布。
+旧雨夜规格恢复点：[13e5c50 的原 docs06](https://github.com/BossaMelon/meemee-moonlantern-lane/blob/13e5c50cc78ab19c6dfea5864b7e5cb7b93aef29/docs/06-quality-slice.md)。旧 `quality-slice-v1.json`、旧 fixture、docs05 与不可变 r2 包保留原字节；真人活跃档允许本人正常保存，新world不访问它；旧契约中 design_source 的历史路径应在该 revision 读取。新事实源为 [world-slice-v1.json](../contracts/world-slice-v1.json) 与 [world fixture](../tests/fixtures/world-slice-scenarios.json)。仍是私人 HP 题材、离线本地存档；商业 IP 路线待用户决定，不购买、不发布。
 
 ## 1. 先交付哪段体验
 
@@ -63,7 +63,7 @@ Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_pause
 
 新增 `world-slice-v1`，save v4、world model v1，嵌入战斗model v2不改其规则。新默认Session/Main/launcher一致，独立用户数据目录 `moonlantern-world-slice-v1` 下再用 `user://profiles/world-slice-v1/moonlantern.json` 与 `.bak`。保存区域/脚点/朝向、携带UID、台内/烹饪/成菜、客人路径与订单/耐心/冻结报价预留、每波小费已付标记、门口返回位姿、RNG/事务/成长。暂停、离线不推进；重启清保持输入而不清进度。
 
-旧r2活跃档、rain-night、三日主/备档及包不得扫描、读写、迁移、覆盖；错误profile/version/map明确拒绝，不静默开新档。实际隔离验收对旧文件前后哈希，而非只比较路径字符串。坏JSON可恢复同profile有效备份，保留坏档。
+旧r2活跃档、rain-night、三日主/备档及包不得扫描、读写、迁移、覆盖；错误profile/version/map明确拒绝，不静默开新档。实际隔离验收只对非活动旧档、受控测试副本与不可变旧包作前后哈希，而非只比较路径字符串；不得读取/恢复/删除真人活跃r2档或要求其哈希静止，本人正常保存变化不属于失败。坏JSON可恢复同profile有效备份，保留坏档。
 
 核心owner以 `game/core/world_night_session.gd`、GameSession分派与 `tests/core/world_session_cases.gd` 接世界状态/几何/事务、保存及runner；UI owner负责Main及`scenes/ui/world_play.tscn`/`game/ui/world_play.gd`画面、相机、输入和册页；E owner处理必要战斗路由/返回钩子；美术先复用现有行走、木/石地板、台椅与灶台。此为接口依赖，不授予新路径或派工；H03/root随后登记实际任务。新完整候选一次combined代码主审，文档先由root收敛。
 
@@ -76,7 +76,7 @@ Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_pause
 | WS03 | 真批量投入→2秒料理→成菜，两种出餐行为/热余菜差异；暂停/读档不复制。 |
 | WS04 | 亲递下一服务步成交，首客可选小费报价/合计/账本守恒；自动无tip、预算不足只付基础价、错菜/在途保存/换请求与读档重复交付反例。 |
 | WS05 | 五seed两路线两价格档，一晚→成长→次晨/菇圃；接力减少手搬而不免费出菜。 |
-| WS06 | 携物/料理/客人途中/交付/门口等完整恢复；旧r2/旧profile哈希不变。 |
+| WS06 | 携物/料理/客人途中/交付/门口等完整恢复；非活动旧档/测试副本/不可变旧包哈希不变；新world不访问真人活跃r2档。 |
 | WS07 | 三种真实InputEvent首段及一晚，3–5分钟首收入观察、全屏/窄屏与独立进程恢复；不可用probe或直接core替代。 |
 | WSH | 新真人首分钟是否能发现移动/拿放、是否理解给客人、搬运是否无聊、是否愿意再经营；旧负面保留，未玩部分明确未验。 |
 

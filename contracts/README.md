@@ -38,6 +38,6 @@ fixture 的 `configuration` 是可消费输入，`scenarios` 保留既有 id/see
 
 [world-slice-v1.json](world-slice-v1.json) 与 [world-slice-scenarios.json](../tests/fixtures/world-slice-scenarios.json) 对应当前 [docs06](../docs/06-quality-slice.md)。r2真人入口反馈为负面；旧Q通过不证明新的空间经营体验。旧quality/prototype JSON、fixtures与docs05保留原字节；旧quality的design_source历史路径在上方r2 revision读取。
 
-新suite/milestone为`world-slice`，schema_version仍1；WS01–WS06 required automated、WS07 runtime、WSH human。目标runner协议为`tests/run.gd -- --suite world-slice --report ABS_REPORT`，当前尚未接入时必须拒绝，不能回落到旧suite。静态规格/运动probe不等于经营执行，WS07/WSH不能写入自动passed。新core/UI默认`world-slice-v1`、save v4，独立用户数据目录与路径；旧活跃r2/雨夜/三日主备档不读写/迁移。
+新suite/milestone为`world-slice`，schema_version仍1；WS01–WS06 required automated、WS07 runtime、WSH human。目标runner协议为`tests/run.gd -- --suite world-slice --report ABS_REPORT`，当前尚未接入时必须拒绝，不能回落到旧suite。静态规格/运动probe不等于经营执行，WS07/WSH不能写入自动passed。新core/UI默认`world-slice-v1`、save v4，独立用户数据目录与路径；新world不访问旧r2/雨夜/三日主备档；哈希守卫只覆盖非活动旧档、测试副本及不可变包，真人活跃r2档允许本人正常保存，不读取/恢复/删除或要求哈希静止。
 
 fixture.configuration.layout是店巷几何/操作锚点的唯一静态数据源，矩形中心坐标；生产核心可内置校验一致的布局，UI只读Core geometry，运行包不读取tests/fixtures。world_input只设置保持轴，不写持久requests/经济流水；world_interact才沿请求防重。亲递在下一50ms服务步成交，每波首客可选2金币小费，与base_price/paid_total在唯一交付点原子入账；自动服务无tip且正常路线不得依赖tip。接口仍为这两个命令，不增加系统。固定五seed、两路线、两价格档覆盖实际循环与保存反例；经济预测不可复制成passed。H02只交设计/contract/fixture，实际范围和依赖由root/H03登记，正式完整候选按既定预算combined审阅。

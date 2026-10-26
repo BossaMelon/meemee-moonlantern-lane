@@ -347,10 +347,10 @@
       "acceptance_ids": ["WS01", "WS04", "WS06"],
       "steps": [
         "At every save boundary fork continuous/save/restart with identical later inputs, test map/profile/version corruption and same-profile valid backup.",
-        "Run real old r2/rain-night/three-day and new launchers against isolated temporary copies; hash old main/bak and package inputs before/after new default play/save."
+        "Run old r2/rain-night/three-day and new launchers only against isolated controlled test copies. Hash guards cover inactive old saves, controlled copies and immutable packages; never read/restore/delete active human r2 save files or require their hashes to remain fixed. Verify new world itself makes no access to old paths."
       ],
       "outcomes": [
-        "Position/facing/region/carry/jobs/customer/order/meal/return/RNG are equal apart from explicitly cleared held input. Old artifacts untouched; no hidden migration."
+        "Position/facing/region/carry/jobs/customer/order/meal/return/RNG are equal apart from explicitly cleared held input. Guarded inactive artifacts/copies untouched; active human saving remains allowed. New world never accesses old player saves; no hidden migration."
       ]
     },
     {

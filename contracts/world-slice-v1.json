@@ -33,8 +33,9 @@
     "old_profiles": ["rain-night-v1", "prototype-v1"],
     "rules": [
       "New Main, Session default, launcher and save/load defaults select this profile together; no hidden opt-in mode.",
-      "Use an independent user-data root AND new path. Never scan/read/migrate/overwrite active r2, rain-night or three-day main/bak. Explicitly supplied old/wrong-profile files fail unchanged.",
-      "Bad JSON may recover a valid same-profile/same-version backup; identity/version/map mismatch fails without silent fallback/new game. Unknown fields cannot bypass UID/economy validation."
+      "Use an independent user-data root AND new path. New world never scans/reads/migrates/overwrites active r2, rain-night or three-day main/bak. Explicitly supplied old/wrong-profile test copies fail unchanged; never probe actual active player files.",
+      "Bad JSON may recover a valid same-profile/same-version backup; identity/version/map mismatch fails without silent fallback/new game. Unknown fields cannot bypass UID/economy validation.",
+      "Hash-invariance guards cover only inactive old saves, controlled test copies and immutable old packages. Active human r2 saves may change normally; do not read/restore/delete them or treat normal saving as failure. Prove new world does not access those paths using isolated test evidence."
     ]
   },
   "movement": {
@@ -391,7 +392,7 @@
       "evidence_kinds": ["automated_case_report", "action_trace"],
       "pass_conditions": [
         "在携料、台内、烹饪、成菜、预留、客人途中、门口/巷道、战斗返程、升级后分别保存重启，与同输入连续分支等价。 包含manual50ms预留、冻结报价与每波小费已付标记。",
-        "旧r2活跃档与备份、rain-night/三日档及旧包前后哈希不变；新Main默认新profile，错版本/地图/坏档边界有实际读写证据。",
+        "仅非活动旧档、受控测试副本及不可变旧包前后哈希不变；新world默认新profile且不访问真人活跃r2档。本人正常保存可改变活跃档，不读取/恢复/删除或要求哈希静止。错版本/地图/坏档边界使用独立测试副本验证。",
         "暂停/失焦/模态/离线不推进或残留输入，request/transaction/RNG与经济守恒保持。 高频world_input仅更新保持轴，不使持久requests/经济流水随输入帧数增长。"
       ]
     },
