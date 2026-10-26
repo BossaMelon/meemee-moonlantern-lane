@@ -21,6 +21,7 @@ func _initialize():
 	var args = OS.get_cmdline_user_args()
 	if args.size() == 2 and args[0] == "--input-only": folder = args[1]
 	elif args.size() == 2 and args[0] == "--clarity": execution = "income"; clarity_run = true; folder = args[1]
+	elif args.size() == 3 and args[0] == "--clarity" and args[1] in ["keyboard", "pad", "touch"]: execution = "income"; clarity_run = true; input_mode = args[1]; folder = args[2]
 	elif args.size() in [4,5] and args[0] == "--first-income" and args[1] in ["keyboard", "pad", "touch"] and args[2] in ["manual", "automatic"]:
 		execution = "income"; input_mode = args[1]; route = args[2]; folder = args[3]
 		if args.size() == 5:

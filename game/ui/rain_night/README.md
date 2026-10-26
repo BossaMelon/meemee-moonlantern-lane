@@ -12,7 +12,7 @@ WASD/方向键、左摇杆与触摸摇杆发送 held 轴；F、手柄 A 和屏�
 
 世界控件按最后真实输入切换：键鼠显示轻量 F/方向键/Esc 提示，手柄显示 A/左摇杆/Start，触屏事件显示摇杆与互动、暂停按钮。忽略模拟鼠标/触屏伴随事件和摇杆死区漂移；模式切换不产生事务，也不改变暂停、模态和动作阶段的输入互斥。情境提示跟随 Core 目标锚点；烹饪中显示真实 job 名称与剩余时间，不把空手放置拒绝当主反馈。
 
-菜谱和菜单直接显示 forecast 及各波 quick/hearty/warm 需求。配方解释来自公开 inputs/effect_id/requires_device，中文材料与柜内、手上、台内数量来自 inventory；按真实计划批量显示所需和缺料。缺料不禁用未来计划。菜单显示当前实际售价与价格档位。`world_play.gd -- --clarity ABS_EMPTY_DIR` 用实际输入检查这条信息链，无 Core 指令夹具。
+菜谱和菜单直接显示 forecast 及各波 quick/hearty/warm 需求。配方解释来自公开 inputs/effect_id/requires_device，中文材料与柜内、手上、台内数量来自 inventory；按真实计划批量显示所需和缺料。缺料不禁用未来计划。菜单显示当前实际售价与价格档位。`world_play.gd -- --clarity [keyboard|pad|touch] ABS_EMPTY_DIR` 用实际输入检查这条信息链，无 Core 指令夹具；省略模式时使用 keyboard。
 
 `world/item_group.gd` 将同种真实物品显示为图标与计数，metadata 保留完整 item_uids；携带组跟随手边浮盘，台内/成菜组及状态读取真实台面和 job。`visual_uid_bindings()` 展开这些 UID 供验收，不把一张组图当作新增库存。新 helper 属运行时源码集合；不能沿用未包含它的旧 source hash 集合。
 
