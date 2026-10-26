@@ -245,6 +245,9 @@ try {
         try { $null = Invoke-Owned $python @($sourceGuard,$fixtureRepo,$fixtureSha,(Join-Path $ownedRoot 'fixture-source-invalid.json')) $ownedRoot 20 'fixture-source-changed' }
         catch { if ($_.Exception.Message -notmatch 'Nonzero exit') { throw }; $rejected=$true }
         if (-not $rejected) { throw 'Changed Git blob fixture accepted.' }
+        $null = Invoke-Owned $python @('-m','unittest','discover','-s',(Join-Path $checkout 'tools'),'-p','test_build_local_demo.py','-k','IsolationFileGuards') $checkout 30 'fixture-config-portability'
+        $configFixtureLog=Read-Log (Join-Path $ReportDirectory 'fixture-config-portability-stderr.log')
+        if ($configFixtureLog -notmatch '(?m)^Ran 4 tests in ' -or $configFixtureLog -notmatch '(?m)^OK\r?$') { throw 'Portable private-config fixtures did not pass all four tests without skips.' }
         $fake = Join-Path $ownedRoot 'fixture import.ps1'
         [IO.File]::WriteAllText($fake, @'
 param($Channel,$Log)
@@ -276,7 +279,7 @@ exit 0
         if (-not $rejected) { throw 'Child-process timeout fixture accepted.' }
         $childResult=$executions[$executions.Count-1].process
         if ($childResult.ExitCode -ne 0 -or $childResult.ObservedPids.Count -lt 2) { throw 'Fixture did not observe a normally exited parent and its remaining child.' }
-        $summary.fixture_cases = @('wrong archive hash refused','changed Git blob refused','clean exit-zero import accepted','stdout/stderr/engine-log exit-zero errors refused','closed-parent owned child terminated and job empty')
+        $summary.fixture_cases = @('wrong archive hash refused','changed Git blob refused','four portable private-config identity/link/byte fixtures passed','clean exit-zero import accepted','stdout/stderr/engine-log exit-zero errors refused','closed-parent owned child terminated and job empty')
         $summary.status='passed; fixtures only, no game or Windows source acceptance'
     } else {
         if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Actual download/source validation is restricted to this GitHub runner invocation.' }
@@ -312,27 +315,97 @@ exit 0
         $null = Invoke-Owned $engine @('--headless','--path',$source,'--import','--log-file',$importLog) $source 120 'import' $importLog
         $summary.imported_texture_count=@(Get-ChildItem -LiteralPath (Join-Path $source '.godot/imported') -File -Filter '*.ctex').Count
         if ($summary.imported_texture_count -lt 1) { throw 'Cold import did not produce actual texture resources.' }
-        # P07 owns the probe/provider. Missing dependency is a real failure; never skip.
-        $fontOutput=Join-Path $tempBase 'w01-font'
-        if (Test-Path -LiteralPath $fontOutput) { throw 'Font probe output must be fresh.' }
-        $fontLog=Join-Path $ReportDirectory 'font-engine.log'
-        $null = Invoke-Owned $engine @('--headless','--path',$source,'--log-file',$fontLog,'--script','game/ui/checks/portable_font.gd','--',$fontOutput) $source 120 'portable-font' $fontLog
-        $font=Read-Log (Join-Path $fontOutput 'font-report.json') | ConvertFrom-Json -AsHashtable
-        if ($font.protocol -ne 1 -or $font.checks -lt 1 -or @($font.failures).Count -or @($font.missing).Count -or -not @($font.fonts).Count -or -not @($font.bindings).Count -or $font.required_han -lt 1 -or $font.layouts.Count -ne 4) { throw 'Font probe has missing glyphs/bindings or incomplete evidence.' }
-        $manifest=Read-Log (Join-Path $source 'assets/fonts/font-manifest.json') | ConvertFrom-Json -AsHashtable
-        $expectedFonts=@{}
-        foreach ($row in @($manifest.primary)+@($manifest.fallbacks)) { $expectedFonts[$row.path]=$row.sha256 }
-        foreach ($row in $font.fonts) {
-            if ($row.class -ne 'FontFile' -or $row.allow_system_fallback -ne $false -or -not $expectedFonts.Contains($row.path) -or $row.sha256 -ne $expectedFonts[$row.path]) { throw 'Font probe data differs from pinned packaged font.' }
-        }
-        foreach ($row in $font.bindings) {
-            if (-not @($font.fonts | Where-Object { $_.path -eq $row.font_path -and $_.instance -eq $row.font_instance }).Count) { throw 'Main text binding does not use the actual packaged font instance.' }
-        }
+        # Run the unchanged P07 producer at both declared headless viewport sizes.
+        $fontRuns=@{}
         $before=Read-Log (Join-Path $ReportDirectory 'source-before.json') | ConvertFrom-Json -AsHashtable
-        foreach ($name in @('game/ui/portable_font.gd','game/ui/main.gd','game/ui/checks/portable_font.gd','assets/fonts/font-manifest.json','assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import')) {
-            if ($font.source_sha256[$name] -ne $before.files[$name].sha256) { throw "Font probe source differs from verified Git blob: $name" }
+        foreach ($sizeCase in @(@{name='large';leaf='w01-font';width=1440;height=904},@{name='small';leaf='w01-font-small';width=844;height=390})) {
+            $fontOutput=Join-Path $tempBase $sizeCase.leaf
+            if (Test-Path -LiteralPath $fontOutput) { throw 'Font probe output must be fresh.' }
+            $fontLog=Join-Path $ReportDirectory $(if ($sizeCase.name -eq 'large') { 'font-engine.log' } else { 'font-small-engine.log' })
+            $fontArgs=@('--headless','--path',$source,'--log-file',$fontLog,'--script','game/ui/checks/portable_font.gd','--',$fontOutput,'--path-tests')
+            if ($sizeCase.name -eq 'small') { $fontArgs+=@('--small') }
+            $null = Invoke-Owned $engine $fontArgs $source 120 ('portable-font-'+$sizeCase.name) $fontLog
+            $font=Read-Log (Join-Path $fontOutput 'font-report.json') | ConvertFrom-Json -AsHashtable
+            if ($font.protocol -ne 1 -or $font.checks -lt 1 -or @($font.failures).Count -or @($font.missing).Count -or -not @($font.fonts).Count -or -not @($font.bindings).Count -or $font.required_han -lt 1 -or $font.layouts.Count -ne 4 -or $font.output_policy.fresh -ne $true) { throw 'Font probe has missing glyphs/bindings or incomplete fresh evidence.' }
+            if ($font.output_directory.Replace('\','/') -cne $fontOutput.Replace('\','/')) { throw 'Font probe used the wrong output directory.' }
+            if ((($font.layouts.entry | Sort-Object) -join ',') -cne 'ledger,menu-board,recipe-book,vendor') { throw 'World font probe did not check all four production books.' }
+            foreach ($layout in $font.layouts) {
+                $dimensions=[regex]::Match($layout.ui_size,'^\(\s*(\d+)(?:\.0+)?,\s*(\d+)(?:\.0+)?\)$')
+                if (-not $dimensions.Success -or [int]$dimensions.Groups[1].Value -ne $sizeCase.width -or [int]$dimensions.Groups[2].Value -ne $sizeCase.height) { throw 'Font probe viewport dimensions differ from the declared size.' }
+            }
+            $manifest=Read-Log (Join-Path $source 'assets/fonts/font-manifest.json') | ConvertFrom-Json -AsHashtable
+            $expectedFonts=@{}
+            foreach ($row in @($manifest.primary)+@($manifest.fallbacks)) { $expectedFonts[$row.path]=$row.sha256 }
+            foreach ($row in $font.fonts) {
+                if ($row.class -ne 'FontFile' -or $row.allow_system_fallback -ne $false -or -not $expectedFonts.Contains($row.path) -or $row.sha256 -ne $expectedFonts[$row.path]) { throw 'Font probe data differs from pinned packaged font.' }
+            }
+            foreach ($row in $font.bindings) {
+                if (-not @($font.fonts | Where-Object { $_.path -eq $row.font_path -and $_.instance -eq $row.font_instance }).Count) { throw 'Main text binding does not use the actual packaged font instance.' }
+            }
+            $fontSources=@('game/ui/portable_font.gd','game/ui/main.gd','game/ui/checks/portable_font.gd','assets/fonts/font-manifest.json','assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import','game/ui/world_play.gd','game/ui/world/world_input.gd','game/ui/world/world_books.gd','game/ui/world/world_controller.gd','game/ui/world/item_group.gd','game/ui/world/world_structure.gd')
+            if ((($font.source_sha256.Keys | Sort-Object) -join ',') -cne (($fontSources | Sort-Object) -join ',')) { throw 'Font producer source bindings differ from the frozen eleven-source set.' }
+            foreach ($name in $fontSources) {
+                if ($font.source_sha256[$name] -ne $before.files[$name].sha256) { throw "Font probe source differs from verified Git blob: $name" }
+            }
+            $fontRuns[$sizeCase.name]=@{checks=$font.checks; required_characters=$font.required_characters; required_han=$font.required_han; bindings=$font.bindings.Count; fonts=$font.fonts; missing=$font.missing; layouts=$font.layouts; path_cases=$font.path_cases; source_sha256=$font.source_sha256; native_pixels_verified=$false}
         }
-        $summary.portable_font=@{checks=$font.checks; required_characters=$font.required_characters; required_han=$font.required_han; bindings=$font.bindings.Count; fonts=$font.fonts; missing=$font.missing; source_sha256=$font.source_sha256; native_pixels_verified=$false}
+        $summary.portable_font=$fontRuns.large
+        $summary.portable_font_small=$fontRuns.small
+
+        # Reuse the fixture-free H07 Main probe in a separate bound source input.
+        # This creates no app, engine copy, export or native window.
+        $mainHelper=Join-Path $ownedRoot 'source_main_checks.py'
+        [IO.File]::WriteAllText($mainHelper, @'
+import json,os,sys
+from pathlib import Path
+sys.path.insert(0,str(Path(sys.argv[2])/'tools'))
+import build_local_demo as demo
+command,source,binding_path=sys.argv[1:4]
+if command=='prepare':
+ project,profile,probe,sha=sys.argv[4:]
+ binding=demo.prepare_source_probe(Path(source),sha,Path(project),profile,Path(probe))
+ demo.validate_source_probe_projection(binding);demo.json_write(Path(binding_path),binding)
+else:
+ binding=demo.json_read(Path(binding_path));mode,report_path,execution_path,label,engine_dir=sys.argv[4:]
+ report=demo.json_read(Path(report_path));rows=json.loads(Path(execution_path).read_text(encoding='utf-8-sig'))
+ entry=next(row for row in rows if row['label']==label);process=entry['process']
+ demo.require(process['ExitCode']==0 and process['AllOwnedProcessesExited'] and not process['TimedOut'],'Main process did not finish cleanly')
+ demo.require(report['process_id'] in process['ObservedPids'],'Main PID was not observed in the owned Job')
+ executable=Path(report['executable']).resolve();engine=Path(engine_dir).resolve()
+ demo.require(executable in [engine/'Godot_v4.7.2-stable_win64.exe',engine/'Godot_v4.7.2-stable_win64_console.exe'],'Main used an unknown engine')
+ demo.validate_probe(report,{'pid':report['process_id']},mode,binding['profile'],binding['source_commit'],executable,binding['main_scene'],binding['source_files_sha256'])
+ expected=Path(os.environ['APPDATA'])/binding['profile']
+ demo.require(str(Path(report['user_data_dir']).resolve())==str(expected.resolve()),'unexpected Windows userdata root')
+ demo.validate_source_probe_projection(binding)
+ if mode=='restore':
+  save=demo.json_read(Path(report_path).with_name('main-save.json'));player=demo.json_read(Path(report_path).with_name('main-player-directory.json'))
+  demo.require(len({player['process_id'],save['process_id'],report['process_id']})==3,'Main checks did not use three processes')
+  demo.require(demo.same_snapshot(save['snapshot'],report['snapshot']) and all(save[k]==report[k] for k in ['save_hash','backup_hash']),'Main restore changed the snapshot or rewrote primary/backup')
+ print('Verified source-only Main',mode,report['process_id'])
+'@, $utf8)
+        $mainSource=Join-Path $ownedRoot '默认档 source probe'
+        $mainProbe=Join-Path $ownedRoot 'source-main-probe.gd'
+        $mainBinding=Join-Path $ReportDirectory 'main-source-binding.json'
+        $mainProfile='MoonlanternH07Source/'+[guid]::NewGuid().ToString('N')+'/verify'
+        $null=Invoke-Owned $python @('-B',$mainHelper,'prepare',$source,$mainBinding,$mainSource,$mainProfile,$mainProbe,$sha) $source 60 'main-prepare'
+        $mainImportLog=Join-Path $ReportDirectory 'main-import-engine.log'
+        $null=Invoke-Owned $engine @('--headless','--path',$mainSource,'--import','--log-file',$mainImportLog) $mainSource 120 'main-import' $mainImportLog
+        $previousMainEnvironment=@{}
+        foreach ($key in @('MOON_DEMO_MODE','MOON_DEMO_REPORT','MOON_DEMO_EXPECTED_PROFILE','MOON_DEMO_BUILD_ID')) { $previousMainEnvironment[$key]=[Environment]::GetEnvironmentVariable($key,'Process') }
+        try {
+            $env:MOON_DEMO_EXPECTED_PROFILE=$mainProfile; $env:MOON_DEMO_BUILD_ID=$sha
+            foreach ($mode in @('player-directory','save','restore')) {
+                $env:MOON_DEMO_MODE=$mode
+                $env:MOON_DEMO_REPORT=Join-Path $ReportDirectory ('main-'+$mode+'.json')
+                $mainLog=Join-Path $ReportDirectory ('main-'+$mode+'-engine.log')
+                $label='main-'+$mode
+                $null=Invoke-Owned $engine @('--headless','--path',$mainSource,'--log-file',$mainLog,'--script',$mainProbe) $mainSource 120 $label $mainLog
+                $null=Invoke-Owned $python @('-B',$mainHelper,'validate',$source,$mainBinding,$mode,$env:MOON_DEMO_REPORT,(Join-Path $ReportDirectory 'executions.json'),$label,$engineDir) $source 60 ($label+'-validate')
+            }
+        } finally {
+            foreach ($key in $previousMainEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key,$previousMainEnvironment[$key],'Process') }
+        }
+        $summary.world_main_default=@{verified=$true; profile=$mainProfile; source_sha=$sha; independent_processes=3; fixture_free_source_input=$true; package_created=$false; native_verified=$false; input_route_verified=$false; binding_sha256=(Get-FileHash -LiteralPath $mainBinding -Algorithm SHA256).Hash.ToLowerInvariant()}
         $gateReport=Join-Path $ReportDirectory 'gate-report.json'
         try {
             $null = Invoke-Owned $python @((Join-Path $source 'tools/gate.py'),'--stage','prototype','--godot',$engine,'--report',$gateReport) $source $GateTimeoutSeconds 'gate'
@@ -357,11 +430,12 @@ exit 0
         }
         $gate=Get-Content -LiteralPath $gateReport -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         if ($gate.status -ne 'passed' -or $gate.gate -ne 'prototype' -or $gate.candidate.sha -ne $sha) { throw 'Actual source gate did not pass for this source SHA.' }
-        if ((($gate.case_reports.Keys | Sort-Object) -join ',') -ne 'prototype,quality-slice') { throw 'Both actual suites must be present.' }
+        if ((($gate.case_reports.Keys | Sort-Object) -join ',') -ne 'prototype,quality-slice,world-slice') { throw 'All three actual suites must be present.' }
         $summary.case_reports=@{}
-        foreach ($suite in @('prototype','quality-slice')) {
+        foreach ($suite in @('prototype','quality-slice','world-slice')) {
             $rows=$gate.case_reports[$suite].cases
             if (-not $rows -or @($rows | Where-Object { $_.status -ne 'passed' -or $_.checks -lt 1 }).Count) { throw "Failed/empty/skipped real cases: $suite" }
+            if ($suite -eq 'world-slice' -and ((($rows.id | Sort-Object) -join ',') -cne 'WS01,WS02,WS03,WS04,WS05,WS06')) { throw 'World must execute exactly WS01-WS06; runtime/human are separate.' }
             $summary.case_reports[$suite]=@{cases=$rows.Count; checks=($rows | Measure-Object -Property checks -Sum).Sum}
         }
         $null = Invoke-Owned $python @($sourceGuard,$source,$sha,(Join-Path $ReportDirectory 'source-after.json')) $source 60 'source-after'
