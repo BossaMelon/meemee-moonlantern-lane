@@ -33,7 +33,7 @@ func _initialize() -> void:
 	for path: String in request.inventory:
 		var bytes := FileAccess.get_file_as_bytes(path)
 		inventory[path] = payload(bytes)
-		check(inventory[path] == request.inventory[path], "virtual resource mismatch " + path)
+		check(inventory[path].sha256 == request.inventory[path].sha256 and inventory[path].bytes == int(request.inventory[path].bytes), "virtual resource mismatch " + path)
 	for path: String in ["res://scenes/main.tscn", "res://scenes/expedition/expedition.tscn"]:
 		check(FileAccess.get_file_as_string(path).begins_with("[gd_scene"), "not a source text scene " + path)
 		check(ResourceLoader.load(path) is PackedScene, "cannot load PackedScene " + path)

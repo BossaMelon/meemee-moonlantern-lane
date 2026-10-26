@@ -115,6 +115,10 @@ def run(editor, argv, cwd, work, label, timeout=240):
     result = h06.run_process([str(editor), *map(str, argv)], str(cwd), timeout, log, uuid.uuid4().hex)
     h06.write_json(work/(label + '-process.json'), result)
     h06.process_ok(result)
+    if '--log-file' in argv:
+        engine_log = Path(argv[argv.index('--log-file') + 1])
+        require(engine_log.is_file(), 'engine log missing: ' + str(engine_log))
+        h06.error_free(engine_log)
     return h06.error_free(log)
 
 
