@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V02 source diagnostics; native first-loop preview is never WS07 completion.
+"""V02 source diagnostics; native first-loop and full-night roles are distinct.
 
 Route execution requires a fixed P10/P11 candidate and an explicitly requested
 CLI resolution or separately recorded headless logical Root preparation.
@@ -34,15 +34,16 @@ from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
 CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
-UI_CHECKPOINT = "ba4d2674940429cbcab1ea16cd8606aedea17c1c"
-UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
+UI_CHECKPOINT = "9d928a1e3d9a9f92b5f2248087a36b2c4833be2b"
+UI_REQUIRED = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
               "scenes/ui/world_play.tscn", "game/ui/world/walk_animation.gd",
               "game/ui/world/world_books.gd.uid", "game/ui/world/world_input.gd.uid",
               "game/ui/world/world_input.gd", "game/ui/world/world_controller.gd.uid",
               "game/ui/world/world_books.gd", "game/ui/world/world_controller.gd",
-              "game/ui/world/walk_animation.gd.uid"]
+              "game/ui/world/walk_animation.gd.uid", "game/ui/world/item_group.gd",
+              "game/ui/world/item_group.gd.uid"]
 PROTECTED_PIDS = {46285, 80978}
 FRONTMOST_COMMAND = ["/usr/bin/osascript", "-l", "JavaScript", "-e",
                     'ObjC.import("AppKit"); var front = $.NSWorkspace.sharedWorkspace.frontmostApplication; JSON.stringify({pid:Number(front.processIdentifier)})']
@@ -59,6 +60,36 @@ OWN_SOURCES = ["tests/runtime/world_slice.py", QA, QA + ".uid",
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def ui_source_bindings(source):
+    # Bind the actual candidate's complete UI script/UID set, including new helpers.
+    paths = set(UI_REQUIRED)
+    paths.update(p.relative_to(source).as_posix() for p in (source / "game/ui").rglob("*")
+                 if p.is_file() and (p.suffix == ".gd" or p.name.endswith(".gd.uid")))
+    require(all((source / path).is_file() for path in paths), "required UI source/UID missing")
+    # Existing check-only scripts may have no tracked UID; production world helpers may not.
+    require(all(path + ".uid" in paths for path in paths if path.startswith("game/ui/world/") and path.endswith(".gd")), "candidate world UI helper has no bound UID")
+    return {path: hashlib.sha256((source / path).read_bytes()).hexdigest() for path in sorted(paths)}
+
+
+def native_image_names(stage):
+    names = {"startup", "recipe-book", "recipe-materials", "shop-exit", "lane", "shop-return",
+             "carrying", "cooking", "ready", "dish-group", "customer-arriving", "first-sale"}
+    if stage == "night-quick":
+        names.update({"four-customers", "settled", "upgrade-purchased", "next-morning", "growth-demonstrated"})
+        names.update("wave-%d-service" % i for i in [1, 2, 3])
+        names.update("wave-%d-complete" % i for i in [1, 2, 3])
+        names.update("wave-%d-%s" % (i, action) for i in [2, 3] for action in ["cooking", "prepared"])
+    return names
+
+
+def stage_display(args, stage):
+    native = args.native and stage != "restore-exit"
+    return {"native": native, "native_night": args.native_night and native,
+            "fullscreen": args.fullscreen and native, "native_slot": args.native_slot if native else None,
+            "window_size": args.window_size if native or not args.native else None,
+            "headless_logical_size": args.restore_headless_logical_size if args.native_night and stage == "restore-exit" else args.headless_logical_size}
 
 
 def strict_json(raw):
@@ -244,9 +275,18 @@ def run_native(command, cwd, timeout, log, output, observations):
 
 def validate_native_images(obs, request, output):
     shots = obs.get("screenshots", [])
-    required = {"startup", "recipe-book", "lane", "carrying", "cooking", "ready", "customer-arriving", "first-sale"}
-    require({row.get("name") for row in shots} == required, "native first-loop root PNG set incomplete")
-    require(obs.get("ui_source_sha256") == request["ui_source_sha256"], "runtime 16-UI-source binding differs")
+    required = native_image_names(request.get("stage"))
+    require(len(shots) == len(required) and {row.get("name") for row in shots} == required, "native role root PNG set incomplete/duplicate")
+    require(obs.get("ui_source_sha256") == request["ui_source_sha256"], "runtime UI-source binding differs")
+    if request.get("stage") == "night-quick":
+        four = next(row for row in shots if row["name"] == "four-customers")
+        require(sum(c.get("spawned") is True and c.get("state") != "gone" for c in four.get("customers", [])) >= 4,
+                "four-customer image lacks four actual present customers")
+        require(four.get("phase") == "trading" and len(four.get("service", {}).get("orders", [])) == 4,
+                "four-customer image is not an actual four-order wave")
+        present_ids = {c["id"] for c in four["customers"] if c.get("spawned") is True and c.get("state") != "gone"}
+        require(len(set(four.get("visible_customer_ids", [])) & present_ids) >= 4,
+                "four actual customers are not all inside the observed world viewport")
     for row in shots:
         require(row.get("source_commit") == request.get("source_commit"), "PNG source/head binding differs")
         path = path_safe(Path(row["path"]))
@@ -323,10 +363,49 @@ def validate_geometry(obs, request):
             require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
 
 
+def validate_restored_effect(before, after, boundary):
+    """Compare actual saved snapshots, including economic ledger and UID history."""
+    require(after["paused"] is True and after["next_uid"] == before["next_uid"], "continued effect allocated extra UIDs or did not pause")
+    uids = [item["uid"] for item in after["items"]]
+    require(len(uids) == len(set(uids)), "continued effect duplicated item UIDs")
+    if boundary == "manual-reservation":
+        reservations = before["service"]["reservations"]
+        require(len(reservations) == 1 and reservations[0]["remaining_ms"] == 50, "original 50ms reservation missing")
+        pending = reservations[0]; uid = pending["item_uid"]
+        removed = [item for item in before["items"] if item["uid"] == uid]
+        require(len(removed) == 1 and removed[0]["location"] == "reserved", "original reserved UID missing")
+        require(after["sales"][:-1] == before["sales"] and len(after["sales"]) == len(before["sales"])+1, "restored reservation paid more than once")
+        sale = after["sales"][-1]
+        require(sale["uid"] == uid and sale["order_id"] == pending["order_id"] and sale["channel"] == "manual"
+                and all(sale[k] == pending[k] for k in ["base_price","tip","paid_total","cost"])
+                and sale["revenue"] == pending["paid_total"] == pending["base_price"]+pending["tip"], "restored sale differs from frozen UID/quote")
+        require(after["cash"] == before["cash"]+pending["paid_total"] and after["items"] == [i for i in before["items"] if i["uid"] != uid], "restored sale cash/UID removal mismatch")
+        require(after["service"]["reservations"] == [] and [o["status"] for o in after["service"]["orders"] if o["id"] == pending["order_id"]] == ["delivered"], "restored order not committed")
+        require(after["ledger"][:-1] == before["ledger"] and len(after["ledger"]) == len(before["ledger"])+1, "restored sale ledger duplicated")
+        entry = after["ledger"][-1]
+        require(entry["cash_delta"] == pending["paid_total"] and entry["removed"] == removed and entry["created"] == []
+                and entry["events"] == [sale], "sale ledger does not account for the original UID exactly once")
+    else:
+        require(boundary == "cooking", "unsupported continuation effect")
+        job = before["world"]["stations"][0]["job"]; expected = job["output_uids"]
+        require(job["remaining_ms"] == 2000 and len(expected) == len(set(expected)) == 3, "original three-output cooking job missing")
+        crafts = [e for e in before["ledger"] if e["kind"] == "craft" and [i["uid"] for i in e["created"]] == expected]
+        require(len(crafts) == 1, "original craft cost history missing")
+        craft = crafts[0]; outputs = [i for i in after["items"] if i["uid"] in expected]
+        require(sum(i["cost"] for i in craft["removed"]) == sum(i["cost"] for i in craft["created"]) == sum(i["cost"] for i in outputs), "restored cooking cost not conserved")
+        require(before["phase"] == "preparation" and before["service"]["next_wave_id"] is not None, "original cooking preparation wave missing")
+        expected_items = [{**i,"location":"carried","prepared_wave_id":before["service"]["next_wave_id"]} if i["uid"] in expected else i for i in before["items"]]
+        require(after["items"] == expected_items and after["world"]["carried_uids"] == expected, "restored cooking did not take exactly the original three UIDs")
+        station = after["world"]["stations"][0]
+        require(station["job"] is None and station["input_uids"] == [] and station["output_uids"] == [], "restored cooking restarted or left duplicate output")
+        require(after["cash"] == before["cash"] and after["sales"] == before["sales"] and after["ledger"] == before["ledger"], "restored cooking repeated production or changed economy")
+
+
 def validate_observation(obs, request, process):
     stage = request.get("stage", "inspect")
     native = request.get("native",False)
-    require(obs.get("kind") == ("world-source-native-first-observation" if native else "world-source-headless-observation") and obs.get("status") == ("observed" if stage == "inspect" else "exit_requested"),
+    role = "night" if request.get("native_night") else "first"
+    require(obs.get("kind") == ("world-source-native-" + role + "-observation" if native else "world-source-headless-observation") and obs.get("status") == ("observed" if stage == "inspect" else "exit_requested"),
             "missing/unexpected headless observation status")
     for key in ["nonce", "source_commit", "namespace", "user_dir", "mode"]:
         require(obs.get(key) == request[key], "observation identity mismatch: " + key)
@@ -350,7 +429,19 @@ def validate_observation(obs, request, process):
     require(names and len(names) == len(set(names)) and names[0] == "startup-before-input" and names[-1] == "pre-quit", "checkpoint sequence incomplete/duplicate")
     require(obs["checkpoints"][0]["input_count"] == 0, "startup barrier received input")
     if stage == "restore-exit":
-        require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
+        if request.get("continue_after_restore"):
+            require(not native and names == ["startup-before-input","settled-before-input","continued-effect","continued-complete","continued-saved","continued-reloaded","continued-stable","paused-continued","saved","pre-quit"], "restore continuation checkpoints missing")
+            rows = {r["name"]:r for r in obs["checkpoints"]}; proof = obs.get("restore_continuation",{})
+            require(proof.get("completed") is True and proof.get("boundary") == request["save_boundary"]
+                    and len(proof.get("load_retries",[])) == 2 and all(r["after_input_count"] > r["before_input_count"] for r in proof["load_retries"])
+                    and proof.get("post_reload_elapsed_ms",0) >= (2200 if request["save_boundary"] == "cooking" else 1000), "restore continuation/retry evidence incomplete")
+            require([p["id"] for p in proof.get("gui_presses",[])] == ["resume","save","load","load","resume","save"], "actual continuation GUI presses missing/duplicated")
+            require(not snapshot_differences(rows["continued-saved"]["snapshot"],rows["continued-reloaded"]["snapshot"])
+                    and rows["continued-saved"]["files"] == rows["continued-reloaded"]["files"], "GUI reload changed completed state/files")
+            for name in ["continued-complete","continued-saved","continued-reloaded","continued-stable","pre-quit"]:
+                validate_restored_effect(rows["settled-before-input"]["snapshot"],rows[name]["snapshot"],request["save_boundary"])
+        else:
+            require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
     else:
         require("saved" in names and "paused-" + request["save_boundary"] in names, "requested real save boundary missing")
         if request["save_boundary"] in ["after-sale", "growth"]:
@@ -387,7 +478,8 @@ func _initialize():
 
 def run_source(args):
     output = new_output(args.output)
-    result = {"kind": "world-source-native-first-diagnostic" if args.native else "world-source-headless-preflight", "status": "failed",
+    role = "night" if args.native_night else "first"
+    result = {"kind": "world-source-native-" + role + "-diagnostic" if args.native else "world-source-headless-preflight", "status": "failed",
               "source_commit": args.candidate, "ws07_passed": False, "wsh_observed": False,
               "processes": [], "evidence": {}, "errors": [], "native":args.native,
               "native_slot":args.native_slot, "frontmost":[], "protected_pids":sorted(PROTECTED_PIDS), "native_process_started":False,
@@ -397,6 +489,7 @@ def run_source(args):
     def launch(label, command, timeout=35, native=False):
         log = output / (label + "-process.log")
         proc = run_native(command,output,timeout,log,output,result["frontmost"]) if native else run_owned(command, output, timeout, log)
+        proc.update(stage=label, display="macOS" if native else "headless", timeout_seconds=timeout)
         if native: result["native_process_started"] = True
         result["processes"].append(proc)
         write_json(output / (label + "-process.json"), proc)
@@ -428,7 +521,7 @@ def run_source(args):
         contract = read_json(source / "contracts/world-slice-v1.json")
         require(contract["profile"]["save_path"] == SAVE_PATH, "world contract save path changed")
         require((source / "game/ui/world_play.gd").is_file(), "P11 world scene is not ready")
-        ui_sources = {name:hashlib.sha256((source/name).read_bytes()).hexdigest() for name in UI_SOURCES}
+        ui_sources = ui_source_bindings(source)
         result["ui_source_sha256"] = ui_sources
         require(not (source / "override.cfg").exists(), "do not overwrite an existing override")
         tracked = file_states(p for p in source.rglob("*") if p.is_file())
@@ -456,26 +549,28 @@ def run_source(args):
         write_json(output / "source-manifest.json", {"candidate": candidate, "tree": tree,
                    "tracked": tracked, "after_import_and_override": generated})
         previous = None
-        for stage in ([args.stage] if args.native or args.stage == "inspect" else [args.stage,"restore-exit"]):
+        for stage in ([args.stage] if (args.native and not args.native_night) or args.stage == "inspect" else [args.stage,"restore-exit"]):
+            display = stage_display(args,stage)
+            stage_native, stage_size = display["native"], display["window_size"]
             request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
                        "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
-                       "save_boundary":args.save_boundary,"window_size":args.window_size,"headless_logical_size":args.headless_logical_size,"growth":args.growth,"tier":args.tier,
-                       "native":args.native,"fullscreen":args.fullscreen,"native_slot":args.native_slot,
+                       "save_boundary":args.save_boundary,"continue_after_restore":args.continue_after_restore,"growth":args.growth,"tier":args.tier,
+                       **display,
                        "ui_source_sha256":ui_sources,
                        "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
             if previous is not None:
                 expected = output / "restore-expected.json"; write_json(expected, previous)
                 request.update(previous=str(expected), previous_sha256=hashlib.sha256(expected.read_bytes()).hexdigest())
             request_path = output / (stage + "-request.json"); write_json(request_path, request)
-            flags = [] if args.window_size is None else ["--resolution", "x".join(map(str,args.window_size))]
-            display_flags = (["--fullscreen"] if args.fullscreen else ["--windowed"]) if args.native else ["--headless"]
-            timeout = args.native_timeout if args.native else (720 if stage.startswith("night-") else 150)
+            flags = [] if stage_size is None else ["--resolution", "x".join(map(str,stage_size))]
+            display_flags = (["--fullscreen"] if args.fullscreen else ["--windowed"]) if stage_native else ["--headless"]
+            timeout = args.native_timeout if stage_native else (720 if stage.startswith("night-") else 150)
             process = launch(stage, [engine, *display_flags, *flags, "--max-fps", "60", "--path", source,
-                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], timeout, args.native)
+                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], timeout, stage_native)
             error_free(output / (stage + "-engine.log"))
             observation = read_json(output / (stage + "-observation.json"))
             validate_observation(observation, request, process)
-            if args.native: validate_native_images(observation,request,output)
+            if stage_native: validate_native_images(observation,request,output)
             trace = [strict_json(line) for line in (output / (stage + "-inputs.jsonl")).read_text().splitlines()]
             require(trace == observation["inputs"], "raw input trace differs from observation")
             if stage == "inspect":
@@ -497,8 +592,9 @@ def run_source(args):
                     require(result["processes"][-2]["ended_ns"] <= process["started_ns"], "restore processes overlapped")
                 previous = {"snapshot":pre_quit,"files":stage_files}
         check_guards(generated)
-        result["status"] = "native-first-observed" if args.native else ("observed" if args.stage == "inspect" else "save-boundary-observed")
-        result["independent_restore_observed"] = not args.native and args.stage != "inspect"
+        result["status"] = "native-" + role + "-observed" if args.native else ("observed" if args.stage == "inspect" else "save-boundary-observed")
+        result["independent_restore_observed"] = (not args.native or args.native_night) and args.stage != "inspect"
+        result["restore_continuation_observed"] = args.continue_after_restore
     except (ValueError, OSError, KeyError, TypeError, BuildError, subprocess.SubprocessError, tarfile.TarError) as error:
         result["errors"].append(str(error))
     finally:
@@ -508,7 +604,7 @@ def run_source(args):
             result["status"] = "failed"; result["errors"].append(str(error))
         result["evidence"] = evidence_files(p for p in output.iterdir() if p.is_file() and p.name != "result.json")
         write_json(output / "result.json", result)
-    return 0 if result["status"] in ["observed", "save-boundary-observed", "native-first-observed"] else 2
+    return 0 if result["status"] in ["observed", "save-boundary-observed", "native-first-observed", "native-night-observed"] else 2
 
 
 def main():
@@ -519,26 +615,40 @@ def main():
     parser.add_argument("--mode", choices=["mouse", "touch", "pad"], required=True)
     parser.add_argument("--stage", choices=["inspect", "first-manual", "first-auto", "night-quick", "night-hot"], default="inspect")
     parser.add_argument("--save-boundary", choices=["carrying", "cooking", "customer", "manual-reservation", "after-sale", "growth"])
+    parser.add_argument("--continue-after-restore", action="store_true", help="headless pad/manual-reservation or touch/cooking only: resume, save/load twice, and verify no repeated effect")
     parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
     parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
     parser.add_argument("--headless-logical-size", type=int, nargs=2, help="explicit headless-only Root content scaling after Main.ready and before input; physical dummy size is retained and recorded")
     display = parser.add_mutually_exclusive_group()
-    display.add_argument("--fullscreen", action="store_true", help="native first-loop visual diagnostic only; separately authorized slot required")
+    display.add_argument("--fullscreen", action="store_true", help="native first-loop, or explicit --native-night; separately authorized slot required")
     display.add_argument("--windowed", action="store_true", help="native first-loop diagnostic at explicit --resolution")
     parser.add_argument("--resolution", help="native windowed WIDTH,HEIGHT or WIDTHxHEIGHT, e.g. 844,390")
     parser.add_argument("--native-slot", help="root-authorized slot label; a label alone does not grant authorization")
-    parser.add_argument("--native-timeout", type=int, default=150, help="native owned process bound, 15..180 seconds")
+    parser.add_argument("--native-night", action="store_true", help="explicit fullscreen night-quick/shelf/standard role; separately authorized slot required")
+    parser.add_argument("--restore-headless-logical-size", type=int, nargs=2, help="native-night only: explicit logical size for the subsequent independent HEADLESS restore")
+    parser.add_argument("--native-timeout", type=int, help="first-loop 15..180 seconds (default150); native-night 360..420 (default420)")
     parser.add_argument("--guard", type=Path, action="append", default=[], help="explicit archived/immutable file only; never active userdata")
     args = parser.parse_args()
     args.native = args.fullscreen or args.windowed
+    if args.native_timeout is None: args.native_timeout = 420 if args.native_night else 150
+    if args.native_night:
+        if not args.fullscreen or args.stage != "night-quick" or args.growth != "shelf" or args.tier != "standard" or args.save_boundary not in [None,"growth"]:
+            parser.error("native-night requires fullscreen night-quick/shelf/standard/growth")
+        if args.restore_headless_logical_size is None or any(a < b for a,b in zip(args.restore_headless_logical_size,[640,360])):
+            parser.error("native-night requires explicit subsequent --restore-headless-logical-size at least 640x360")
+    elif args.restore_headless_logical_size is not None:
+        parser.error("headless restore size is only for the native-night role")
+    if args.continue_after_restore and (args.native or args.stage != "first-manual" or (args.mode,args.save_boundary) not in [("pad","manual-reservation"),("touch","cooking")]):
+        parser.error("restore continuation only supports headless pad/manual-reservation or touch/cooking")
     if args.native:
         if not args.native_slot or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",args.native_slot):
             parser.error("native preview requires a separately authorized --native-slot; no native launch")
-        if args.stage not in ["first-manual","first-auto"] or args.save_boundary not in [None,"after-sale"]:
+        if not args.native_night and (args.stage not in ["first-manual","first-auto"] or args.save_boundary not in [None,"after-sale"]):
             parser.error("native preview only supports first-loop after-sale, not full-night/restore claims")
-        if args.window_size is not None or args.headless_logical_size is not None or not 15 <= args.native_timeout <= 180:
-            parser.error("native uses fullscreen or windowed --resolution and a 15..180 second bound")
+        low,high = (360,420) if args.native_night else (15,180)
+        if args.window_size is not None or args.headless_logical_size is not None or not low <= args.native_timeout <= high:
+            parser.error("native uses fullscreen or windowed --resolution and a %d..%d second bound" % (low,high))
         if args.fullscreen and args.resolution:
             parser.error("fullscreen observes screen bounds; do not supply a resolution")
         if args.windowed:

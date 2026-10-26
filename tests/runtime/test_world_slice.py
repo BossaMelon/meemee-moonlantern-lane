@@ -1,5 +1,7 @@
 """V02 supervisor unit/owned-child checks; never WS07 gameplay evidence."""
 import copy
+import contextlib
+import io
 from contextlib import nullcontext
 import json
 import os
@@ -221,7 +223,7 @@ class SupervisorTests(unittest.TestCase):
         # Deliberately incomplete PNG header, never a rendered game image.
         raw = self.root / "invalid-world-only.png"
         raw.write_bytes(b"\x89PNG\r\n\x1a\n" + struct.pack(">I",13) + b"IHDR" + struct.pack(">II",640,360))
-        names = ["startup","recipe-book","lane","carrying","cooking","ready","customer-arriving","first-sale"]
+        names = w.native_image_names("first-auto")
         rows = [{"name":name,"path":str(raw),"png_size":[640,360],"root_texture_size":[640,360]} for name in names]
         with self.assertRaisesRegex(ValueError,"root PNG replaced"):
             w.validate_native_images({"screenshots":rows,"ui_source_sha256":{}},{"ui_source_sha256":{}},self.root)
@@ -255,6 +257,101 @@ class SupervisorTests(unittest.TestCase):
                 result=subprocess.run(command+flags,capture_output=True,text=True)
                 self.assertEqual(result.returncode,2)
                 self.assertFalse(output.exists())
+
+    def test_restored_manual_effect_rejects_double_payment_uid_and_quote_changes(self):
+        # Synthetic nonzero-cost negative fixtures, not gameplay evidence.
+        item={"uid":8,"cost":3,"location":"reserved"}
+        pending={"item_uid":8,"order_id":"order-1","remaining_ms":50,"base_price":12,"tip":2,"paid_total":14,"cost":3}
+        before={"paused":True,"next_uid":9,"cash":60,"items":[item],"sales":[],"ledger":[],"service":{"reservations":[pending]}}
+        sale={"uid":8,"order_id":"order-1","channel":"manual","base_price":12,"tip":2,"paid_total":14,"revenue":14,"cost":3}
+        after={**before,"cash":74,"items":[],"sales":[sale],"ledger":[{"cash_delta":14,"removed":[item],"created":[],"events":[sale]}],"service":{"reservations":[],"orders":[{"id":"order-1","status":"delivered"}]}}
+        w.validate_restored_effect(before,after,"manual-reservation")
+        for fault in ["double-sale","double-cash","retained-uid","changed-tip","double-ledger"]:
+            bad=copy.deepcopy(after)
+            if fault == "double-sale": bad["sales"].append(copy.deepcopy(sale))
+            elif fault == "double-cash": bad["cash"]+=14
+            elif fault == "retained-uid": bad["items"]=[item]
+            elif fault == "changed-tip": bad["sales"][0]["tip"]=0
+            else: bad["ledger"]*=2
+            with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"manual-reservation")
+
+    def test_restored_cooking_rejects_extra_output_cost_drift_and_restart(self):
+        outputs=[{"uid":uid,"cost":cost,"location":"cooking","prepared_wave_id":None} for uid,cost in [(8,2),(9,3),(10,4)]]
+        job={"remaining_ms":2000,"output_uids":[8,9,10]}
+        craft={"kind":"craft","created":outputs,"removed":[{"uid":2,"cost":9}]}
+        before={"paused":True,"next_uid":11,"cash":60,"phase":"preparation","service":{"next_wave_id":"n1-w1"},"items":outputs,"sales":[],"ledger":[craft],"world":{"stations":[{"job":job}]}}
+        after={**before,"items":[{**i,"location":"carried","prepared_wave_id":"n1-w1"} for i in outputs],"world":{"stations":[{"job":None,"input_uids":[],"output_uids":[]}],"carried_uids":[8,9,10]}}
+        w.validate_restored_effect(before,after,"cooking")
+        for fault in ["duplicate-uid","new-uid","cost","wave","restart","recrafted"]:
+            bad=copy.deepcopy(after)
+            if fault == "duplicate-uid": bad["items"].append(copy.deepcopy(bad["items"][0]))
+            elif fault == "new-uid": bad["next_uid"]+=1
+            elif fault == "cost": bad["items"][0]["cost"]+=1
+            elif fault == "wave": bad["items"][0]["prepared_wave_id"]="wrong-wave"
+            elif fault == "restart": bad["world"]["stations"][0]["job"]=job
+            else: bad["ledger"].append(craft)
+            with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"cooking")
+
+    def test_restore_continuation_rejects_native_and_unapproved_routes_before_launch(self):
+        output=self.root/"never-created"
+        command=[sys.executable,str(Path(w.__file__)),"--candidate","a"*40,"--godot","missing","--output",str(output),"--mode","mouse","--continue-after-restore"]
+        for flags in [[],["--stage","first-manual","--save-boundary","cooking"],["--stage","first-auto","--fullscreen","--native-slot","not-authority"]]:
+            result=subprocess.run(command+flags,capture_output=True,text=True)
+            self.assertEqual(result.returncode,2);self.assertIn("restore continuation only supports",result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_native_binding_rejects_missing_new_item_group_source_or_uid(self):
+        for name in w.UI_REQUIRED + ["game/ui/world/future_helper.gd","game/ui/world/future_helper.gd.uid"]:
+            path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text("synthetic fixture")
+            if name.endswith(".gd"): Path(str(path)+".uid").write_text("uid://synthetic")
+        expected=w.ui_source_bindings(self.root)
+        self.assertIn("game/ui/world/future_helper.gd",expected)
+        self.assertIn("game/ui/world/future_helper.gd.uid",expected)
+        shots=[{"name":name} for name in w.native_image_names("first-auto")]
+        for path in ["game/ui/world/item_group.gd","game/ui/world/item_group.gd.uid","game/ui/world/future_helper.gd","game/ui/world/future_helper.gd.uid"]:
+            actual=expected.copy();del actual[path]
+            with self.subTest(path=path),self.assertRaisesRegex(ValueError,"source binding differs"):
+                w.validate_native_images({"ui_source_sha256":actual,"screenshots":shots},{"ui_source_sha256":expected},self.root)
+        (self.root/"game/ui/world/future_helper.gd.uid").unlink()
+        with self.assertRaisesRegex(ValueError,"no bound UID"):
+            w.ui_source_bindings(self.root)
+
+    def test_native_night_requires_explicit_role_bound_and_separate_headless_restore(self):
+        base=["world_slice.py","--candidate","a"*40,"--godot","/must-not-start","--output",str(self.root/"absent"),"--mode","mouse","--stage","night-quick","--fullscreen","--native-slot","not-authority"]
+        cases=[([],"first-loop after-sale"),(["--native-night"],"requires explicit subsequent"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","421"],"360..420"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--stage","night-hot"],"requires fullscreen night-quick"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--headless-logical-size","1280","720"],"360..420")]
+        for flags,message in cases:
+            error=io.StringIO()
+            with self.subTest(flags=flags),patch.object(sys,"argv",base+flags),patch.object(w,"run_source") as launch,contextlib.redirect_stderr(error):
+                with self.assertRaises(SystemExit) as raised: w.main()
+                self.assertEqual(raised.exception.code,2);self.assertIn(message,error.getvalue());launch.assert_not_called()
+        with patch.object(sys,"argv",base+["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","420"]),patch.object(w,"run_source",return_value=0) as launch:
+            self.assertEqual(w.main(),0)
+            args=launch.call_args.args[0]
+        self.assertEqual(args.save_boundary,"growth")
+        first=w.stage_display(args,"night-quick");restore=w.stage_display(args,"restore-exit")
+        self.assertTrue(first["native"] and first["native_night"] and first["fullscreen"])
+        self.assertIsNone(first["headless_logical_size"])
+        self.assertFalse(restore["native"] or restore["native_night"] or restore["fullscreen"])
+        self.assertIsNone(restore["native_slot"]);self.assertIsNone(restore["window_size"])
+        self.assertEqual(restore["headless_logical_size"],[1280,720])
+
+    def test_native_night_rejects_first_loop_or_unspawned_four_guest_evidence(self):
+        request={"stage":"night-quick","ui_source_sha256":{}}
+        obs={"screenshots":[{"name":name} for name in w.native_image_names("first-auto")],"ui_source_sha256":{}}
+        with self.assertRaisesRegex(ValueError,"root PNG set incomplete"):
+            w.validate_native_images(obs,request,self.root)
+        obs["screenshots"]=[{"name":name} for name in w.native_image_names("night-quick")]
+        four=next(row for row in obs["screenshots"] if row["name"]=="four-customers")
+        four.update(phase="trading",customers=[{"id":str(i),"spawned":False,"state":"arriving"} for i in range(4)],service={"orders":[{}]*4})
+        with self.assertRaisesRegex(ValueError,"four actual present"):
+            w.validate_native_images(obs,request,self.root)
+        for row in four["customers"]: row["spawned"]=True
+        four["visible_customer_ids"]=["0","1","2"]
+        with self.assertRaisesRegex(ValueError,"all inside the observed world viewport"):
+            w.validate_native_images(obs,request,self.root)
 
 
 if __name__ == "__main__":
