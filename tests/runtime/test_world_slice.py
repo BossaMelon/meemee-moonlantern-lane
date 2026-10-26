@@ -256,6 +256,47 @@ class SupervisorTests(unittest.TestCase):
                 self.assertEqual(result.returncode,2)
                 self.assertFalse(output.exists())
 
+    def test_restored_manual_effect_rejects_double_payment_uid_and_quote_changes(self):
+        # Synthetic nonzero-cost negative fixtures, not gameplay evidence.
+        item={"uid":8,"cost":3,"location":"reserved"}
+        pending={"item_uid":8,"order_id":"order-1","remaining_ms":50,"base_price":12,"tip":2,"paid_total":14,"cost":3}
+        before={"paused":True,"next_uid":9,"cash":60,"items":[item],"sales":[],"ledger":[],"service":{"reservations":[pending]}}
+        sale={"uid":8,"order_id":"order-1","channel":"manual","base_price":12,"tip":2,"paid_total":14,"revenue":14,"cost":3}
+        after={**before,"cash":74,"items":[],"sales":[sale],"ledger":[{"cash_delta":14,"removed":[item],"created":[],"events":[sale]}],"service":{"reservations":[],"orders":[{"id":"order-1","status":"delivered"}]}}
+        w.validate_restored_effect(before,after,"manual-reservation")
+        for fault in ["double-sale","double-cash","retained-uid","changed-tip","double-ledger"]:
+            bad=copy.deepcopy(after)
+            if fault == "double-sale": bad["sales"].append(copy.deepcopy(sale))
+            elif fault == "double-cash": bad["cash"]+=14
+            elif fault == "retained-uid": bad["items"]=[item]
+            elif fault == "changed-tip": bad["sales"][0]["tip"]=0
+            else: bad["ledger"]*=2
+            with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"manual-reservation")
+
+    def test_restored_cooking_rejects_extra_output_cost_drift_and_restart(self):
+        outputs=[{"uid":uid,"cost":cost,"location":"cooking"} for uid,cost in [(8,2),(9,3),(10,4)]]
+        job={"remaining_ms":2000,"output_uids":[8,9,10]}
+        craft={"kind":"craft","created":outputs,"removed":[{"uid":2,"cost":9}]}
+        before={"paused":True,"next_uid":11,"cash":60,"items":outputs,"sales":[],"ledger":[craft],"world":{"stations":[{"job":job}]}}
+        after={**before,"items":[{**i,"location":"carried"} for i in outputs],"world":{"stations":[{"job":None,"input_uids":[],"output_uids":[]}],"carried_uids":[8,9,10]}}
+        w.validate_restored_effect(before,after,"cooking")
+        for fault in ["duplicate-uid","new-uid","cost","restart","recrafted"]:
+            bad=copy.deepcopy(after)
+            if fault == "duplicate-uid": bad["items"].append(copy.deepcopy(bad["items"][0]))
+            elif fault == "new-uid": bad["next_uid"]+=1
+            elif fault == "cost": bad["items"][0]["cost"]+=1
+            elif fault == "restart": bad["world"]["stations"][0]["job"]=job
+            else: bad["ledger"].append(craft)
+            with self.subTest(fault=fault),self.assertRaises(ValueError): w.validate_restored_effect(before,bad,"cooking")
+
+    def test_restore_continuation_rejects_native_and_unapproved_routes_before_launch(self):
+        output=self.root/"never-created"
+        command=[sys.executable,str(Path(w.__file__)),"--candidate","a"*40,"--godot","missing","--output",str(output),"--mode","mouse","--continue-after-restore"]
+        for flags in [[],["--stage","first-manual","--save-boundary","cooking"],["--stage","first-auto","--fullscreen","--native-slot","not-authority"]]:
+            result=subprocess.run(command+flags,capture_output=True,text=True)
+            self.assertEqual(result.returncode,2);self.assertIn("restore continuation only supports",result.stderr)
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

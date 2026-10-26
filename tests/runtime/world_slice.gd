@@ -145,7 +145,8 @@ func inspect_main():
 	if request.stage == "restore-exit":
 		checkpoint("settled-before-input")
 		if not restore_barrier(): return
-		await quit_from_pause()
+		if request.get("continue_after_restore",false): await continue_restored_boundary()
+		else: await quit_from_pause()
 	else:
 		if request.stage.begins_with("night-") and not await configure_menu(): return
 		await first_loop()
@@ -259,6 +260,58 @@ func checkpoint(label: String):
 
 func restore_barrier() -> bool:
 	return check(report.inputs.is_empty() and same(ui.game.snapshot(), previous.get("snapshot")) and same(save_files(), previous.get("files")), "complete automatic restore/raw primary-backup differs before input")
+
+func continue_restored_boundary():
+	var boundary = request.save_boundary
+	if not check(not request.get("native",false) and ((boundary == "manual-reservation" and request.mode == "pad") or (boundary == "cooking" and request.mode == "touch")),"unsupported restore continuation"): return
+	var baseline: Dictionary = previous.snapshot
+	var manual = boundary == "manual-reservation"
+	if not check(baseline.paused and (baseline.service.reservations.size() == 1 if manual else baseline.world.stations[0].job is Dictionary),"restored pending effect missing"): return
+	var original: Dictionary = (baseline.service.reservations[0] if manual else baseline.world.stations[0].job).duplicate(true)
+	if not check(int(original.remaining_ms) == (50 if manual else 2000),"unexpected restored duration"): return
+	var expected_uids: Array = [original.item_uid] if manual else original.output_uids.duplicate()
+	var costs: Dictionary = {}
+	for item in baseline.items:
+		if item.uid in expected_uids: costs[str(item.uid)] = item.cost
+	report.restore_continuation = {"boundary":boundary,"original":original,"initial_cash":baseline.cash,"item_costs":costs,"load_retries":[],"completed":false}
+	write_report() # Preserve pending UID/order/cost facts before any new input.
+	await click_control("resume")
+	if not await wait_for(func(): return not view().paused,1000,"restore continuation real Resume"): return
+	if manual:
+		if not await wait_for(func(): return view().sales.any(func(s): return s.order_id == original.order_id and s.get("revenue",0)>0),2000,"restored manual reservation actually paid"): return
+	else:
+		if not await wait_for(func(): return station().job == null and same(station().output_uids,expected_uids),5000,"restored cooking completes original output UIDs"): return
+	checkpoint("continued-effect")
+	if not manual:
+		await interact("prep","take")
+		if not await wait_for(func(): return same(view().world.carried_uids,expected_uids) and station().output_uids.is_empty(),1000,"actually take restored cooked batch"): return
+	send_event(pause_event(true)); send_event(pause_event(false))
+	if not await wait_for(func(): return view().paused,1000,"pause completed restored effect"): return
+	checkpoint("continued-complete")
+	var completed = ui.game.snapshot()
+	await click_control("save")
+	if not await wait_for(func(): return same(JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH)),completed),1000,"completed effect saved through GUI"): return
+	checkpoint("continued-saved")
+	var saved_files = save_files()
+	for attempt in range(2):
+		var before_inputs = report.inputs.size()
+		await click_control("load")
+		for frame in range(2): await get_tree().process_frame
+		if not check(same(ui.game.snapshot(),completed) and same(save_files(),saved_files),"GUI Load retry altered completed snapshot or save bytes"): return
+		report.restore_continuation.load_retries.append({"attempt":attempt+1,"before_input_count":before_inputs,"after_input_count":report.inputs.size(),"files":save_files()})
+	checkpoint("continued-reloaded")
+	await click_control("resume")
+	if not await wait_for(func(): return not view().paused,1000,"resume after GUI reload"): return
+	var began = Time.get_ticks_msec(); var observe_ms = maxi(1000,int(original.remaining_ms)+200)
+	while Time.get_ticks_msec()-began < observe_ms:
+		if failed: return
+		await get_tree().process_frame
+	report.restore_continuation.post_reload_elapsed_ms = Time.get_ticks_msec()-began
+	send_event(pause_event(true)); send_event(pause_event(false))
+	if not await wait_for(func(): return view().paused,1000,"pause after duplicate-effect observation"): return
+	checkpoint("continued-stable")
+	report.restore_continuation.completed = true
+	await save_and_exit("continued")
 
 func wait_for(predicate: Callable, milliseconds: int, label: String) -> bool:
 	var deadline = Time.get_ticks_msec() + milliseconds

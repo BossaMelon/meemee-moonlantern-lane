@@ -323,6 +323,43 @@ def validate_geometry(obs, request):
             require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
 
 
+def validate_restored_effect(before, after, boundary):
+    """Compare actual saved snapshots, including economic ledger and UID history."""
+    require(after["paused"] is True and after["next_uid"] == before["next_uid"], "continued effect allocated extra UIDs or did not pause")
+    uids = [item["uid"] for item in after["items"]]
+    require(len(uids) == len(set(uids)), "continued effect duplicated item UIDs")
+    if boundary == "manual-reservation":
+        reservations = before["service"]["reservations"]
+        require(len(reservations) == 1 and reservations[0]["remaining_ms"] == 50, "original 50ms reservation missing")
+        pending = reservations[0]; uid = pending["item_uid"]
+        removed = [item for item in before["items"] if item["uid"] == uid]
+        require(len(removed) == 1 and removed[0]["location"] == "reserved", "original reserved UID missing")
+        require(after["sales"][:-1] == before["sales"] and len(after["sales"]) == len(before["sales"])+1, "restored reservation paid more than once")
+        sale = after["sales"][-1]
+        require(sale["uid"] == uid and sale["order_id"] == pending["order_id"] and sale["channel"] == "manual"
+                and all(sale[k] == pending[k] for k in ["base_price","tip","paid_total","cost"])
+                and sale["revenue"] == pending["paid_total"] == pending["base_price"]+pending["tip"], "restored sale differs from frozen UID/quote")
+        require(after["cash"] == before["cash"]+pending["paid_total"] and after["items"] == [i for i in before["items"] if i["uid"] != uid], "restored sale cash/UID removal mismatch")
+        require(after["service"]["reservations"] == [] and [o["status"] for o in after["service"]["orders"] if o["id"] == pending["order_id"]] == ["delivered"], "restored order not committed")
+        require(after["ledger"][:-1] == before["ledger"] and len(after["ledger"]) == len(before["ledger"])+1, "restored sale ledger duplicated")
+        entry = after["ledger"][-1]
+        require(entry["cash_delta"] == pending["paid_total"] and entry["removed"] == removed and entry["created"] == []
+                and entry["events"] == [sale], "sale ledger does not account for the original UID exactly once")
+    else:
+        require(boundary == "cooking", "unsupported continuation effect")
+        job = before["world"]["stations"][0]["job"]; expected = job["output_uids"]
+        require(job["remaining_ms"] == 2000 and len(expected) == len(set(expected)) == 3, "original three-output cooking job missing")
+        crafts = [e for e in before["ledger"] if e["kind"] == "craft" and [i["uid"] for i in e["created"]] == expected]
+        require(len(crafts) == 1, "original craft cost history missing")
+        craft = crafts[0]; outputs = [i for i in after["items"] if i["uid"] in expected]
+        require(sum(i["cost"] for i in craft["removed"]) == sum(i["cost"] for i in craft["created"]) == sum(i["cost"] for i in outputs), "restored cooking cost not conserved")
+        expected_items = [{**i,"location":"carried"} if i["uid"] in expected else i for i in before["items"]]
+        require(after["items"] == expected_items and after["world"]["carried_uids"] == expected, "restored cooking did not take exactly the original three UIDs")
+        station = after["world"]["stations"][0]
+        require(station["job"] is None and station["input_uids"] == [] and station["output_uids"] == [], "restored cooking restarted or left duplicate output")
+        require(after["cash"] == before["cash"] and after["sales"] == before["sales"] and after["ledger"] == before["ledger"], "restored cooking repeated production or changed economy")
+
+
 def validate_observation(obs, request, process):
     stage = request.get("stage", "inspect")
     native = request.get("native",False)
@@ -350,7 +387,18 @@ def validate_observation(obs, request, process):
     require(names and len(names) == len(set(names)) and names[0] == "startup-before-input" and names[-1] == "pre-quit", "checkpoint sequence incomplete/duplicate")
     require(obs["checkpoints"][0]["input_count"] == 0, "startup barrier received input")
     if stage == "restore-exit":
-        require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
+        if request.get("continue_after_restore"):
+            require(not native and names == ["startup-before-input","settled-before-input","continued-effect","continued-complete","continued-saved","continued-reloaded","continued-stable","paused-continued","saved","pre-quit"], "restore continuation checkpoints missing")
+            rows = {r["name"]:r for r in obs["checkpoints"]}; proof = obs.get("restore_continuation",{})
+            require(proof.get("completed") is True and proof.get("boundary") == request["save_boundary"]
+                    and len(proof.get("load_retries",[])) == 2 and all(r["after_input_count"] > r["before_input_count"] for r in proof["load_retries"])
+                    and proof.get("post_reload_elapsed_ms",0) >= (2200 if request["save_boundary"] == "cooking" else 1000), "restore continuation/retry evidence incomplete")
+            require(not snapshot_differences(rows["continued-saved"]["snapshot"],rows["continued-reloaded"]["snapshot"])
+                    and rows["continued-saved"]["files"] == rows["continued-reloaded"]["files"], "GUI reload changed completed state/files")
+            for name in ["continued-complete","continued-saved","continued-reloaded","continued-stable","pre-quit"]:
+                validate_restored_effect(rows["settled-before-input"]["snapshot"],rows[name]["snapshot"],request["save_boundary"])
+        else:
+            require(names == ["startup-before-input", "settled-before-input", "pre-quit"], "restore checkpoints missing")
     else:
         require("saved" in names and "paused-" + request["save_boundary"] in names, "requested real save boundary missing")
         if request["save_boundary"] in ["after-sale", "growth"]:
@@ -459,7 +507,7 @@ def run_source(args):
         for stage in ([args.stage] if args.native or args.stage == "inspect" else [args.stage,"restore-exit"]):
             request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
                        "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
-                       "save_boundary":args.save_boundary,"window_size":args.window_size,"headless_logical_size":args.headless_logical_size,"growth":args.growth,"tier":args.tier,
+                       "save_boundary":args.save_boundary,"continue_after_restore":args.continue_after_restore,"window_size":args.window_size,"headless_logical_size":args.headless_logical_size,"growth":args.growth,"tier":args.tier,
                        "native":args.native,"fullscreen":args.fullscreen,"native_slot":args.native_slot,
                        "ui_source_sha256":ui_sources,
                        "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
@@ -499,6 +547,7 @@ def run_source(args):
         check_guards(generated)
         result["status"] = "native-first-observed" if args.native else ("observed" if args.stage == "inspect" else "save-boundary-observed")
         result["independent_restore_observed"] = not args.native and args.stage != "inspect"
+        result["restore_continuation_observed"] = args.continue_after_restore
     except (ValueError, OSError, KeyError, TypeError, BuildError, subprocess.SubprocessError, tarfile.TarError) as error:
         result["errors"].append(str(error))
     finally:
@@ -519,6 +568,7 @@ def main():
     parser.add_argument("--mode", choices=["mouse", "touch", "pad"], required=True)
     parser.add_argument("--stage", choices=["inspect", "first-manual", "first-auto", "night-quick", "night-hot"], default="inspect")
     parser.add_argument("--save-boundary", choices=["carrying", "cooking", "customer", "manual-reservation", "after-sale", "growth"])
+    parser.add_argument("--continue-after-restore", action="store_true", help="headless pad/manual-reservation or touch/cooking only: resume, save/load twice, and verify no repeated effect")
     parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
     parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
@@ -532,6 +582,8 @@ def main():
     parser.add_argument("--guard", type=Path, action="append", default=[], help="explicit archived/immutable file only; never active userdata")
     args = parser.parse_args()
     args.native = args.fullscreen or args.windowed
+    if args.continue_after_restore and (args.native or args.stage != "first-manual" or (args.mode,args.save_boundary) not in [("pad","manual-reservation"),("touch","cooking")]):
+        parser.error("restore continuation only supports headless pad/manual-reservation or touch/cooking")
     if args.native:
         if not args.native_slot or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",args.native_slot):
             parser.error("native preview requires a separately authorized --native-slot; no native launch")
