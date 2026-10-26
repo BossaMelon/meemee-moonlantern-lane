@@ -227,6 +227,23 @@ func world_f():
 func inspect_book(target: String, setup: String):
 	await world_f()
 	expect(ui.get_open_sheet()==target,"real F opens nearby production book "+target)
+	if target=="ledger":
+		expect(ui.game.view().day==2 and ui.game.view().cash!=ui.game.snapshot().initial_cash,"ledger fixture starts second night with actual non-initial wallet")
+		var button=ui.get_action_control("settle")
+		for n in range(30):
+			if viewport.gui_get_focus_owner()==button:break
+			for down in [true,false]:
+				var event=InputEventJoypadButton.new();event.button_index=JOY_BUTTON_DPAD_DOWN;event.pressed=down;viewport.push_input(event,true);await process_frame
+		expect(viewport.gui_get_focus_owner()==button,"real D-pad reaches settled-ledger action through scroll")
+		await click("settle")
+		var fresh: Dictionary=ui.game.view();var summary: Dictionary=fresh.summary;var lines: Array[String]=[]
+		for label in ui.world_controller.books.find_children("*","Label",true,false):lines.append(label.text)
+		var text="\n".join(lines)
+		expect(fresh.phase=="settled" and summary.day==2,"actual ledger button settles the real second-day fixture")
+		expect("当前余额"+str(fresh.cash)+"金" in text and "日结时余额"+str(summary.cash)+"金" in text,"ledger labels actual wallet separately from period profit")
+		expect("料理收入"+str(summary.revenue)+"金" in text and "已售食材成本"+str(summary.sold_cost)+"金" in text,"ledger labels authoritative revenue and sold ingredient cost")
+		expect("毛利润"+str(summary.gross_profit)+"金" in text and "本期利润"+str(int(summary.gross_profit)-int(summary.fee))+"金" in text,"ledger uses authoritative gross profit then deducts actual fee")
+		expect(int(summary.gross_profit)-int(summary.fee)!=int(fresh.cash) and "= 结末" not in text,"second-day fixture cannot equate period profit with wallet")
 	inspect_bindings(ui)
 	var book=ui.world_controller.books
 	expect(Rect2(Vector2.ZERO,ui.size).encloses(book.get_global_rect()),"font metrics keep actual World book inside viewport: "+target)
@@ -238,17 +255,21 @@ func closing_fixture():
 	# Font/layout fixture only, before mounting Main. This is NOT WS07 or a
 	# runtime night-completion claim: legal real-Core movement/time builds state.
 	var game=load("res://game/core/game_session.gd").new(23,"world-slice-v1")
-	for point in [Vector2(1160,364),Vector2(1160,580),Vector2(1120,580)]: fixture_walk(game,point)
-	for wave in range(3):
-		var action="open_shop" if wave==0 else "start_wave"
-		var payload={} if wave==0 else {"wave_id":game.view().service.next_wave_id}
-		var result=game.command("world_interact",{"target_id":"door-bell","action":action,"payload":payload},"font-fixture-wave-"+str(wave))
-		expect(result.ok,"legal pre-mount font fixture starts real wave")
-		for n in range(4):
-			if game.view().phase!="trading":break
-			expect(game.advance(60000).ok,"legal pre-mount font fixture advances actual empty service")
-	expect(game.view().phase=="closing","ledger layout fixture reaches real closing phase")
-	fixture_walk(game,Vector2(580,606))
+	for night in range(2):
+		var points=[Vector2(1160,364),Vector2(1160,580),Vector2(1120,580)] if night==0 else [Vector2(1160,606),Vector2(1160,580),Vector2(1120,580)]
+		for point in points:fixture_walk(game,point)
+		for wave in range(3):
+			var action="open_shop" if wave==0 else "start_wave"
+			var payload={} if wave==0 else {"wave_id":game.view().service.next_wave_id}
+			var result=game.command("world_interact",{"target_id":"door-bell","action":action,"payload":payload},"font-fixture-wave-%s-%s"%[night,wave])
+			expect(result.ok,"legal pre-mount font fixture starts real wave")
+			for n in range(4):
+				if game.view().phase!="trading":break
+				expect(game.advance(60000).ok,"legal pre-mount font fixture advances actual empty service")
+		expect(game.view().phase=="closing","ledger layout fixture reaches real closing phase")
+		fixture_walk(game,Vector2(580,606))
+		if night==0:
+			for action in ["settle","next_day"]:expect(game.command("world_interact",{"target_id":"ledger","action":action,"payload":{}},"font-fixture-"+action).ok,"legal pre-mount ledger fixture reaches next day")
 	return game
 
 func fixture_walk(game, target: Vector2):
