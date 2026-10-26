@@ -298,6 +298,13 @@ class SupervisorTests(unittest.TestCase):
             self.assertEqual(result.returncode,2);self.assertIn("restore continuation only supports",result.stderr)
             self.assertFalse(output.exists())
 
+    def test_native_binding_rejects_missing_new_item_group_source_or_uid(self):
+        expected={path:"a"*64 for path in w.UI_SOURCES}
+        for path in ["game/ui/world/item_group.gd","game/ui/world/item_group.gd.uid"]:
+            actual=expected.copy();del actual[path]
+            with self.subTest(path=path),self.assertRaisesRegex(ValueError,"source binding differs"):
+                w.validate_native_images({"ui_source_sha256":actual},{"ui_source_sha256":expected},self.root)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

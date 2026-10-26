@@ -34,7 +34,7 @@ from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
 CORE_CHECKPOINT = "6b5ac7909d08643140ca78c8efcabe098109ac10"
-UI_CHECKPOINT = "ba4d2674940429cbcab1ea16cd8606aedea17c1c"
+UI_CHECKPOINT = "9d928a1e3d9a9f92b5f2248087a36b2c4833be2b"
 UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
               "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
               "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
@@ -42,7 +42,8 @@ UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd
               "game/ui/world/world_books.gd.uid", "game/ui/world/world_input.gd.uid",
               "game/ui/world/world_input.gd", "game/ui/world/world_controller.gd.uid",
               "game/ui/world/world_books.gd", "game/ui/world/world_controller.gd",
-              "game/ui/world/walk_animation.gd.uid"]
+              "game/ui/world/walk_animation.gd.uid", "game/ui/world/item_group.gd",
+              "game/ui/world/item_group.gd.uid"]
 PROTECTED_PIDS = {46285, 80978}
 FRONTMOST_COMMAND = ["/usr/bin/osascript", "-l", "JavaScript", "-e",
                     'ObjC.import("AppKit"); var front = $.NSWorkspace.sharedWorkspace.frontmostApplication; JSON.stringify({pid:Number(front.processIdentifier)})']
@@ -246,7 +247,7 @@ def validate_native_images(obs, request, output):
     shots = obs.get("screenshots", [])
     required = {"startup", "recipe-book", "lane", "carrying", "cooking", "ready", "customer-arriving", "first-sale"}
     require({row.get("name") for row in shots} == required, "native first-loop root PNG set incomplete")
-    require(obs.get("ui_source_sha256") == request["ui_source_sha256"], "runtime 16-UI-source binding differs")
+    require(obs.get("ui_source_sha256") == request["ui_source_sha256"], "runtime 18-UI-source binding differs")
     for row in shots:
         require(row.get("source_commit") == request.get("source_commit"), "PNG source/head binding differs")
         path = path_safe(Path(row["path"]))

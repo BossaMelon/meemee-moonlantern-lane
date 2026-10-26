@@ -44,8 +44,8 @@ func _enter_tree():
 	if native:
 		if request.stage not in ["first-manual","first-auto"] or request.get("save_boundary") != "after-sale" or str(request.get("native_slot","")).is_empty():
 			fail("native preview requires declared slot and first-loop-only scope"); return
-		if not request.get("ui_source_sha256") is Dictionary or request.ui_source_sha256.size() != 16:
-			fail("native runtime requires 16 UI source bindings"); return
+		if not request.get("ui_source_sha256") is Dictionary or request.ui_source_sha256.size() != 18:
+			fail("native runtime requires 18 UI source bindings"); return
 		report.ui_source_sha256 = {}
 		for path in request.ui_source_sha256:
 			var actual = FileAccess.get_sha256("res://"+path)
