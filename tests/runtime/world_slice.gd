@@ -1,6 +1,7 @@
 extends Node
 ## V02 real-input source driver. Execution awaits a fixed P10/P11 candidate.
-## Never replace Main, set geometry/time/save_path, or mutate Session directly.
+## Never replace Main, set control/map geometry/time/save_path, or mutate Session.
+## Explicit headless-only Root content scaling is recorded before natural Main.
 const MAIN_SCENE = "res://scenes/main.tscn"
 const MAIN_SCRIPT = "res://game/ui/main.gd"
 const SAVE_PATH = "user://profiles/world-slice-v1/moonlantern.json"
@@ -34,6 +35,8 @@ func _enter_tree():
 	report = {"kind":"world-source-headless-observation", "status":"failed", "nonce":request.nonce, "source_commit":request.source_commit, "pid":OS.get_process_id(), "engine_version":version_text, "mode":request.mode, "namespace":ProjectSettings.get_setting("application/config/custom_user_dir_name", ""), "user_dir":OS.get_user_data_dir(), "save_path":"", "main_scene":"", "main_script":"", "ready_seen":false, "current_scene_matches":false, "display":DisplayServer.get_name(), "inputs":[], "screenshots":[], "failures":[], "ws07_passed":false, "snapshot":{}, "geometry":{}, "files":{}}
 	report.merge({"stage":request.stage, "checkpoints":[], "trajectory":[], "events":[], "actions":[], "intents":[], "waves":[], "batches":[], "scroll":[], "combat_events":[], "dish_carry_trips":0, "quit_input_dispatched":false})
 	var native = request.get("native",false)
+	if native and request.get("headless_logical_size") != null:
+		fail("headless logical preparation is forbidden for native evidence"); return
 	if native: report.kind = "world-source-native-first-observation"
 	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != ("macOS" if native else "headless"):
 		fail("unsupported diagnostic stage/display")
@@ -61,6 +64,17 @@ func _enter_tree():
 	elif FileAccess.file_exists(SAVE_PATH) or FileAccess.file_exists(SAVE_PATH + ".bak"):
 		fail("fresh inspection already contains a save")
 		return
+	var logical_size = request.get("headless_logical_size")
+	if logical_size != null:
+		if native or request.stage == "inspect" or not logical_size is Array or logical_size.size() != 2 or logical_size[0] < 640 or logical_size[1] < 360 or request.get("window_size") != null:
+			fail("invalid explicit headless logical preparation"); return
+		var root = get_tree().root
+		var before = observe_geometry()
+		if get_tree().current_scene != null:
+			fail("headless logical preparation must precede natural Main"); return
+		root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		root.content_scale_size = Vector2i(logical_size[0],logical_size[1])
+		report.headless_preparation = {"role":"headless-input-only","target":"/root","before_main":true,"requested":logical_size,"before":before,"after":observe_geometry()}
 	input_trace = FileAccess.open(request.output.path_join(request.stage + "-inputs.jsonl"), FileAccess.WRITE)
 	if input_trace == null:
 		fail("cannot create input trace")
@@ -116,7 +130,9 @@ func inspect_main():
 	world_ui = find_world(ui)
 	if not check(is_instance_valid(world_ui) and world_ui.is_visible_in_tree(), "actual P11 world projection missing"): return
 	var size = request.get("window_size", [])
-	if not (request.get("native",false) and request.get("fullscreen",false)):
+	if request.get("headless_logical_size") != null:
+		if not check(observe_geometry().viewport == [0.0,0.0,request.headless_logical_size[0],request.headless_logical_size[1]] and observe_geometry().window == report.headless_preparation.before.window,"declared headless logical viewport unavailable or physical size changed"): return
+	elif not (request.get("native",false) and request.get("fullscreen",false)):
 		if not check(size is Array and size.size() == 2 and observe_geometry().window == size, "declared CLI resolution differs from actual window: " + JSON.stringify(observe_geometry())): return
 	if not check(world_ui.size.x >= 640 and world_ui.size.y >= 360, "actual world control too small for declared input route"): return
 	if request.get("native",false):
@@ -135,7 +151,7 @@ func observe_geometry() -> Dictionary:
 	var window = get_window()
 	var rect = window.get_visible_rect()
 	var transform = window.get_final_transform()
-	return {"window":[window.size.x, window.size.y], "viewport":[rect.position.x, rect.position.y, rect.size.x, rect.size.y], "transform":[transform.x.x, transform.x.y, transform.y.x, transform.y.y, transform.origin.x, transform.origin.y]}
+	return {"window":[window.size.x, window.size.y], "viewport":[rect.position.x, rect.position.y, rect.size.x, rect.size.y], "transform":[transform.x.x, transform.x.y, transform.y.x, transform.y.y, transform.origin.x, transform.origin.y],"content_scale_mode":window.content_scale_mode,"content_scale_size":[window.content_scale_size.x,window.content_scale_size.y],"world_control_size":[world_ui.size.x,world_ui.size.y] if is_instance_valid(world_ui) else null}
 
 func dispatch_event(event: InputEvent):
 	send_event(event)

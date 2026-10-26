@@ -300,6 +300,27 @@ def validate_probe(probe, namespace, expected_user, pid):
     return user
 
 
+def validate_geometry(obs, request):
+    native = request.get("native", False)
+    logical = request.get("headless_logical_size")
+    preparation = obs.get("headless_preparation")
+    require(not native or (logical is None and preparation is None), "native evidence cannot use headless preparation")
+    if logical is not None:
+        require(not native and obs.get("display") == "headless" and request["stage"] != "inspect", "logical preparation requires headless inputs")
+        require(isinstance(preparation, dict) and preparation.get("role") == "headless-input-only"
+                and preparation.get("target") == "/root" and preparation.get("before_main") is True
+                and preparation.get("requested") == logical, "headless preparation record missing")
+        physical = preparation["before"]["window"]
+        for geometry in [preparation["after"], obs["geometry"]]:
+            require(geometry["window"] == physical and geometry["viewport"] == [0,0,*logical]
+                    and geometry["content_scale_mode"] == 1 and geometry["content_scale_size"] == logical,
+                    "headless logical preparation geometry mismatch")
+    else:
+        require(preparation is None, "undeclared headless preparation")
+        if not (native and request.get("fullscreen")):
+            require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
+
+
 def validate_observation(obs, request, process):
     stage = request.get("stage", "inspect")
     native = request.get("native",False)
@@ -320,8 +341,7 @@ def validate_observation(obs, request, process):
         require(obs.get("inputs") == [] and obs.get("files") == {"primary": False, "backup": False}, "read-only fresh probe wrote saves/input")
         return
     require(obs.get("stage") == stage and obs.get("quit_input_dispatched") is True, "route did not request real UI exit")
-    if not (native and request["fullscreen"]):
-        require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
+    validate_geometry(obs, request)
     trace = obs.get("inputs", [])
     require(trace and [r["sequence"] for r in trace] == list(range(1,len(trace)+1)), "missing/noncontiguous actual inputs")
     names = [r["name"] for r in obs.get("checkpoints", [])]
@@ -437,7 +457,7 @@ def run_source(args):
         for stage in ([args.stage] if args.native or args.stage == "inspect" else [args.stage,"restore-exit"]):
             request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
                        "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
-                       "save_boundary":args.save_boundary,"window_size":args.window_size,"growth":args.growth,"tier":args.tier,
+                       "save_boundary":args.save_boundary,"window_size":args.window_size,"headless_logical_size":args.headless_logical_size,"growth":args.growth,"tier":args.tier,
                        "native":args.native,"fullscreen":args.fullscreen,"native_slot":args.native_slot,
                        "ui_source_sha256":ui_sources,
                        "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
@@ -500,6 +520,7 @@ def main():
     parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
     parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
+    parser.add_argument("--headless-logical-size", type=int, nargs=2, help="explicit headless-only Root content scaling before Main; physical dummy size is retained and recorded")
     display = parser.add_mutually_exclusive_group()
     display.add_argument("--fullscreen", action="store_true", help="native first-loop visual diagnostic only; separately authorized slot required")
     display.add_argument("--windowed", action="store_true", help="native first-loop diagnostic at explicit --resolution")
@@ -514,7 +535,7 @@ def main():
             parser.error("native preview requires a separately authorized --native-slot; no native launch")
         if args.stage not in ["first-manual","first-auto"] or args.save_boundary not in [None,"after-sale"]:
             parser.error("native preview only supports first-loop after-sale, not full-night/restore claims")
-        if args.window_size is not None or not 15 <= args.native_timeout <= 180:
+        if args.window_size is not None or args.headless_logical_size is not None or not 15 <= args.native_timeout <= 180:
             parser.error("native uses fullscreen or windowed --resolution and a 15..180 second bound")
         if args.fullscreen and args.resolution:
             parser.error("fullscreen observes screen bounds; do not supply a resolution")
@@ -525,8 +546,11 @@ def main():
             args.window_size = [int(value) for value in dimensions.groups()]
     elif args.native_slot or args.resolution:
         parser.error("native slot/resolution requires --fullscreen or --windowed")
-    if args.stage != "inspect" and not args.fullscreen and (args.window_size is None or args.window_size[0] < 640 or args.window_size[1] < 360):
-        parser.error("input diagnostics require an explicit window size of at least 640x360; no runtime geometry setters")
+    if args.headless_logical_size is not None and (args.window_size is not None or args.stage == "inspect"):
+        parser.error("headless logical size is exclusive with window size and read-only inspection")
+    input_size = args.headless_logical_size or args.window_size
+    if args.stage != "inspect" and not args.fullscreen and (input_size is None or input_size[0] < 640 or input_size[1] < 360):
+        parser.error("input diagnostics require an explicit window or headless logical size of at least 640x360")
     if args.stage == "first-auto" and args.save_boundary == "manual-reservation":
         parser.error("manual reservation boundary requires first-manual")
     night = args.stage.startswith("night-")

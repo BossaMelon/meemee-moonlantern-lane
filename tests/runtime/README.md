@@ -6,10 +6,10 @@
 它拒绝旧 rain-night 默认值，要求固定完整提交及与该提交一致的监督器/复用 helper；
 在全新目录导出 Git tree，先独立观测 OS user-data 位置，再用 Node autoload 观察自然
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
-窗口/控件布局，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
+控件或地图几何，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
 world view、P11 world_play/world_input。已消费固定 P11 `ba4d2674940429cbcab1ea16cd8606aedea17c1c`；
-**V02 首次产品路线仍待总协调为固定组合候选分配运行时段**。
+headless 产品路线已获总协调授权；原生窗口仍须另获有界时段。
 后续候选必须包含 Core `6b5ac7909d08643140ca78c8efcabe098109ac10`（或其后继），入口
 检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
 
@@ -18,11 +18,16 @@ python3 -m unittest discover -s tests/runtime -p 'test_world_slice.py' -v
 python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolute/path/to/Godot --mode mouse --output /private/tmp/NEW_V02_RUN
 ```
 
-取得固定候选与首次执行授权后，在上例增加 `--stage first-manual`（或 `first-auto`）及
-明确的 `--window-size 1280 720`。尺寸只通过官方 `--resolution` 启动参数请求；输入前
-必须观测实际 Window 等于请求、实际 world Control 至少640×360。headless 若仍返回64×64
-便明确失败，不设置 root/控件大小、不把 dummy 当作真实渲染。该参数的实际有效性尚待
-固定生产候选实测；不是已经解决旧 H06 的尺寸问题。
+在上例增加 `--stage first-manual`（或 `first-auto`）及明确的
+`--headless-logical-size 1280 720`，即可执行 headless 输入路线与第二进程恢复。
+原 `--window-size` 仍只通过官方 `--resolution` 请求物理尺寸并严格核对；Godot 4.7.2
+在本机产品 Main 实测返回64×64，原始失败保留，不能据此声称原生窗口正确。
+新选项只在 headless 输入模式、自然 Main 加载前设置 Root Window 的
+`content_scale_mode=CANVAS_ITEMS` 与 `content_scale_size`，记录设置前后物理/逻辑尺寸、
+变换和准备时机。物理 dummy 尺寸必须保持，实际逻辑 viewport 必须等于请求，实际
+world Control 至少640×360。不写 Control/地图几何、产品状态或时钟；原生模式和只读
+inspect 拒绝此选项。它只支持输入诊断，不能产生窗口、截图或WS07证据。
+公开API见 [Godot 4.7 Window](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-property-content-scale-size)。
 
 原生首环使用 `--fullscreen`，或单独 `--windowed --resolution 844,390`（也接受844x390）。
 必须另有 root 明确授权的 `--native-slot SLOT_LABEL`；参数只是记录授权时段，不能自己产生

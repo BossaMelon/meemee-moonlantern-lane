@@ -176,7 +176,7 @@ class SupervisorTests(unittest.TestCase):
         command = [sys.executable, str(w.ROOT / "tests/runtime/world_slice.py"),
                    "--candidate", "a"*40, "--godot", "/must-not-start-godot",
                    "--mode", "touch", "--output", str(output), "--stage", "first-manual"]
-        cases = [([], "explicit window size"),
+        cases = [([], "explicit window or headless logical size"),
                  (["--window-size","1280","720","--save-boundary","growth"], "night stages require growth"),
                  (["--stage","night-quick","--window-size","1280","720","--save-boundary","after-sale"], "night stages require growth"),
                  (["--fullscreen"], "separately authorized --native-slot"),
@@ -225,6 +225,34 @@ class SupervisorTests(unittest.TestCase):
         rows = [{"name":name,"path":str(raw),"png_size":[640,360],"root_texture_size":[640,360]} for name in names]
         with self.assertRaisesRegex(ValueError,"root PNG replaced"):
             w.validate_native_images({"screenshots":rows,"ui_source_sha256":{}},{"ui_source_sha256":{}},self.root)
+
+    def test_headless_logical_preparation_preserves_dummy_size_and_cannot_claim_native(self):
+        request = {"stage":"first-manual","headless_logical_size":[1280,720],"window_size":None}
+        geometry = {"window":[64,64],"viewport":[0,0,1280,720],"content_scale_size":[1280,720],"content_scale_mode":1}
+        obs = {"display":"headless","geometry":geometry,"headless_preparation":{
+            "role":"headless-input-only","target":"/root","before_main":True,"requested":[1280,720],
+            "before":{"window":[64,64],"viewport":[0,0,64,64]},"after":copy.deepcopy(geometry)}}
+        w.validate_geometry(obs,request)
+        for change in ["native","missing","physical","logical","timing","undeclared"]:
+            bad=copy.deepcopy(obs); req=copy.deepcopy(request)
+            if change == "native": req.update(native=True,fullscreen=True)
+            elif change == "missing": del bad["headless_preparation"]
+            elif change == "physical": bad["geometry"]["window"]=[1280,720]
+            elif change == "logical": bad["geometry"]["viewport"]=[0,0,64,64]
+            elif change == "timing": bad["headless_preparation"]["before_main"]=False
+            else: req["headless_logical_size"]=None
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                w.validate_geometry(bad,req)
+
+    def test_headless_logical_cli_rejects_native_inspect_and_ambiguous_size(self):
+        output=self.root/"never-created"
+        command=[sys.executable,str(Path(w.__file__)),"--candidate","a"*40,"--godot","missing", "--output",str(output),"--mode","mouse","--headless-logical-size","1280","720"]
+        for flags in [[],["--stage","first-manual","--window-size","1280","720"],
+                      ["--stage","first-auto","--fullscreen","--native-slot","negative-fixture"]]:
+            with self.subTest(flags=flags):
+                result=subprocess.run(command+flags,capture_output=True,text=True)
+                self.assertEqual(result.returncode,2)
+                self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
