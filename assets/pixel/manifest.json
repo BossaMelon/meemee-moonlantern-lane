@@ -3410,6 +3410,878 @@
         "model_id": "deep-stump",
         "sorting": "model center; sprite extends 30px above footprint for raised body"
       }
+    },
+    "meemee_walk_se_01": {
+      "file": "sprites/meemee_walk_se_01.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        0,
+        0,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        8,
+        8,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        0,
+        0,
+        543,
+        750
+      ],
+      "source_opaque_bounds": [
+        111,
+        91,
+        487,
+        724
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          8,
+          8
+        ],
+        "head_anchor_source_x": 297.5,
+        "ground_anchor_source_y": 724,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "se",
+      "phase": "contact_a",
+      "sha256": "2bb035187373a4bb5b5a9243f0599334568d92b1a415a7e60d5021916c4fafd8",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_sw_01": {
+      "file": "sprites/meemee_walk_sw_01.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        0,
+        64,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        8,
+        40,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        0,
+        0,
+        543,
+        750
+      ],
+      "source_opaque_bounds": [
+        111,
+        91,
+        487,
+        724
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          8,
+          8
+        ],
+        "head_anchor_source_x": 297.5,
+        "ground_anchor_source_y": 724,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "sw",
+      "phase": "contact_a",
+      "sha256": "db5fe8d960c7d8fde7f926fcefeb6c77bb535f3037af64dc159a52a77ec76b13",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_se_01"
+    },
+    "meemee_walk_se_02": {
+      "file": "sprites/meemee_walk_se_02.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        48,
+        0,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        9,
+        40,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        543,
+        0,
+        1086,
+        750
+      ],
+      "source_opaque_bounds": [
+        633,
+        91,
+        998,
+        711
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          9
+        ],
+        "head_anchor_source_x": 810.5,
+        "ground_anchor_source_y": 711,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "se",
+      "phase": "passing_a",
+      "sha256": "00ee89a60a359c9584fbfa8e98402a24c6db689b52a0d66ef5de9a8f7b95c27e",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_sw_02": {
+      "file": "sprites/meemee_walk_sw_02.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        48,
+        64,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        8,
+        9,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        543,
+        0,
+        1086,
+        750
+      ],
+      "source_opaque_bounds": [
+        633,
+        91,
+        998,
+        711
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          9
+        ],
+        "head_anchor_source_x": 810.5,
+        "ground_anchor_source_y": 711,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "sw",
+      "phase": "passing_a",
+      "sha256": "a2e61014a74e2f9d119b5bec13b1020afcf2bd105ba31602a1bc7db02602750c",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_se_02"
+    },
+    "meemee_walk_se_03": {
+      "file": "sprites/meemee_walk_se_03.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        96,
+        0,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        10,
+        41,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        0,
+        750,
+        543,
+        1448
+      ],
+      "source_opaque_bounds": [
+        111,
+        786,
+        497,
+        1399
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          10
+        ],
+        "head_anchor_source_x": 296.0,
+        "ground_anchor_source_y": 1399,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "se",
+      "phase": "contact_b",
+      "sha256": "bcbdd910f355df878ea1bac839f29c77b94d290aeb4776f0010965e200db1c94",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_sw_03": {
+      "file": "sprites/meemee_walk_sw_03.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        96,
+        64,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        7,
+        10,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        0,
+        750,
+        543,
+        1448
+      ],
+      "source_opaque_bounds": [
+        111,
+        786,
+        497,
+        1399
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          10
+        ],
+        "head_anchor_source_x": 296.0,
+        "ground_anchor_source_y": 1399,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "sw",
+      "phase": "contact_b",
+      "sha256": "2a8deb57ec2c57de4b4f4cb911a198acab6de64a908c2d3f3ae8c3288800e59a",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_se_03"
+    },
+    "meemee_walk_se_04": {
+      "file": "sprites/meemee_walk_se_04.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        144,
+        0,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        10,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        543,
+        750,
+        1086,
+        1448
+      ],
+      "source_opaque_bounds": [
+        634,
+        786,
+        993,
+        1397
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          10
+        ],
+        "head_anchor_source_x": 812.0,
+        "ground_anchor_source_y": 1397,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "se",
+      "phase": "passing_b",
+      "sha256": "100dfdda560e1e3aff32e8c3b2d1e2bee5d49354a5616520eaa4e4251da219fd",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_sw_04": {
+      "file": "sprites/meemee_walk_sw_04.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        144,
+        64,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        10,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-se-v2.png",
+      "source_crop": [
+        543,
+        750,
+        1086,
+        1448
+      ],
+      "source_opaque_bounds": [
+        634,
+        786,
+        993,
+        1397
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08372827804107424,
+        "placement_offset_before_mirror": [
+          9,
+          10
+        ],
+        "head_anchor_source_x": 812.0,
+        "ground_anchor_source_y": 1397,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "sw",
+      "phase": "passing_b",
+      "sha256": "34ed34531597d15603eb218904e36e971886aeb6558f2a20ed9244ecef6ed29d",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_se_04"
+    },
+    "meemee_walk_ne_01": {
+      "file": "sprites/meemee_walk_ne_01.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        0,
+        128,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        7,
+        8,
+        38,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        0,
+        0,
+        543,
+        750
+      ],
+      "source_opaque_bounds": [
+        112,
+        68,
+        486,
+        705
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          7,
+          8
+        ],
+        "head_anchor_source_x": 315.0,
+        "ground_anchor_source_y": 705,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "ne",
+      "phase": "contact_a",
+      "sha256": "da706c3b41179073eec8be1e0f8e69524887b291b5ec0228513e72cdf5e6ddad",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_nw_01": {
+      "file": "sprites/meemee_walk_nw_01.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        0,
+        192,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        10,
+        8,
+        41,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        0,
+        0,
+        543,
+        750
+      ],
+      "source_opaque_bounds": [
+        112,
+        68,
+        486,
+        705
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          7,
+          8
+        ],
+        "head_anchor_source_x": 315.0,
+        "ground_anchor_source_y": 705,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "nw",
+      "phase": "contact_a",
+      "sha256": "8581ad26179ad744cc88ab13a8bef85204641922d39e7e9816bd7ade6b3e2179",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_ne_01"
+    },
+    "meemee_walk_ne_02": {
+      "file": "sprites/meemee_walk_ne_02.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        48,
+        128,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        8,
+        9,
+        38,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        543,
+        0,
+        1086,
+        750
+      ],
+      "source_opaque_bounds": [
+        624,
+        69,
+        985,
+        700
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          9
+        ],
+        "head_anchor_source_x": 818.0,
+        "ground_anchor_source_y": 700,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "ne",
+      "phase": "passing_a",
+      "sha256": "f0d577e6130c049868fc9c2f30b4ff025df63d99832a1a6234acacfb80553307",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_nw_02": {
+      "file": "sprites/meemee_walk_nw_02.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        48,
+        192,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        10,
+        9,
+        40,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        543,
+        0,
+        1086,
+        750
+      ],
+      "source_opaque_bounds": [
+        624,
+        69,
+        985,
+        700
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          9
+        ],
+        "head_anchor_source_x": 818.0,
+        "ground_anchor_source_y": 700,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "nw",
+      "phase": "passing_a",
+      "sha256": "cee22c39155281938b475f570bd209116fa20a11835ea66c22acb2311e11bae4",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_ne_02"
+    },
+    "meemee_walk_ne_03": {
+      "file": "sprites/meemee_walk_ne_03.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        96,
+        128,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        8,
+        9,
+        38,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        0,
+        750,
+        543,
+        1448
+      ],
+      "source_opaque_bounds": [
+        112,
+        757,
+        477,
+        1385
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          9
+        ],
+        "head_anchor_source_x": 310.5,
+        "ground_anchor_source_y": 1385,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "ne",
+      "phase": "contact_b",
+      "sha256": "6283090432608ad739c026538b8b6a1828af3db3e0768a998833979912f7c6aa",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_nw_03": {
+      "file": "sprites/meemee_walk_nw_03.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        96,
+        192,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        10,
+        9,
+        40,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        0,
+        750,
+        543,
+        1448
+      ],
+      "source_opaque_bounds": [
+        112,
+        757,
+        477,
+        1385
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          9
+        ],
+        "head_anchor_source_x": 310.5,
+        "ground_anchor_source_y": 1385,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "nw",
+      "phase": "contact_b",
+      "sha256": "1a89fbfad4cdbdca0a02c7471ffad54e31815df7c3b498d4f5b16a178baabeba",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_ne_03"
+    },
+    "meemee_walk_ne_04": {
+      "file": "sprites/meemee_walk_ne_04.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        144,
+        128,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        8,
+        8,
+        39,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        543,
+        750,
+        1086,
+        1448
+      ],
+      "source_opaque_bounds": [
+        615,
+        753,
+        984,
+        1391
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          8
+        ],
+        "head_anchor_source_x": 811.5,
+        "ground_anchor_source_y": 1391,
+        "horizontal_mirror": false,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "ne",
+      "phase": "passing_b",
+      "sha256": "6b15f384658c3cde5adb63ed0a4fa4bfc7b55bc30840db96217cbfa770ada416",
+      "purpose": "movement-driven walk frame; no baked translation"
+    },
+    "meemee_walk_nw_04": {
+      "file": "sprites/meemee_walk_nw_04.png",
+      "size": [
+        48,
+        64
+      ],
+      "pivot": [
+        24,
+        61
+      ],
+      "atlas": "atlases/meemee_walk_cycle.png",
+      "region": [
+        144,
+        192,
+        48,
+        64
+      ],
+      "opaque_bounds": [
+        9,
+        8,
+        40,
+        61
+      ],
+      "source": "source/meemee-walk-ne.png",
+      "source_crop": [
+        543,
+        750,
+        1086,
+        1448
+      ],
+      "source_opaque_bounds": [
+        615,
+        753,
+        984,
+        1391
+      ],
+      "export": {
+        "uniform_clip_scale": 0.08307210031347963,
+        "placement_offset_before_mirror": [
+          8,
+          8
+        ],
+        "head_anchor_source_x": 811.5,
+        "ground_anchor_source_y": 1391,
+        "horizontal_mirror": true,
+        "filter": "nearest",
+        "alpha_threshold": 128
+      },
+      "asset_set": "meemee_walk_cycle_v1",
+      "facing": "nw",
+      "phase": "passing_b",
+      "sha256": "94bcbf4a437755ec88d8927e8f92d9c5b149e2e33b1e5a4205c95619fe5e97e2",
+      "purpose": "movement-driven walk frame; no baked translation",
+      "derived_from": "meemee_walk_ne_04"
     }
   },
   "backgrounds": {
@@ -3906,6 +4778,33 @@
       "mode": "RGBA",
       "sha256": "39a3c01254a9b420c60c9cf3d39083358248234c560e0c89efa9988ea67c8bdd",
       "runtime": false
+    },
+    "meemee-walk-se-v1.png": {
+      "size": [
+        1086,
+        1448
+      ],
+      "mode": "RGBA",
+      "sha256": "2042263b4c3d5d92e06c76022204a404dd097c55dfab202f7f63de6e00bb10e4",
+      "runtime": false
+    },
+    "meemee-walk-se-v2.png": {
+      "size": [
+        1086,
+        1448
+      ],
+      "mode": "RGBA",
+      "sha256": "591ce19d29753b5f0bd09d410b1de3896134af5d0e34da36806aae2014d8d90c",
+      "runtime": false
+    },
+    "meemee-walk-ne.png": {
+      "size": [
+        1086,
+        1448
+      ],
+      "mode": "RGBA",
+      "sha256": "c19945252ce058de7f2838856cce4b475c57c81754cdb3fe072f3271eb873ba5",
+      "runtime": false
     }
   },
   "content_contract_revision": "4d06f599b40663b3910a215f89b1bd1a26343b48",
@@ -3980,10 +4879,106 @@
       ],
       "loop": false,
       "trigger": "actual skill event; visual only, never damage or radius authority"
+    },
+    "meemee_walk_se_cycle": {
+      "frames": [
+        "meemee_walk_se_01",
+        "meemee_walk_se_02",
+        "meemee_walk_se_03",
+        "meemee_walk_se_04"
+      ],
+      "duration_ms": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true,
+      "facing": "se",
+      "pivot": [
+        24,
+        61
+      ],
+      "trigger": "actual displacement; stop when stationary or paused",
+      "stop_frame": "meemee_walk_se",
+      "pause_policy": "freeze current phase",
+      "usage": "4-frame alternate-step loop; UI controls playback rate and world movement independently"
+    },
+    "meemee_walk_sw_cycle": {
+      "frames": [
+        "meemee_walk_sw_01",
+        "meemee_walk_sw_02",
+        "meemee_walk_sw_03",
+        "meemee_walk_sw_04"
+      ],
+      "duration_ms": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true,
+      "facing": "sw",
+      "pivot": [
+        24,
+        61
+      ],
+      "trigger": "actual displacement; stop when stationary or paused",
+      "stop_frame": "meemee_walk_sw",
+      "pause_policy": "freeze current phase",
+      "usage": "4-frame alternate-step loop; UI controls playback rate and world movement independently"
+    },
+    "meemee_walk_ne_cycle": {
+      "frames": [
+        "meemee_walk_ne_01",
+        "meemee_walk_ne_02",
+        "meemee_walk_ne_03",
+        "meemee_walk_ne_04"
+      ],
+      "duration_ms": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true,
+      "facing": "ne",
+      "pivot": [
+        24,
+        61
+      ],
+      "trigger": "actual displacement; stop when stationary or paused",
+      "stop_frame": "meemee_walk_ne",
+      "pause_policy": "freeze current phase",
+      "usage": "4-frame alternate-step loop; UI controls playback rate and world movement independently"
+    },
+    "meemee_walk_nw_cycle": {
+      "frames": [
+        "meemee_walk_nw_01",
+        "meemee_walk_nw_02",
+        "meemee_walk_nw_03",
+        "meemee_walk_nw_04"
+      ],
+      "duration_ms": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true,
+      "facing": "nw",
+      "pivot": [
+        24,
+        61
+      ],
+      "trigger": "actual displacement; stop when stationary or paused",
+      "stop_frame": "meemee_walk_nw",
+      "pause_policy": "freeze current phase",
+      "usage": "4-frame alternate-step loop; UI controls playback rate and world movement independently"
     }
   },
   "integration_limits": [
-    "Pose frames are discrete poses, not a complete interpolated walking cycle.",
+    "Legacy action IDs remain single poses; meemee_walk_*_cycle adds four-frame diagonal walk loops, not eight-direction interpolated animation.",
     "Art does not implement gameplay, collision, input, cooking effects or UI focus.",
     "Environment floor pieces are modular decorative diamonds; not certified seamless Wang tiles.",
     "Background furniture is baked in; use either background composition or modular furniture, not both over the same furniture."

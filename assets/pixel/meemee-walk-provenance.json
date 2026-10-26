@@ -1,0 +1,26 @@
+{
+  "task_id": "A01",
+  "base_revision": "f51251b6c6a4646688c03c1fbe77885f1b907c29",
+  "generation": "OpenAI built-in image_gen; original outputs preserved; no movie images or CLI/API fallback",
+  "character_reference": {
+    "file": "source/actions.png",
+    "se_crop": [0,0,384,512],
+    "ne_crop": [768,0,1152,512],
+    "role": "existing MeeMee silhouette, costume, palette, diagonal facing and pixel density"
+  },
+  "sources": [
+    {"file":"source/meemee-walk-se-v1.png","generation_id":"4536362f-6cd8-4e53-97a2-cc419afe7310","direction":"se","status":"retained draft; repeated same-side contact, not exported"},
+    {"file":"source/meemee-walk-se-v2.png","generation_id":"f189ce89-f099-4436-8624-298ddb40d57c","reference":"meemee-walk-se-v1.png","direction":"se","status":"exported; opposite contact corrected in bottom row"},
+    {"file":"source/meemee-walk-ne.png","generation_id":"a1f367e6-f572-4a30-871c-641be727c610","direction":"ne","status":"exported; alternate boot soles and arm swing in back view"}
+  ],
+  "derivation": {
+    "se":"four generated frames from meemee-walk-se-v2.png",
+    "sw":"horizontal mirror of the entire se four-frame sequence, not alternating facing within a clip",
+    "ne":"four generated frames from meemee-walk-ne.png",
+    "nw":"horizontal mirror of the entire ne four-frame sequence, not alternating facing within a clip"
+  },
+  "export": "48x64 per frame; pivot [24,61]; one uniform scale per source clip, head-horizontal and lowest-boot ground registration; nearest, original shared 32-color palette, binary alpha, zero transparent RGB",
+  "timing": "four 125ms frames per loop; initial playback suggestion, not a new movement speed contract",
+  "evidence": "assets/pixel/evidence/meemee-walk/ is Git-ignored and reproducible; contacts/GIF/metrics are asset QA, not game rendering or movement proof",
+  "limits": "Small first movement-support package. No new world geometry, collision, UI, game speed or final-art-quality claim. Legacy PNGs and sprite records unchanged."
+}
