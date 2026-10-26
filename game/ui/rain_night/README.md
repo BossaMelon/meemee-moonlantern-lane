@@ -10,6 +10,12 @@ WASD/方向键、左摇杆与触摸摇杆发送 held 轴；F、手柄 A 和屏�
 
 世界入口失焦会清空世界与动作面板输入并暂停真实 Session；回来后从暂停菜单继续。首单检查覆盖实际 Main 的失焦通知、时钟与位置冻结，以及恢复后轴为零。
 
+世界控件按最后真实输入切换：键鼠显示轻量 F/方向键/Esc 提示，手柄显示 A/左摇杆/Start，触屏事件显示摇杆与互动、暂停按钮。忽略模拟鼠标/触屏伴随事件和摇杆死区漂移；模式切换不产生事务，也不改变暂停、模态和动作阶段的输入互斥。情境提示跟随 Core 目标锚点；烹饪中显示真实 job 名称与剩余时间，不把空手放置拒绝当主反馈。
+
+菜谱和菜单直接显示 forecast 及各波 quick/hearty/warm 需求。配方解释来自公开 inputs/effect_id/requires_device，中文材料与柜内、手上、台内数量来自 inventory；按真实计划批量显示所需和缺料。缺料不禁用未来计划。菜单显示当前实际售价与价格档位。`world_play.gd -- --clarity ABS_EMPTY_DIR` 用实际输入检查这条信息链，无 Core 指令夹具。
+
+`world/item_group.gd` 将同种真实物品显示为图标与计数，metadata 保留完整 item_uids；携带组跟随手边浮盘，台内/成菜组及状态读取真实台面和 job。`visual_uid_bindings()` 展开这些 UID 供验收，不把一张组图当作新增库存。新 helper 属运行时源码集合；不能沿用未包含它的旧 source hash 集合。
+
 以下 `panels.gd` 与 `world_*` 定位协议仅适用于明确注入 `rain-night-v1` 的旧雨夜入口。
 
 随包文字字体入口为 `res://game/ui/portable_font.gd`，唯一公共接口 `get_font() -> Font`。它返回实际导入的共享 FontFile，禁止 SystemFont 和系统回退，fallbacks 仅可引用清单中的随包字体；不改变调用方字号、颜色、间距。主店铺主题消费此接口，动作面板由 E03 对接同一接口；不在这里改动作贴图或玩法。精确字体、原始数据 SHA、原许可与版权见 `assets/fonts/font-manifest.json` 和 `assets/SOURCES.md`。
