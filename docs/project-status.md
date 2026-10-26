@@ -4,14 +4,24 @@
 
 **Steam 可售品质目标仍 active、未完成，玩法改进为第一优先级。** 用户本次实际打开 r2（human PID `46285`）后原话：“不好玩，空间太小，主角都不能动，交互也很无聊”。这证明首屏/店内空间交互评价失败；未测整晚经营或当前新战斗，不能据此补造那些范围的结论。旧三日/雨夜代码与 gate 保留，不删不降；源码 CI、runtime、人类反馈、商业 IP 与发布分别记录，自动检查通过不能推导为好玩。
 
-**当前主线：H02 新 world 合同与 P02 有限运动/拿放 probe 已派发，尚未验收。** 先用灰盒和现有素材验证可走动空间、碰撞/镜头、靠近交互与世界内操作，短浮层承载采购/配方/规划；不自行扩大世界或七日内容。两项由既有可见 chat 按现有权限推进：
+**当前主线：登记 P10/P11/H07/V02，合同与组件 PR 仍待验收合入。** H03 状态转向 [PR #50](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/50) 已由 root 合入 main `afd8e5c035de0cf80b8b7c51987df06de045b5cc`。本轮从该 main 登记有限实现范围，仅改任务清单与本状态；不实现 gate、launcher 或游戏，不新增 chat/sub-agent，不因登记把依赖候选写成已合入。
 
 | 当前工作 | 承担者与配置 | 实际边界 |
 |---|---|---|
-| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | 收敛可试玩新切片；设计与正式新 profile/API 尚未冻结，不把建议写成已实现。 |
-| P02 有限运动/拿放 probe | 月灯巷｜像素界面与交互；9807 工作树 `codex/p02-walk-world-probe`；Sol high / Standard | 有限交互验证，不含经济或保存，不冒充新经营实现；结果仍待实际检查。 |
+| H02 新 world 合同 | 月灯巷｜魔法料理玩法与验收契约；77d1 工作树 `codex/h02-world-slice-contract`；Astra xhigh / Standard | [PR #52](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/52) 当前候选 `16b9232b37b78ac717e1b46fae2c8c1b6e280618`，root 已收敛接口，作者已同步当前 main、最终 CI 进行中；尚未验收合入。 |
+| P02 有限运动/拿放 probe | 月灯巷｜像素界面与交互；9807 工作树 `codex/p02-walk-world-probe`；Sol high / Standard | [PR #51](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/51) 候选 `1370a419f116b99b696cb1ecbf0ec72f59439d04`；不含经济或保存，不冒充新经营实现，仍待验收合入。 |
+| A01 行走动画 | 月灯巷｜像素魔法世界与资产；`codex/a01-meemee-walk-cycle`；Astra high / Standard | [PR #53](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/53) 固定候选 `d521d04cb9c610421f00ac8c227274f5d08261b1`；四向动画待验收合入，P11 可消费固定候选，不争写 pixel。 |
 
-正式新 profile、接口、实施任务与依赖待 H02 合同及 root 冻结后另登记；本 H03 仅改 `AGENTS.md` 与本状态，不改 `harness/tasks.json`。owner、chat、模型、路径仍以 [任务清单](../harness/tasks.json) 为准；root 不开发，实施均用可见 chat、指定模型/Standard 和真实 PR gate，禁止 sub-agent 与转派。
+新任务精确 allowed_paths、chat、模型与依赖仅在 [任务清单](../harness/tasks.json) 登记，旧条目不变，全部复用原 owner/chat、指定模型与 Standard。登记不等于依赖已完成或实现已通过；root 随后按实际契约候选派实现，作者不自行转派或合并。
+
+| 新任务 | 依赖 | 实施与交付边界 |
+|---|---|---|
+| P10 world 核心 | H02、H03 | core_implementation / Astra xhigh：权威移动碰撞、world 状态、料理 UID/唯一成交与保存；统一 GameSession 默认 `world-slice-v1` 和 WS01–06 runner。可在 `tests/core/**` 将旧 suite 显式绑定旧 profile，断言与原 prototype/quality 回归不降。 |
+| P11 world 场景 | P10、H02 | ui_implementation / Sol high：新默认 Main/world 场景与实际输入，只消费 Core geometry/state，不复制 probe 的物理/经济权威；仅消费 A01 固定动画资源。 |
+| H07 world 门禁/启动 | H02、H03、P10 | engineering_delivery / Sol high：增加 world 六个 required 自动 case/suite，保留两个旧 suite；Main/launcher/profile 与独立 namespace 一致。真实文件为 `tools/gate.py`、`tools/test_gate.py`、`tools/build_local_demo.py`、`tools/test_build_local_demo.py`、`tools/README.md`、`.github/workflows/gate.yml`、`.github/workflows/windows-validation.yml`、`tools/run_windows_gate.ps1`；不新增不存在的 macos 文件名，不接入旧 D02/native RED 链，三个 required context 名不变。 |
+| V02 world 运行验收 | P10、P11、H07 | runtime_verification / Astra xhigh：限定新增 `world_slice.py`、`world_slice.gd(.uid)`、`test_world_slice.py` 与现有 runtime README；真实 InputEvent 三输入首循环、完整夜/次晨成长、全屏/窄屏和双进程恢复，具体 QA 入口由 owner 按冻结契约建议。保护旧 profile/原包，活动 human 档不作静态 hash 守卫。 |
+
+候选合同将新 Main、Session、launcher 与默认保存统一到 `world-slice-v1`（独立 user-data root，`user://profiles/world-slice-v1/moonlantern.json`），旧 `prototype-v1` / `rain-night-v1` 显式回归，不扫描、迁移、覆盖旧档；WS01–06 自动证据、WS07 runtime、WSH human 分开。此前候选的活动档静态守卫冲突已由 H02 `16b9232` 修正：WS06/profile 只检查非活动旧档、受控副本及不可变旧包，新 world 不探测真人活跃档；本 H03 只核对并登记，不改契约或触碰活动存档。E 新任务暂不登记，Core 可复用既有 E02 模型，确有路由缺口时再由 root 给 action owner 精确路径，避免预造框架。
 
 **旧原生阶段：保留恢复点，交互验证暂缓以免继续投入被否决产品。** P09 已验产品集成落点仍为 `97c49cfd6ba6d840c6ae355b656d66819bbc6554`，可见性修复本身成立，不等于好玩。H06/D02 不强行合并，不继续为旧面板交互补验收：
 
@@ -128,8 +138,8 @@ P03 [PR #16](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/16) 已�
 
 ## 下一步与交付边界
 
-1. **先收敛 world 合同并验证有限动作。** 本次真人首屏/店内空间评价已经失败，不要求用户再完成旧整晚流程才允许转向。H02 新合同与 P02 有限运动/拿放 probe 已派发；先以灰盒/现素材验证，不含经济/保存的 probe 不当作新经营完成。正式 profile、接口和实现依赖待 H02＋root 冻结后另登记，本轮不改 tasks，不自行扩七日、大世界或内容数量。旧面板 D02/H06 保留恢复点、交互验收暂缓。
+1. **先验收合同与组件，再按依赖实现 world。** 本次真人首屏/店内空间评价已经失败，不要求用户再完成旧整晚流程才允许转向。H02 #52、有限 P02 probe #51 与 A01 动画 #53 均保留真实候选和待验状态，probe 不等于新经营。P10 → P11/H07 → V02 精确范围已登记，root 按最终固定 H02 候选派实现；本轮不实现，旧面板 D02/H06 仍保留恢复点、交互验收暂缓，不自行扩七日、大世界或内容数量。
 2. **保留已完成的三日技术基线。** H02 [PR #9](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/9)、P01 [#13](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/13)、E01 [#10](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/10)、P02 [#15](https://github.com/BossaMelon/meemee-moonlantern-lane/pull/15)、P03 #16 均已按依赖合入 main。docs05、旧契约与 PR #9 保持技术基线记录，新阶段设计另起分支。旧功能原型里程碑已完成，Steam 品质目标仍未完成。
-3. **平台与商业边界保持待验。** Windows source editor 已验，Windows 原生 release 启动通过但完整交互/窗口未验；iOS 实机、实体手柄/触屏、Xcode 打包和发行包验证未完成，本机缺完整 Xcode/`simctl`。人类趣味尚未合格。HP 商业 IP 授权/替换方案待决定，购买资源、开付费服务、Steam 上架与实际游戏发布均未授权；公开源码不等于发布。本 H03 仅作工作原则与真实状态更新，部署不适用。
+3. **平台与商业边界保持待验。** Windows source editor 已验，Windows 原生 release 启动通过但完整交互/窗口未验；iOS 实机、实体手柄/触屏、Xcode 打包和发行包验证未完成，本机缺完整 Xcode/`simctl`。人类趣味尚未合格。HP 商业 IP 授权/替换方案待决定，购买资源、开付费服务、Steam 上架与实际游戏发布均未授权；公开源码不等于发布。本 H03 仅作任务范围与真实状态登记，部署不适用。
 
 root 已实际查询并启用 main 服务器保护：required `harness`、`prototype`、`windows-source`（均 app_id=15368），strict=true、enforce_admins=true、required reviews=0 原字段保持，禁止 force-push/delete；实际 before/after 快照与字节哈希见最终交付索引；集成仍守 exact-head，不绕失败 gate。实施仅用现有可见 chat、指定模型与 Standard，不建 sub-agent 或擅自转派；本 H03 文档候选由总协调审阅并合并。每小时 issue 巡检依 app 调度，无变化安静，不宣称外部常驻保证。

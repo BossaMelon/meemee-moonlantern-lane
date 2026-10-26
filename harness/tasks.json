@@ -446,6 +446,92 @@
       "model": "gpt-6-astra",
       "reasoning_effort": "xhigh",
       "service_tier": "default"
+    },
+    {
+      "id": "P10",
+      "owner": "core_implementation",
+      "allowed_paths": [
+        "project.godot",
+        "game/core/**",
+        "tests/run.gd",
+        "tests/run.gd.uid",
+        "tests/core/**"
+      ],
+      "depends_on": [
+        "H02",
+        "H03"
+      ],
+      "chat_id": "01a172c8-545f-7391-9d0e-d8820e85fc07",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
+    },
+    {
+      "id": "P11",
+      "owner": "ui_implementation",
+      "allowed_paths": [
+        "scenes/main.tscn",
+        "scenes/ui/world_play.tscn",
+        "game/ui/main.gd",
+        "game/ui/world_play.gd",
+        "game/ui/world_play.gd.uid",
+        "game/ui/world/**",
+        "game/ui/checks/world_play.gd",
+        "game/ui/checks/world_play.gd.uid",
+        "game/ui/rain_night/README.md",
+        "assets/SOURCES.md"
+      ],
+      "depends_on": [
+        "P10",
+        "H02"
+      ],
+      "chat_id": "01a172c8-4c24-7dc1-bb64-307423676621",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "H07",
+      "owner": "engineering_delivery",
+      "allowed_paths": [
+        "tools/gate.py",
+        "tools/test_gate.py",
+        "tools/build_local_demo.py",
+        "tools/test_build_local_demo.py",
+        "tools/README.md",
+        ".github/workflows/gate.yml",
+        ".github/workflows/windows-validation.yml",
+        "tools/run_windows_gate.ps1"
+      ],
+      "depends_on": [
+        "H02",
+        "H03",
+        "P10"
+      ],
+      "chat_id": "01a172c8-6d55-7282-84dc-4926245636c6",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default"
+    },
+    {
+      "id": "V02",
+      "owner": "runtime_verification",
+      "allowed_paths": [
+        "tests/runtime/world_slice.py",
+        "tests/runtime/world_slice.gd",
+        "tests/runtime/world_slice.gd.uid",
+        "tests/runtime/test_world_slice.py",
+        "tests/runtime/README.md"
+      ],
+      "depends_on": [
+        "P10",
+        "P11",
+        "H07"
+      ],
+      "chat_id": "01a17302-168c-7d22-90fd-9633ccf7e434",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default"
     }
   ],
   "coordination": {
