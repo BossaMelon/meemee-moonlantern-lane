@@ -67,6 +67,10 @@ F 前必须确认 Core 的首个 enabled interaction 恰为目标动作。记录
 UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现金与订单/客人反应。
 
 `--save-boundary carrying|cooking|customer|manual-reservation|after-sale` 默认 after-sale。
+manual-reservation 在确认/暂停 InputEvent 后各调用一次官方
+[`Input.flush_buffered_events()`](https://docs.godotengine.org/en/4.7/classes/class_input.html#class-input-method-flush-buffered-events)，
+使缓冲输入进入真实游戏输入循环；记录该准备，不改时钟或产品状态。暂停前后均必须
+实际观测同一订单的50ms手递预留，其他路线不改变事件刷新时机。
 每次用新 namespace，从真实新游戏走到边界，实际暂停并确认250ms状态不变，再用真实
 控件保存退出。manual-reservation 必须在下一服务步前实际观测到50ms预留，否则失败；
 不回写时间或构造预留。宿主退出后比较完整主档与pre-quit，再启动独立 restore-exit：

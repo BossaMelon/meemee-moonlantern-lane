@@ -335,8 +335,14 @@ func interact(target: String, action: String) -> Dictionary:
 	send_event(confirm_event(true))
 	# Catch the real 50ms reservation before yielding to another service step.
 	if action == "serve" and request.save_boundary == "manual-reservation":
+		# parse_input_event may buffer the event. Flush through the real input loop;
+		# never advance time or create/pause a reservation through a product API.
+		Input.flush_buffered_events()
+		report.manual_reservation_flush = {"method":"Input.flush_buffered_events","confirmation_input_count":report.inputs.size(),"tick":view().world.tick}
 		if check(view().service.reservations.any(func(r): return r.channel == "manual" and r.remaining_ms == 50 and r.order_id == option.payload.order_id), "manual reservation was not synchronously observable before service step"):
 			send_event(pause_event(true)); send_event(pause_event(false))
+			Input.flush_buffered_events()
+			check(view().paused and view().service.reservations.any(func(r): return r.channel == "manual" and r.remaining_ms == 50 and r.order_id == option.payload.order_id),"actual pause input did not preserve the 50ms manual reservation")
 	send_event(confirm_event(false))
 	await get_tree().process_frame
 	return option
