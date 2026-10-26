@@ -43,3 +43,5 @@ fixture 的 `configuration` 是可消费输入，`scenarios` 保留既有 id/see
 fixture.configuration.layout是店巷几何/操作锚点的唯一静态数据源，矩形中心坐标；生产核心可内置校验一致的布局，UI只读Core geometry，运行包不读取tests/fixtures。world_input只设置保持轴，不写持久requests/经济流水；world_interact才沿请求防重。亲递在下一50ms服务步成交，每波首客可选2金币小费，与base_price/paid_total在唯一交付点原子入账；自动服务无tip且正常路线不得依赖tip。接口仍为这两个命令，不增加系统。固定五seed、两路线、两价格档覆盖实际循环与保存反例；经济预测不可复制成passed。H02只交设计/contract/fixture，实际范围和依赖由root/H03登记，正式完整候选按既定预算combined审阅。
 
 暂停规则以api.pause_policy的册页白名单为准，包含账本settle/upgrade/next_day，仍守原空间/阶段/UID条件且不走时；take/put/cook/serve/enter/open_shop/start_wave暂停禁用，world_input仅可清零，save/pause仍走Session。完整材料束按`min(剩余计划份数,floor(12/每份原料总单位))`稳定取最小UID，已携/已装料计入剩余；缺整束则原子失败。星火汤/彗星饼6份经12料+6料两趟装台后一次cook6，保留托盘12/台24/批量1–6默认3。WS02/WS03及fixture专门覆盖停时作弊、缺束、重复取料和两趟UID/成本守恒。
+
+World连续经营使用独立动作快照`version=3/ruleset=world-slice-v1`，`day`为真实正整数日期，`encounter_day=min(day,2)`；薄适配层内部投影Rain v2运行/验证，旧Rain/prototype规则、schema与日期负例不改。外层WorldCore仍save v4/world model v1，禁止把嵌入新动作状态假标v2。第3日以后复用既有第二日最高遭遇配置，Panel显示真实day；Core校验与世界日期一致，错误/未知上下文必须拒绝。WS05/06与fixture覆盖第3/6日真实入口、返程、保存、跨日掉落唯一领取与坏context，WS01–06/WS07/WSH角色和required不变。batch6高级原料是合法成本/UID的边界夹具，不改变供应或要求两天收齐6份稀有；真实探索与正常经济分别验证。本修订仅规格，不宣称适配代码/运行验收已通过。

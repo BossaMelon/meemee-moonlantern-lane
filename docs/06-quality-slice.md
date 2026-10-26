@@ -55,7 +55,11 @@ r2 真人入口反馈：“不好玩，空间太小，主角都不能动，交�
 
 新客流、继承料和接力会改变收支，旧110的Q05结论不能直接沿用。五种子、两路线、标准/高价档须真实经营验证首晚至少一种成长和次夜基础料理，无恢复依赖；两项不硬互斥，发现无取舍或软锁先修初值，不扩内容。对同批次升级前后记录手搬趟数与UID/成本，不能只写“自动化”文案。
 
+星火汤/彗星饼batch6的18料夹具是具有合法成本、UID和配方权限的边界测试，用于验证两趟搬运与批量守恒；不改变正常供应，也不要求两天内收齐6份稀有料。真实探索取得与正常经营经济另行举证。
+
 店门与巷道双向靠近F切换；携物可在两区往返，不复制。菇圃门仅准备阶段、空手、无料理/配送在途且当日次数可用时进入，复用既有E02模型、地图、餐前效果与掉落。返回**保存的巷道门口位置/朝向**，不是只改phase。世界Main只推进非战斗时钟，战斗仍由EPanel推进，同一Session一次只有一个tick owner。
+
+World可连续next_day，嵌入动作快照因此使用独立`version=3/ruleset=world-slice-v1`：`day`为真实经营日期（正整数），`encounter_day=min(day,2)`。薄适配层仅在内部将状态投影为原Rain v2运行与验证；第3日及以后复用既有最高（第二日）遭遇配置，不回落弱敌，也不代表新增怪物或成长。Panel始终显示真实day。Core校验动作day与世界日期相同；掉落身份和领取去重必须区分真实日期/本次探索，不能因多个日期共用encounter_day=2而冲突、重复领取或吞掉新日掉落。未知/错误ruleset、version、日期上下文及缺失/不匹配encounter_day均拒绝，不能把新状态标成原v2。旧Rain/prototype规则、schema与日期负例保持原样。
 
 ## 5. 最小生产接口与保存
 
@@ -63,7 +67,7 @@ Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_pause
 
 核心持有 `world.region_id/player/input/carried_uids/plan/stations/customers/intro_flags/remainder_ms`，位置/碰撞、制作与经济是同一事实源；`view.interactions`提供可选动作/建议UID/短提示/禁用理由。UI只画Camera、角色/托盘、魔法料理、真实客人与flight，不能维护第二份库存或销售状态。独立运动probe只验证手感，生产接入须换成这些真实接口。
 
-新增 `world-slice-v1`，save v4、world model v1，嵌入战斗model v2不改其规则。新默认Session/Main/launcher一致，独立用户数据目录 `moonlantern-world-slice-v1` 下再用 `user://profiles/world-slice-v1/moonlantern.json` 与 `.bak`。保存区域/脚点/朝向、携带UID、台内/烹饪/成菜、客人路径与订单/耐心/冻结报价预留、每波小费已付标记、门口返回位姿、RNG/事务/成长。暂停、离线不推进；重启清保持输入而不清进度。
+新增 `world-slice-v1`，外层save v4、world model v1保持；嵌入World动作快照为v3，内部复用Rain v2，两个类型版本不能混标。新默认Session/Main/launcher一致，独立用户数据目录 `moonlantern-world-slice-v1` 下再用 `user://profiles/world-slice-v1/moonlantern.json` 与 `.bak`。保存区域/脚点/朝向、携带UID、台内/烹饪/成菜、客人路径与订单/耐心/冻结报价预留、每波小费已付标记、门口返回位姿、动作day/encounter_day、RNG/事务/成长。暂停、离线不推进；重启清保持输入而不清进度。
 
 旧r2活跃档、rain-night、三日主/备档及包不得扫描、读写、迁移、覆盖；错误profile/version/map明确拒绝，不静默开新档。实际隔离验收只对非活动旧档、受控测试副本与不可变旧包作前后哈希，而非只比较路径字符串；不得读取/恢复/删除真人活跃r2档或要求其哈希静止，本人正常保存变化不属于失败。坏JSON可恢复同profile有效备份，保留坏档。
 
@@ -77,8 +81,8 @@ Session仍用 `command(kind,args,request_id)`、`view/snapshot/advance/set_pause
 | WS02 | 近身取放同UID、隔墙/远处/错区/重复F/错误UID拒绝；暂停允许合规账本升级，禁止停时cook/serve/开波/移动；白名单仍受空间/阶段守卫约束。 |
 | WS03 | 真批量投入→2秒料理→成菜；3原料×6分4份/2份两束备齐，18个输入UID只消耗一次、产6菜；缺整束原子失败、不重复取已备料；暂停/读档不复制。 |
 | WS04 | 亲递下一服务步成交，首客可选小费报价/合计/账本守恒；自动无tip、预算不足只付基础价、错菜/在途保存/换请求与读档重复交付反例。 |
-| WS05 | 五seed两路线两价格档，一晚→成长→次晨/菇圃；接力减少手搬而不免费出菜。 |
-| WS06 | 携物/料理/客人途中/交付/门口等完整恢复；非活动旧档/测试副本/不可变旧包哈希不变；新world不访问真人活跃r2档。 |
+| WS05 | 五seed两路线两价格档，一晚→成长→次晨/菇圃；接力减少手搬而不免费出菜；第3/6日真实门口进入、沿用第二日遭遇并返回保存位姿，跨日掉落唯一领取。 |
+| WS06 | 携物/料理/客人途中/交付/门口等完整恢复；第3/6日动作v3保存恢复及坏版本/ruleset/日期上下文拒绝；非活动旧档/测试副本/不可变旧包哈希不变，新world不访问真人活跃r2档。 |
 | WS07 | 三种真实InputEvent首段及一晚，3–5分钟首收入观察、全屏/窄屏与独立进程恢复；不可用probe或直接core替代。 |
 | WSH | 新真人首分钟是否能发现移动/拿放、是否理解给客人、搬运是否无聊、是否愿意再经营；旧负面保留，未玩部分明确未验。 |
 
