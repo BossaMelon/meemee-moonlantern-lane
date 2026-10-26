@@ -529,6 +529,7 @@ func test_save_and_expedition():
 	test_isolated_processes()
 	if campaign_evidence.is_empty(): test_campaign_progression()
 	preload("res://tests/core/world_campaign_cases.gd").new().contexts(self,campaign_evidence)
+	preload("res://tests/core/world_day_boundary_cases.gd").new().run(self)
 
 func copy_scripts(source: String, target: String):
 	DirAccess.make_dir_recursive_absolute(target)
