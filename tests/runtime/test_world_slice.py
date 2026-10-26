@@ -202,14 +202,90 @@ class SupervisorTests(unittest.TestCase):
                     w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
                 launch.assert_not_called()
 
-    def test_native_render_lock_contention_does_not_wait(self):
+    def test_native_inherited_lock_rejects_unlocked_shared_and_foreign_holder(self):
         path = self.root / "fixture-render.lock"
-        original = w.render_lock
-        with original(path), patch.object(w,"render_lock",side_effect=lambda: original(path)), \
-             patch.object(w,"frontmost_observation") as observe, patch.object(w,"run_owned") as launch:
-            with self.assertRaisesRegex(ValueError,"lock occupied"):
-                w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
-            observe.assert_not_called(); launch.assert_not_called()
+        fd = os.open(path,os.O_CREAT|os.O_RDWR,0o600)
+        original = w.render_lock; other = None
+        try:
+            with self.assertRaisesRegex(ValueError,"inherited wrapper"):
+                with original(path): self.fail("non-inherited fd accepted")
+            os.set_inheritable(fd,True)
+            for mode in ["unlocked","shared","foreign"]:
+                if mode == "shared": w.fcntl.flock(fd,w.fcntl.LOCK_SH)
+                if mode == "foreign":
+                    w.fcntl.flock(fd,w.fcntl.LOCK_UN)
+                    other = os.open(path,os.O_RDWR)
+                    w.fcntl.flock(other,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
+                message = "another holder" if mode == "foreign" else "not already exclusively held"
+                with self.subTest(mode=mode),patch.object(w,"render_lock",side_effect=lambda: original(path)), \
+                     patch.object(w,"frontmost_observation") as observe,patch.object(w,"run_owned") as launch:
+                    with self.assertRaisesRegex(ValueError,message):
+                        w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
+                    observe.assert_not_called();launch.assert_not_called()
+        finally:
+            if other is not None: os.close(other)
+            os.close(fd)
+
+    def test_real_wrapper_exec_keeps_lock_through_child_and_supervisor_exit(self):
+        path = self.root / "fixture-render.lock"
+        # Execute the unchanged real wrapper, remapping only its global lock
+        # pathname to this isolated fixture. No render lock or app is disturbed.
+        child = f'''import sys,subprocess
+sys.path.insert(0,{str(Path(w.__file__).parent)!r})
+import world_slice as w
+with w.render_lock(sys.argv[1]) as proof:
+ print(w.json.dumps(proof),flush=True)
+ subprocess.run([sys.executable,"-c","print('child-ready',flush=True); input()"],check=True)
+ w.verify_render_lock(proof)
+ print('child-exited',flush=True)
+ input()
+w.verify_render_lock(proof)
+print('context-exited',flush=True)
+input()
+'''
+        wrapper = str(w.ROOT / "tools/with_render_lock.py")
+        launcher = '''import os,sys,runpy
+original_open=os.open
+fixture=sys.argv[1]; wrapper=sys.argv[2]; child=sys.argv[3]
+def fixture_open(path,*args,**kwargs):
+ if path == f"/tmp/moonlantern-render-{os.getuid()}.lock": path=fixture
+ return original_open(path,*args,**kwargs)
+os.open=fixture_open
+sys.argv=[wrapper,"--",sys.executable,"-c",child,fixture]
+runpy.run_path(wrapper,run_name="__main__")
+'''
+        process = subprocess.Popen([sys.executable,"-c",launcher,str(path),wrapper,child],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,start_new_session=True)
+        try:
+            # Bounded pipe reads: a broken exec/lock implementation must not hang.
+            import select
+            def line():
+                self.assertTrue(select.select([process.stdout],[],[],5)[0],"wrapper child response timed out")
+                return process.stdout.readline().decode().strip()
+            proof=json.loads(line())
+            self.assertEqual((proof["device"],proof["inode"]),(path.stat().st_dev,path.stat().st_ino))
+            for phase in ["child-ready","child-exited","context-exited"]:
+                self.assertEqual(line(),phase)
+                probe=os.open(path,os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError): w.fcntl.flock(probe,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
+                finally: os.close(probe)
+                process.stdin.write(b"continue\n");process.stdin.flush()
+            process.wait(timeout=5)
+            self.assertEqual(process.returncode,0,process.stderr.read())
+            probe=os.open(path,os.O_RDWR)
+            try: w.fcntl.flock(probe,w.fcntl.LOCK_EX|w.fcntl.LOCK_NB)
+            finally: os.close(probe)
+        finally:
+            w.stop_owned_group(process);process.wait(timeout=5)
+            process.stdin.close();process.stdout.close();process.stderr.close()
+
+    def test_unwrapped_native_refused_before_output_or_child(self):
+        output=self.root/"must-not-create"
+        command=[sys.executable,str(Path(w.__file__)),"--candidate","a"*40,"--godot","/must-not-start","--output",str(output),"--mode","mouse","--stage","first-auto","--fullscreen","--native-slot","not-authority"]
+        result=subprocess.run(command,capture_output=True,text=True,timeout=5)
+        self.assertEqual(result.returncode,2)
+        self.assertIn("wrapper",result.stderr)
+        self.assertFalse(output.exists())
 
     def test_monitor_rejection_stops_only_its_owned_child(self):
         def reject(_pid): raise ValueError("synthetic foreground rejection")
@@ -327,7 +403,7 @@ class SupervisorTests(unittest.TestCase):
             with self.subTest(flags=flags),patch.object(sys,"argv",base+flags),patch.object(w,"run_source") as launch,contextlib.redirect_stderr(error):
                 with self.assertRaises(SystemExit) as raised: w.main()
                 self.assertEqual(raised.exception.code,2);self.assertIn(message,error.getvalue());launch.assert_not_called()
-        with patch.object(sys,"argv",base+["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","420"]),patch.object(w,"run_source",return_value=0) as launch:
+        with patch.object(sys,"argv",base+["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","420"]),patch.object(w,"render_lock",return_value=nullcontext({})),patch.object(w,"run_source",return_value=0) as launch:
             self.assertEqual(w.main(),0)
             args=launch.call_args.args[0]
         self.assertEqual(args.save_boundary,"growth")
@@ -352,6 +428,31 @@ class SupervisorTests(unittest.TestCase):
         four["visible_customer_ids"]=["0","1","2"]
         with self.assertRaisesRegex(ValueError,"all inside the observed world viewport"):
             w.validate_native_images(obs,request,self.root)
+
+    def test_native_startup_requires_owned_fresh_samples_and_real_resume(self):
+        rows=[];samples=[]
+        for index in [1,2]:
+            path=self.root/("frontmost-%02d-during-window.json" % index)
+            row={"label":"during-window","pid":123,"protected":False,"observed_unix_ns":10**15+index*2*10**9,"finished_unix_ns":10**15+index*2*10**9+50*10**6}
+            w.write_json(path,row);rows.append(row)
+            samples.append({"path":str(path),"sha256":w.hashlib.sha256(path.read_bytes()).hexdigest()})
+        obs={"inputs":[{},{},{}],"checkpoints":[{"name":"native-ready-before-input","input_count":0,"snapshot":{"paused":True}}],"native_startup":{"complete":True,"stable_focus_ms":2000,"ready_unix_ms":rows[-1]["finished_unix_ns"]/1e6+1000,"host_samples":samples,"resume_required":True,"resume_inputs_before":0,"resume_press_count":1,"resume_inputs_after":3}}
+        w.validate_native_startup(obs,self.root,123)
+        for change,message in [("foreign","not the owned process"),("foreign_first","not the owned process"),("stale","stale"),("no_press","real GUI press"),("prior_input","zero-input")]:
+            bad=copy.deepcopy(obs)
+            if change=="foreign":
+                path=Path(samples[-1]["path"]);w.write_json(path,{**rows[-1],"pid":27370})
+                bad["native_startup"]["host_samples"][-1]["sha256"]=w.hashlib.sha256(path.read_bytes()).hexdigest()
+            if change=="foreign_first":
+                path=Path(samples[0]["path"]);w.write_json(path,{**rows[0],"pid":27370})
+                bad["native_startup"]["host_samples"][0]["sha256"]=w.hashlib.sha256(path.read_bytes()).hexdigest()
+            if change=="stale": bad["native_startup"]["ready_unix_ms"]+=4000
+            if change=="no_press": bad["native_startup"]["resume_press_count"]=0
+            if change=="prior_input": bad["checkpoints"][0]["input_count"]=1
+            with self.subTest(change=change),self.assertRaisesRegex(ValueError,message):
+                w.validate_native_startup(bad,self.root,123)
+            w.write_json(Path(samples[-1]["path"]),rows[-1])
+            w.write_json(Path(samples[0]["path"]),rows[0])
 
 
 if __name__ == "__main__":

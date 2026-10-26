@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import errno
 import fcntl
 import hashlib
 import io
@@ -18,6 +19,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import struct
 import subprocess
 import sys
@@ -54,7 +56,7 @@ SAVE_PATH = "user://" + SAVE_RELATIVE
 QA = "tests/runtime/world_slice.gd"
 OWN_SOURCES = ["tests/runtime/world_slice.py", QA, QA + ".uid",
                "tests/runtime/quality_support.py", "tests/runtime/check_source_launch.py",
-               "tools/build_local_demo.py"]
+               "tools/build_local_demo.py", "tools/with_render_lock.py"]
 
 
 def require(condition, message):
@@ -220,17 +222,53 @@ def error_free(path):
 
 @contextmanager
 def render_lock(path=None):
-    """Same lock as tools/with_render_lock.py, but never wait or launch on contention."""
+    """Verify the wrapper's inherited lock; never acquire a new owning lock."""
     path = Path(path) if path is not None else Path(f"/tmp/moonlantern-render-{os.getuid()}.lock")
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
+    require(path.exists(), "native supervisor requires outer tools/with_render_lock.py")
+    identity = path.lstat()
+    require(stat.S_ISREG(identity.st_mode) and identity.st_uid == os.getuid(), "render lock is not this user's regular file")
+    matches = []
+    for name in os.listdir("/dev/fd"):
         try:
+            fd = int(name); current = os.fstat(fd)
+            if (current.st_dev,current.st_ino) == (identity.st_dev,identity.st_ino) and os.get_inheritable(fd): matches.append(fd)
+        except OSError:
+            continue  # /dev/fd's own enumeration descriptor may already be closed.
+    require(len(matches) == 1, "native supervisor requires exactly one inherited wrapper lock descriptor")
+    proof = {"path":str(path),"fd":matches[0],"device":identity.st_dev,"inode":identity.st_ino,"uid":identity.st_uid}
+    verify_render_lock(proof)
+    yield proof
+    # Do not unlock/close it: the outer exec-inherited descriptor lasts until
+    # the complete supervisor exits, including headless restore and reporting.
+
+
+def verify_render_lock(proof):
+    path = Path(proof["path"]); fd = proof["fd"]
+    identity = path.lstat(); current = os.fstat(fd)
+    expected = (proof["device"],proof["inode"],proof["uid"])
+    require(stat.S_ISREG(identity.st_mode) and (identity.st_dev,identity.st_ino,identity.st_uid) == expected
+            and (current.st_dev,current.st_ino,current.st_uid) == expected and os.get_inheritable(fd), "inherited render lock identity changed")
+    # A separate shared-lock probe must conflict with an already-held EX lock.
+    # This probe is never used as the owning lock and never waits.
+    probe = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        require((os.fstat(probe).st_dev,os.fstat(probe).st_ino) == expected[:2], "render lock path changed during probe")
+        try:
+            fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError as error:
+            if error.errno not in (errno.EACCES,errno.EAGAIN): raise
+        else:
+            fcntl.flock(probe, fcntl.LOCK_UN)
+            raise ValueError("inherited render lock was not already exclusively held")
+        try:
+            # Same open-file description: succeeds for the wrapper's own lock,
+            # refuses a foreign holder without reopening/relocking against self.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise ValueError("render lock occupied; no native launch") from error
-        yield
+        except OSError as error:
+            if error.errno not in (errno.EACCES,errno.EAGAIN): raise
+            raise ValueError("render lock occupied by another holder; no native launch") from error
     finally:
-        os.close(fd)
+        os.close(probe)
 
 
 def frontmost_observation(output, label, index):
@@ -246,7 +284,10 @@ def frontmost_observation(output, label, index):
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         row["error"] = str(error)
     row["finished_unix_ns"] = time.time_ns()
-    write_json(output / ("frontmost-%02d-%s.json" % (index,label)), row)
+    path = output / ("frontmost-%02d-%s.json" % (index,label))
+    pending = path.with_suffix(".json.tmp")
+    write_json(pending, row)
+    pending.replace(path)  # Publish the existing audit row whole; no new IPC channel.
     # Public aggregate needs only PID/protection and timing; raw stdout/stderr stay local.
     return {key:row[key] for key in ["label","observed_unix_ns","finished_unix_ns","pid","protected","error"] if key in row}
 
@@ -271,6 +312,32 @@ def run_native(command, cwd, timeout, log, output, observations):
         except (ValueError, OSError) as error:
             process["frontmost_error"] = str(error)
         return process
+
+
+def validate_native_startup(obs, output, pid):
+    proof = obs.get("native_startup", {})
+    ready = next((r for r in obs.get("checkpoints", []) if r["name"] == "native-ready-before-input"), {})
+    require(proof.get("complete") is True and ready.get("input_count") == 0
+            and proof.get("stable_focus_ms", 0) >= 1000, "native startup lacks stable zero-input barrier")
+    samples = proof.get("host_samples", [])
+    require(len(samples) == 2, "native startup needs two existing host foreground samples")
+    rows = []
+    for sample in samples:
+        path = path_safe(sample["path"])
+        require(path.parent == output and re.fullmatch(r"frontmost-\d+-during-window\.json", path.name), "startup foreground evidence escaped output")
+        require(hashlib.sha256(path.read_bytes()).hexdigest() == sample["sha256"], "startup foreground sample hash differs")
+        row = read_json(path); require_safe_foreground(row)
+        require(row["label"] == "during-window" and row["pid"] == pid, "startup foreground is not the owned process")
+        rows.append(row)
+    gap_ms = (rows[1]["observed_unix_ns"]-rows[0]["observed_unix_ns"])/1e6
+    age_ms = proof["ready_unix_ms"]-rows[1]["finished_unix_ns"]/1e6
+    require(1500 <= gap_ms <= 4000 and 0 <= age_ms <= 3000, "startup foreground evidence stale or not two normal samples")
+    resume = proof.get("resume_required")
+    require(type(resume) is bool and ready.get("snapshot", {}).get("paused") == resume
+            and proof.get("resume_inputs_before") == 0, "startup pause/input provenance missing")
+    require((proof.get("resume_press_count") == 1 and 0 < proof.get("resume_inputs_after", 0) <= len(obs["inputs"])) if resume
+            else proof.get("resume_press_count") == 0 and proof.get("resume_inputs_after") == 0,
+            "startup pause was not resumed through exactly one real GUI press")
 
 
 def validate_native_images(obs, request, output):
@@ -428,6 +495,7 @@ def validate_observation(obs, request, process):
     names = [r["name"] for r in obs.get("checkpoints", [])]
     require(names and len(names) == len(set(names)) and names[0] == "startup-before-input" and names[-1] == "pre-quit", "checkpoint sequence incomplete/duplicate")
     require(obs["checkpoints"][0]["input_count"] == 0, "startup barrier received input")
+    if native: validate_native_startup(obs, Path(request["output"]), process["pid"])
     if stage == "restore-exit":
         if request.get("continue_after_restore"):
             require(not native and names == ["startup-before-input","settled-before-input","continued-effect","continued-complete","continued-saved","continued-reloaded","continued-stable","paused-continued","saved","pre-quit"], "restore continuation checkpoints missing")
@@ -487,6 +555,7 @@ def run_source(args):
     tracked = {}
     guards = {}
     def launch(label, command, timeout=35, native=False):
+        if args.native: verify_render_lock(args.render_lock_proof)
         log = output / (label + "-process.log")
         proc = run_native(command,output,timeout,log,output,result["frontmost"]) if native else run_owned(command, output, timeout, log)
         proc.update(stage=label, display="macOS" if native else "headless", timeout_seconds=timeout)
@@ -600,6 +669,9 @@ def run_source(args):
     finally:
         try:
             check_guards(tracked); check_guards(guards)
+            if args.native:
+                verify_render_lock(args.render_lock_proof)
+                result["render_lock"] = {**args.render_lock_proof,"held_through_supervisor":True}
         except (ValueError, OSError) as error:
             result["status"] = "failed"; result["errors"].append(str(error))
         result["evidence"] = evidence_files(p for p in output.iterdir() if p.is_file() and p.name != "result.json")
@@ -671,6 +743,10 @@ def main():
     if night != (args.save_boundary == "growth"):
         parser.error("night stages require growth boundary; first-loop stages cannot claim growth")
     try:
+        if args.native:
+            with render_lock() as proof:
+                args.render_lock_proof = proof
+                return run_source(args)
         return run_source(args)
     except (ValueError, OSError) as error:
         print(str(error), file=sys.stderr)

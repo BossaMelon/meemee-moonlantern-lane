@@ -41,9 +41,9 @@ inspect 拒绝此选项。它只支持输入诊断，不能产生窗口、截图
 实际读到的哈希相同。以下命令仅为待slot模板，准备工作不执行：
 
 ```sh
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
-python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage night-quick --growth shelf --tier standard --fullscreen --native-night --native-slot ROOT_ASSIGNED_NIGHT_SLOT --native-timeout 420 --restore-headless-logical-size 1280 720 --output /private/tmp/NEW_V02_NATIVE_NIGHT
+python3 tools/with_render_lock.py -- python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
+python3 tools/with_render_lock.py -- python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
+python3 tools/with_render_lock.py -- python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage night-quick --growth shelf --tier standard --fullscreen --native-night --native-slot ROOT_ASSIGNED_NIGHT_SLOT --native-timeout 420 --restore-headless-logical-size 1280 720 --output /private/tmp/NEW_V02_NATIVE_NIGHT
 ```
 
 `--native-night` 明确选择完整夜角色，仅接受 fullscreen/night-quick/shelf/standard/growth；
@@ -56,14 +56,46 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /abso
 每个进程单独记录 display、argv、PID、上限及退出；原生进程绝不混入 headless 尺寸准备。
 成功角色为 `native-night-observed`，独立恢复仍是 headless 证据；首环保持 `native-first-observed`。
 
-原生监督器非阻塞取得现有 `/tmp/moonlantern-render-UID.lock`；占用时直接退出，不等待后
-擅自启动。随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
+原生命令必须由上例的外层 `tools/with_render_lock.py --` 包住整个supervisor；直接调用
+在创建输出或任何子进程前失败。V02绑定wrapper源码哈希，并从自身 `/dev/fd` 核验唯一
+可继承描述符与 `/tmp/moonlantern-render-UID.lock` 的device/inode/uid一致。独立的非阻塞
+共享锁探针必须与已持有的排他锁冲突，再通过原继承描述符核验自身锁；不新开拥有锁的
+描述符，不依赖环境标签，不与自己二次加锁冲突。每个子进程前及最终报告前复验，V02
+不关闭/解锁继承描述符，因此锁持续至整个supervisor退出，包括后续headless恢复。
+纯Python夹具执行未改动wrapper，只把锁路径映射到独立临时文件，验证真实exec继承、
+子进程期间/结束后/supervisor结束前争用仍失败，以及退出后释放；不占用全局渲染锁。
+API依据：[Apple flock(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)、
+[Python 3.14文件描述符继承](https://docs.python.org/3.14/library/os.html#inheritance-of-file-descriptors)。
+
+**外层争用边界尚未闭合：** 当前wrapper遇到占用会在exec之前阻塞等待；V02无法从被启动
+之前使它即时拒绝。此工具不在V02允许路径内，本改动不修改它，也不能把内部非阻塞校验
+冒充外层争用拒绝。须由总协调安排工具owner处理这一要求后，再分配新的原生时段。
+
+随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
 `processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/是否保护，留本地原始输出、
 命令和时间。读取失败或前台为受保护46285/80978时不启动/不继续新渲染；运行中只结束自己
 创建的进程组。引擎自然获得焦点后才分发内部 InputEvent，失焦即失败，不重新激活任何app。
 不读取其他app名字或bundle；公开汇总仅保留PID/保护判定及时间，原始stdout/stderr留本地。
 不使用System Events、CUA、系统截图、OS键鼠输入或权限设置。原生首环默认150秒，上限180秒；
 超时/清理不得计为成功，暂停/保存/退出仍走真实控件。
+
+原生启动最多在进程总时限内等待12秒：Window自然焦点连续稳定至少1秒，且现有
+`frontmost-*.json` 审计中连续两次during-window均为自有PID（仍约2秒采样，两次间隔
+1.5–4秒，最新结果不超过3秒）。复用原审计文件，原子发布完整JSON；不新增focus通信
+通道、不改变OS采样频率。外部应用持续前台、失效/缺少样本或自然焦点未恢复则0输入失败。
+Main.ready的 `startup-before-input` 及稳定后的 `native-ready-before-input` 均保留完整
+零输入快照。若后者仍暂停，仅在上述条件满足后通过真实GUI Resume恢复，并只读计数
+一次实际Button.pressed；不发该信号、不调用core暂停setter、不自动激活窗口。
+`startup` PNG在这个屏障及可选真实Resume之后捕获，因此如发生Resume，其input_count
+会大于0；零输入证明来自保留的两份完整快照，不能把该图冒称零输入图。
+
+观察器记录自身实际收到的application/window Focus通知与暂停变化，不推定未采到的
+历史通知。宿主原采样频率、保护PID与最终自有前台证据门槛保留；每次实际输入和截图
+还要求最新自有前台样本有效。启动屏障后失焦仍失败、不重试；正常Quit请求后的
+销毁通知只记录，退出本身仍必须成功。7054唯一失败的1.748秒进程未覆盖下一次约2秒采样，
+不能用未来等待结果补写旧前台瞬间或归咎产品。API依据
+[Node Focus通知](https://docs.godotengine.org/en/4.7/classes/class_node.html#class-node-constant-notification-application-focus-out) 与
+[Window.has_focus](https://docs.godotengine.org/en/4.7/classes/class_window.html#class-window-method-has-focus)。
 
 先拍自然入口，再用真实输入打开菜谱；材料行被裁切时通过真实滚轮/触摸拖动/手柄方向键滚动。
 原首环现在要求12张：`startup`、`recipe-book`、`recipe-materials`、`shop-exit`、`lane`、
