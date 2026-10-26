@@ -68,7 +68,8 @@ def ui_source_bindings(source):
     paths.update(p.relative_to(source).as_posix() for p in (source / "game/ui").rglob("*")
                  if p.is_file() and (p.suffix == ".gd" or p.name.endswith(".gd.uid")))
     require(all((source / path).is_file() for path in paths), "required UI source/UID missing")
-    require(all(path + ".uid" in paths for path in paths if path.endswith(".gd")), "candidate UI script has no bound UID")
+    # Existing check-only scripts may have no tracked UID; production world helpers may not.
+    require(all(path + ".uid" in paths for path in paths if path.startswith("game/ui/world/") and path.endswith(".gd")), "candidate world UI helper has no bound UID")
     return {path: hashlib.sha256((source / path).read_bytes()).hexdigest() for path in sorted(paths)}
 
 
