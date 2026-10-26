@@ -342,8 +342,8 @@ exit 0
             foreach ($row in $font.bindings) {
                 if (-not @($font.fonts | Where-Object { $_.path -eq $row.font_path -and $_.instance -eq $row.font_instance }).Count) { throw 'Main text binding does not use the actual packaged font instance.' }
             }
-            $fontSources=@('game/ui/portable_font.gd','game/ui/main.gd','game/ui/checks/portable_font.gd','assets/fonts/font-manifest.json','assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import','game/ui/world_play.gd','game/ui/world/world_input.gd','game/ui/world/world_books.gd','game/ui/world/world_controller.gd','game/ui/world/item_group.gd')
-            if ((($font.source_sha256.Keys | Sort-Object) -join ',') -cne (($fontSources | Sort-Object) -join ',')) { throw 'Font producer source bindings differ from the frozen ten-source set.' }
+            $fontSources=@('game/ui/portable_font.gd','game/ui/main.gd','game/ui/checks/portable_font.gd','assets/fonts/font-manifest.json','assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf.import','game/ui/world_play.gd','game/ui/world/world_input.gd','game/ui/world/world_books.gd','game/ui/world/world_controller.gd','game/ui/world/item_group.gd','game/ui/world/world_structure.gd')
+            if ((($font.source_sha256.Keys | Sort-Object) -join ',') -cne (($fontSources | Sort-Object) -join ',')) { throw 'Font producer source bindings differ from the frozen eleven-source set.' }
             foreach ($name in $fontSources) {
                 if ($font.source_sha256[$name] -ne $before.files[$name].sha256) { throw "Font probe source differs from verified Git blob: $name" }
             }
