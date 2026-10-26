@@ -2,13 +2,14 @@
 
 ## V02 world 切片：真实输入驱动与监督器
 
-`world_slice.py` 提供 **Mac 源码 headless 观察、首段和整夜输入诊断**，不能通过 WS07。
+`world_slice.py` 提供 **Mac 源码 headless 诊断及独立的原生首环视觉诊断**，不能通过 WS07。
 它拒绝旧 rain-night 默认值，要求固定完整提交及与该提交一致的监督器/复用 helper；
 在全新目录导出 Git tree，先独立观测 OS user-data 位置，再用 Node autoload 观察自然
 Main.ready/current_scene/default save path。不会实例化或替换 Main、写经济状态、重设
 窗口/控件布局，也不会读取实际玩家旧档。`inspect` 阶段禁止注入事件；`first-manual`
 与 `first-auto` 编排三种真实输入的首段与暂停/保存/第二进程恢复。实现依据 P10 实际
-world view、P11 world_play/world_input；**首次生产路线执行仍待总协调给出固定组合候选**。
+world view、P11 world_play/world_input。已消费固定 P11 `d3a0b9da4c564372e2e2ea27bc04731d231fbe76`；
+**V02 首次产品路线仍待总协调为固定组合候选分配运行时段**。
 后续候选必须包含 Core `a060e920ec12de15af38d9cfc389cc566deef931`（或其后继），入口
 检查该提交祖先关系，不能用旧 f98/初始279检查的报告代替当前保存恢复依据。
 
@@ -22,6 +23,35 @@ python3 tests/runtime/world_slice.py --candidate FULL_COMMIT_SHA --godot /absolu
 必须观测实际 Window 等于请求、实际 world Control 至少640×360。headless 若仍返回64×64
 便明确失败，不设置 root/控件大小、不把 dummy 当作真实渲染。该参数的实际有效性尚待
 固定生产候选实测；不是已经解决旧 H06 的尺寸问题。
+
+原生首环使用 `--fullscreen`，或单独 `--windowed --resolution 844,390`（也接受844x390）。
+必须另有 root 明确授权的 `--native-slot SLOT_LABEL`；参数只是记录授权时段，不能自己产生
+授权。只接受 `first-manual` / `first-auto` 的 after-sale 边界，拒绝原生整夜/成长或恢复
+声明。每次新 namespace；源码须含固定P11祖先并绑定16个UI文件，宿主导出的哈希与引擎
+实际读到的哈希相同。以下命令仅为待slot模板，准备工作不执行：
+
+```sh
+python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode mouse --stage first-auto --fullscreen --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_FULLSCREEN
+python3 tests/runtime/world_slice.py --candidate FULL_COMBINED_SHA --godot /absolute/path/to/Godot --mode touch --stage first-auto --windowed --resolution 844,390 --native-slot ROOT_ASSIGNED_SLOT --native-timeout 150 --output /private/tmp/NEW_V02_NARROW
+```
+
+原生监督器非阻塞取得现有 `/tmp/moonlantern-render-UID.lock`；占用时直接退出，不等待后
+擅自启动。随后用 root 已核验的 get-only AppKit `NSWorkspace.frontmostApplication` /
+`processIdentifier` 命令新读启动前、窗口期间（约每2秒）及退出后的PID/bundle，留原始输出、
+命令和时间。读取失败或前台为受保护46285/80978时不启动/不继续新渲染；运行中只结束自己
+创建的进程组。引擎自然获得焦点后才分发内部 InputEvent，失焦即失败，不重新激活任何app。
+不使用System Events、CUA、系统截图、OS键鼠输入或权限设置。原生进程默认150秒，上限180秒；
+超时/清理不得计为成功，暂停/保存/退出仍走真实控件。
+
+先拍自然入口，再用真实输入打开短菜谱、步行到巷道后回店，依次记录携料、制作、成菜、
+客人入场、首笔成交，共8张PNG。只从 **Root Window viewport** 调用 `get_texture().get_image()`，
+每张等实际 frame_post_draw（最多5秒），不截640子viewport冒充全屏、不缩放图片。报告保留
+屏幕/系统可用区/窗口矩形与mode、逻辑Root viewport、640世界viewport、纹理代理、原始PNG
+尺寸、DPI/scale、final/stretch transform及当时位置/UID/现金。纹理代理尺寸不冒充rawPNG
+尺寸；rawPNG必须符合实际stretch映射的相邻整数像素。全屏窗口矩形须精确等于屏幕或macOS
+API返回的系统可用区，窄窗须实际为844×390。宿主另读PNG IHDR与哈希核验。
+[Godot 4.7 CLI](https://docs.godotengine.org/en/4.7/tutorials/editor/command_line_tutorial.html)、
+[DisplayServer读取API](https://docs.godotengine.org/en/4.7/classes/class_displayserver.html)。
 
 键鼠使用真实 WASD/F，手柄使用左轴/A，触屏读取实际 P11 relay 的圆盘/动作区域并经
 当前变换映射事件。只读 Core 几何按16格、半径12加容差规划保守路径；途中反复检查真实
@@ -67,10 +97,11 @@ UID转移、制作剩余时间/tick、冻结报价、成交/served事件、现�
 目录，拒绝 live OS user-data 根下的路径及软链接。活动 r2 保存可正常变化，不读取、
 冻结或恢复它；这里的受控副本 guard 不冒充对真人文件的访问审计。
 
-preflight 成功仅为 `status=observed` / exit 0；首段双进程成功仅为
-`status=save-boundary-observed` / exit 0。两者始终 `ws07_passed=false`、
-`wsh_observed=false`；失败 exit 2 保留原件。当前没有原生渲染 CLI，也没有任何截图或
-实际输入通过声明。Python 合成观察和受控子进程测试仅证明监督器边界；缺少 P10/P11 时
+preflight 成功仅为 `status=observed` / exit 0；headless双进程成功仅为
+`status=save-boundary-observed` / exit 0；原生首环成功仅为 `native-first-observed`，且
+`independent_restore_observed=false`。所有路径始终 `ws07_passed=false`、`wsh_observed=false`；
+失败 exit 2 保留原件。入口实现不等于已有截图/实际输入通过。Python 合成观察和受控子进程
+测试仅证明监督器边界；缺少 P10/P11 时
 真实入口在启动产品前失败。WS01–06 继续由 Core 自动 runner 负责，WSH 必须是真人反馈。
 
 后续 WS07 仍需实跑并修正同候选三输入首段、各保存边界、整夜三波与次晨成长驱动；

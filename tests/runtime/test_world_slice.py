@@ -1,9 +1,11 @@
 """V02 supervisor unit/owned-child checks; never WS07 gameplay evidence."""
 import copy
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import unittest
@@ -104,6 +106,8 @@ class SupervisorTests(unittest.TestCase):
                "snapshot": {"profile_id": "world-slice-v1", "version": 4, "world": {}},
                "geometry": {"window": [64, 64]}, "files": {"primary": False, "backup": False}}
         w.validate_observation(obs, request, {"pid": 25})
+        with self.assertRaises(ValueError):
+            w.validate_observation(obs, {**request,"native":True,"fullscreen":True,"stage":"first-auto"}, {"pid":25})
         for key, value in [("pid", 26), ("ws07_passed", True), ("inputs", [{}]),
                            ("nonce", "other"), ("display", "macos"),
                            ("ready_seen", False), ("snapshot", {})]:
@@ -174,13 +178,53 @@ class SupervisorTests(unittest.TestCase):
                    "--mode", "touch", "--output", str(output), "--stage", "first-manual"]
         cases = [([], "explicit window size"),
                  (["--window-size","1280","720","--save-boundary","growth"], "night stages require growth"),
-                 (["--stage","night-quick","--window-size","1280","720","--save-boundary","after-sale"], "night stages require growth")]
+                 (["--stage","night-quick","--window-size","1280","720","--save-boundary","after-sale"], "night stages require growth"),
+                 (["--fullscreen"], "separately authorized --native-slot"),
+                 (["--windowed","--native-slot","negative-fixture"], "requires --resolution"),
+                 (["--fullscreen","--native-slot","negative-fixture","--stage","night-hot"], "first-loop after-sale"),
+                 (["--fullscreen","--native-slot","negative-fixture","--resolution","844,390"], "do not supply a resolution")]
         for flags, message in cases:
             with self.subTest(flags=flags):
                 result = subprocess.run(command + flags, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 2)
                 self.assertIn(message, result.stderr)
                 self.assertFalse(output.exists())
+
+    def test_native_protected_or_unavailable_foreground_never_starts_process(self):
+        # Synthetic command responses only; no AppKit/osascript call in tests.
+        for raw in ['{"pid":46285,"bundle":"fixture"}', '{"pid":80978,"bundle":"fixture"}', 'null', 'bad-json']:
+            with self.subTest(raw=raw), patch.object(w, "render_lock", return_value=nullcontext()), \
+                 patch.object(w.subprocess, "run", return_value=subprocess.CompletedProcess([],0,raw,"")), \
+                 patch.object(w, "run_owned") as launch:
+                with self.assertRaises(ValueError):
+                    w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
+                launch.assert_not_called()
+
+    def test_native_render_lock_contention_does_not_wait(self):
+        path = self.root / "fixture-render.lock"
+        original = w.render_lock
+        with original(path), patch.object(w,"render_lock",side_effect=lambda: original(path)), \
+             patch.object(w,"frontmost_observation") as observe, patch.object(w,"run_owned") as launch:
+            with self.assertRaisesRegex(ValueError,"lock occupied"):
+                w.run_native(["never-start"],self.root,15,self.root/"unused.log",self.root,[])
+            observe.assert_not_called(); launch.assert_not_called()
+
+    def test_monitor_rejection_stops_only_its_owned_child(self):
+        def reject(_pid): raise ValueError("synthetic foreground rejection")
+        result = w.run_owned([sys.executable,"-c","import time; time.sleep(20)"],self.root,2,self.root/"monitor.log",monitor=reject)
+        self.assertEqual(result["monitor_error"],"synthetic foreground rejection")
+        self.assertTrue(result["owned_empty"])
+        self.assertTrue(result["cleanup_signals"])
+        with self.assertRaises(ValueError): w.require_process(result,self.root/"monitor.log")
+
+    def test_world_sized_png_cannot_claim_root_native_capture(self):
+        # Deliberately incomplete PNG header, never a rendered game image.
+        raw = self.root / "invalid-world-only.png"
+        raw.write_bytes(b"\x89PNG\r\n\x1a\n" + struct.pack(">I",13) + b"IHDR" + struct.pack(">II",640,360))
+        names = ["startup","recipe-book","lane","carrying","cooking","ready","customer-arriving","first-sale"]
+        rows = [{"name":name,"path":str(raw),"png_size":[640,360],"root_texture_size":[640,360]} for name in names]
+        with self.assertRaisesRegex(ValueError,"root PNG replaced"):
+            w.validate_native_images({"screenshots":rows,"ui_source_sha256":{}},{"ui_source_sha256":{}},self.root)
 
 
 if __name__ == "__main__":

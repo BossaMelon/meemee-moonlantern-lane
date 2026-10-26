@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""V02 headless source inspection/first-loop diagnostics, never WS07 completion.
+"""V02 source diagnostics; native first-loop preview is never WS07 completion.
 
 Route execution awaits a fixed P10/P11 candidate and an explicitly requested
 CLI resolution, checked against the actual window before any injected input.
-No native-render CLI: no_focus is not a Mac non-activation guarantee.
+Native preview requires a separately authorized slot, fresh foreground reads,
+and the shared render lock. No OS input or activation commands are used.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import io
 import json
@@ -15,6 +18,7 @@ import math
 import os
 from pathlib import Path
 import re
+import struct
 import subprocess
 import sys
 import tarfile
@@ -30,6 +34,18 @@ from build_local_demo import BuildError, git, resolve_candidate, safe_path, stop
 
 ENGINE_VERSION = "4.7.2.stable.official.ed1daf0bf"
 CORE_CHECKPOINT = "a060e920ec12de15af38d9cfc389cc566deef931"
+UI_CHECKPOINT = "d3a0b9da4c564372e2e2ea27bc04731d231fbe76"
+UI_SOURCES = ["game/ui/main.gd", "game/ui/world_play.gd", "game/ui/world_play.gd.uid",
+              "game/ui/checks/world_play.gd", "game/ui/checks/world_play.gd.uid",
+              "game/ui/checks/portable_font.gd", "game/ui/checks/startup_save.gd",
+              "scenes/ui/world_play.tscn", "game/ui/world/walk_animation.gd",
+              "game/ui/world/world_books.gd.uid", "game/ui/world/world_input.gd.uid",
+              "game/ui/world/world_input.gd", "game/ui/world/world_controller.gd.uid",
+              "game/ui/world/world_books.gd", "game/ui/world/world_controller.gd",
+              "game/ui/world/walk_animation.gd.uid"]
+PROTECTED_PIDS = {46285, 80978}
+FRONTMOST_COMMAND = ["/usr/bin/osascript", "-l", "JavaScript", "-e",
+                    'ObjC.import("AppKit"); var front = $.NSWorkspace.sharedWorkspace.frontmostApplication; JSON.stringify({pid:Number(front.processIdentifier),bundle:ObjC.unwrap(front.bundleIdentifier)})']
 MAIN_SCENE = "res://scenes/main.tscn"
 MAIN_SCRIPT = "res://game/ui/main.gd"
 SAVE_RELATIVE = "profiles/world-slice-v1/moonlantern.json"
@@ -111,7 +127,7 @@ def check_evidence(before):
     check_guards(before)
 
 
-def run_owned(command, cwd, timeout, log):
+def run_owned(command, cwd, timeout, log, monitor=None):
     require(os.name == "posix", "V02 process ownership currently supports POSIX only")
     require(type(timeout) in (int, float) and math.isfinite(timeout) and timeout > 0, "invalid process timeout")
     command = [str(arg) for arg in command]
@@ -120,12 +136,30 @@ def run_owned(command, cwd, timeout, log):
         process = subprocess.Popen(command, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT,
                                    start_new_session=True)
         timed_out = interrupted = False
+        monitor_error = None
         try:
-            process.wait(timeout=timeout)
+            if monitor is None:
+                process.wait(timeout=timeout)
+            else:
+                deadline = time.monotonic() + timeout
+                next_observation = 0
+                while process.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    if time.monotonic() >= next_observation:
+                        monitor(process.pid)
+                        next_observation = time.monotonic() + 2
+                    try:
+                        process.wait(timeout=min(.25, remaining))
+                    except subprocess.TimeoutExpired:
+                        pass
         except subprocess.TimeoutExpired:
             timed_out = True
         except KeyboardInterrupt:
             interrupted = True
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            monitor_error = str(error)
         finally:
             # Always check, including parent exit 0 with an orphaned descendant.
             empty, signals = stop_owned_group(process)
@@ -134,12 +168,15 @@ def run_owned(command, cwd, timeout, log):
             "started_ns": started, "ended_ns": time.monotonic_ns(),
             "exit_code": process.returncode, "timed_out": timed_out,
             "interrupted": interrupted, "owned_empty": empty, "cleanup_signals": signals,
+            "monitor_error": monitor_error,
             "log_sha256": hashlib.sha256(log.read_bytes()).hexdigest()}
 
 
 def require_process(result, log):
     require(result["exit_code"] == 0 and not result["timed_out"] and not result["interrupted"]
-            and result["owned_empty"] and not result["cleanup_signals"], "process did not exit cleanly")
+            and result["owned_empty"] and not result["cleanup_signals"]
+            and not result.get("monitor_error") and not result.get("frontmost_error"),
+            "process did not exit cleanly: " + str(result.get("monitor_error") or result.get("frontmost_error") or "exit/timeout/interruption/owned-group failure"))
     require(hashlib.sha256(log.read_bytes()).hexdigest() == result["log_sha256"], "process log changed")
     error_free(log)
 
@@ -148,6 +185,83 @@ def error_free(path):
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", path.read_text(errors="replace"))
     require(not re.search(r"(?m)^\s*(?:SCRIPT ERROR|ERROR|Parse Error):", text), "engine error: " + str(path))
     return text
+
+
+@contextmanager
+def render_lock(path=None):
+    """Same lock as tools/with_render_lock.py, but never wait or launch on contention."""
+    path = Path(path) if path is not None else Path(f"/tmp/moonlantern-render-{os.getuid()}.lock")
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ValueError("render lock occupied; no native launch") from error
+        yield
+    finally:
+        os.close(fd)
+
+
+def frontmost_observation(output, label, index):
+    row = {"label": label, "observed_unix_ns": time.time_ns(), "command": FRONTMOST_COMMAND}
+    try:
+        result = subprocess.run(FRONTMOST_COMMAND, capture_output=True, text=True, timeout=5)
+        row.update(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
+        require(result.returncode == 0, "read-only frontmost command failed")
+        value = strict_json(result.stdout)
+        require(isinstance(value,dict) and type(value.get("pid")) is int and value["pid"] > 0 and isinstance(value.get("bundle"), str), "invalid frontmost PID/bundle")
+        row.update(value)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        row["error"] = str(error)
+    row["finished_unix_ns"] = time.time_ns()
+    write_json(output / ("frontmost-%02d-%s.json" % (index,label)), row)
+    return row
+
+
+def require_safe_foreground(row):
+    require(not row.get("error") and type(row.get("pid")) is int, "frontmost observation unavailable; no further native launch")
+    require(row["pid"] not in PROTECTED_PIDS, "protected game is foreground; no further native launch")
+
+
+def run_native(command, cwd, timeout, log, output, observations):
+    def observe(label):
+        row = frontmost_observation(output,label,len(observations))
+        observations.append(row)
+        require_safe_foreground(row)
+        return row
+    with render_lock():
+        observe("before-launch")
+        process = run_owned(command,cwd,timeout,log,monitor=lambda _pid: observe("during-window"))
+        try:
+            observe("after-exit")
+            require(any(row.get("pid") == process["pid"] and row["label"] == "during-window" for row in observations), "owned native PID never observed foreground")
+        except (ValueError, OSError) as error:
+            process["frontmost_error"] = str(error)
+        return process
+
+
+def validate_native_images(obs, request, output):
+    shots = obs.get("screenshots", [])
+    required = {"startup", "recipe-book", "lane", "carrying", "cooking", "ready", "customer-arriving", "first-sale"}
+    require({row.get("name") for row in shots} == required, "native first-loop root PNG set incomplete")
+    require(obs.get("ui_source_sha256") == request["ui_source_sha256"], "runtime 16-UI-source binding differs")
+    for row in shots:
+        require(row.get("source_commit") == request.get("source_commit"), "PNG source/head binding differs")
+        path = path_safe(Path(row["path"]))
+        require(path.parent == output and path.is_file(), "root PNG escaped output/missing")
+        raw = path.read_bytes()
+        require(len(raw) >= 24 and raw[:8] == b"\x89PNG\r\n\x1a\n" and raw[12:16] == b"IHDR", "invalid raw PNG")
+        size = list(struct.unpack(">II",raw[16:24]))
+        require(size == row["png_size"] and size != [640,360]
+                and row["capture_viewport"] == "/root" and row["world_viewport_size"] == [640,360], "root PNG replaced by world subviewport")
+        mapped_size = row.get("mapped_root_size", [])
+        require(len(mapped_size) == 2 and all(value in [math.floor(mapped),math.ceil(mapped)] for value,mapped in zip(size,mapped_size)), "raw root PNG differs from observed stretch mapping")
+        require(hashlib.sha256(raw).hexdigest() == row["sha256"], "raw PNG hash differs")
+        require(row["window_focused"] is True and row["window_mode"] == row["root_mode"], "native focus/mode evidence missing")
+        if request["fullscreen"]:
+            require(row["window_mode"] in [3,4] and row["fullscreen_coverage"] in ["screen","macos_usable_rect"], "requested fullscreen not observed")
+        else:
+            require(row["window_mode"] == 0 and row["window_size"] == request["window_size"], "requested native windowed resolution not observed")
 
 
 def validate_defaults(project):
@@ -186,7 +300,8 @@ def validate_probe(probe, namespace, expected_user, pid):
 
 def validate_observation(obs, request, process):
     stage = request.get("stage", "inspect")
-    require(obs.get("kind") == "world-source-headless-observation" and obs.get("status") == ("observed" if stage == "inspect" else "exit_requested"),
+    native = request.get("native",False)
+    require(obs.get("kind") == ("world-source-native-first-observation" if native else "world-source-headless-observation") and obs.get("status") == ("observed" if stage == "inspect" else "exit_requested"),
             "missing/unexpected headless observation status")
     for key in ["nonce", "source_commit", "namespace", "user_dir", "mode"]:
         require(obs.get(key) == request[key], "observation identity mismatch: " + key)
@@ -194,7 +309,7 @@ def validate_observation(obs, request, process):
     require(obs.get("save_path") == SAVE_PATH and obs.get("main_scene") == MAIN_SCENE
             and obs.get("main_script") == MAIN_SCRIPT and obs.get("ready_seen") is True
             and obs.get("current_scene_matches") is True, "natural world Main not observed")
-    require(obs.get("display") == "headless" and obs.get("screenshots") == []
+    require(obs.get("display") == ("macOS" if native else "headless") and (native or obs.get("screenshots") == [])
             and obs.get("ws07_passed") is False and obs.get("failures") == [], "headless/read-only evidence cannot pass WS07")
     snapshot = obs.get("snapshot", {})
     require(snapshot.get("profile_id") == "world-slice-v1" and snapshot.get("version") == 4
@@ -203,7 +318,8 @@ def validate_observation(obs, request, process):
         require(obs.get("inputs") == [] and obs.get("files") == {"primary": False, "backup": False}, "read-only fresh probe wrote saves/input")
         return
     require(obs.get("stage") == stage and obs.get("quit_input_dispatched") is True, "route did not request real UI exit")
-    require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
+    if not (native and request["fullscreen"]):
+        require(obs.get("geometry", {}).get("window") == request["window_size"], "actual CLI resolution mismatch")
     trace = obs.get("inputs", [])
     require(trace and [r["sequence"] for r in trace] == list(range(1,len(trace)+1)), "missing/noncontiguous actual inputs")
     names = [r["name"] for r in obs.get("checkpoints", [])]
@@ -247,15 +363,17 @@ func _initialize():
 
 def run_source(args):
     output = new_output(args.output)
-    result = {"kind": "world-source-headless-preflight", "status": "failed",
+    result = {"kind": "world-source-native-first-diagnostic" if args.native else "world-source-headless-preflight", "status": "failed",
               "source_commit": args.candidate, "ws07_passed": False, "wsh_observed": False,
-              "processes": [], "evidence": {}, "errors": [],
+              "processes": [], "evidence": {}, "errors": [], "native":args.native,
+              "native_slot":args.native_slot, "frontmost":[], "protected_pids":sorted(PROTECTED_PIDS), "native_process_started":False,
               "remaining": ["first execution against fixed P10/P11 candidate", "three-input full night/growth integration", "authorized rendered WS07", "human WSH"]}
     tracked = {}
     guards = {}
-    def launch(label, command, timeout=35):
+    def launch(label, command, timeout=35, native=False):
         log = output / (label + "-process.log")
-        proc = run_owned(command, output, timeout, log)
+        proc = run_native(command,output,timeout,log,output,result["frontmost"]) if native else run_owned(command, output, timeout, log)
+        if native: result["native_process_started"] = True
         result["processes"].append(proc)
         write_json(output / (label + "-process.json"), proc)
         write_json(output / "result.json", result)
@@ -267,6 +385,9 @@ def run_source(args):
         require(not git(ROOT, "status", "--porcelain").strip(), "commit the combined candidate before inspection")
         git(ROOT, "merge-base", "--is-ancestor", CORE_CHECKPOINT, candidate)
         result["minimum_core_checkpoint"] = CORE_CHECKPOINT
+        if args.native:
+            git(ROOT, "merge-base", "--is-ancestor", UI_CHECKPOINT, candidate)
+            result["ui_checkpoint"] = UI_CHECKPOINT
         for relative in OWN_SOURCES:
             require((ROOT / relative).read_bytes() == git(ROOT, "show", candidate + ":" + relative),
                     "running harness/helper differs from candidate: " + relative)
@@ -283,6 +404,8 @@ def run_source(args):
         contract = read_json(source / "contracts/world-slice-v1.json")
         require(contract["profile"]["save_path"] == SAVE_PATH, "world contract save path changed")
         require((source / "game/ui/world_play.gd").is_file(), "P11 world scene is not ready")
+        ui_sources = {name:hashlib.sha256((source/name).read_bytes()).hexdigest() for name in UI_SOURCES}
+        result["ui_source_sha256"] = ui_sources
         require(not (source / "override.cfg").exists(), "do not overwrite an existing override")
         tracked = file_states(p for p in source.rglob("*") if p.is_file())
         namespace = "MeeMeeMoonlanternLane-V02/" + uuid.uuid4().hex + "/" + args.mode
@@ -309,21 +432,26 @@ def run_source(args):
         write_json(output / "source-manifest.json", {"candidate": candidate, "tree": tree,
                    "tracked": tracked, "after_import_and_override": generated})
         previous = None
-        for stage in (["inspect"] if args.stage == "inspect" else [args.stage,"restore-exit"]):
+        for stage in ([args.stage] if args.native or args.stage == "inspect" else [args.stage,"restore-exit"]):
             request = {"nonce": uuid.uuid4().hex, "source_commit": candidate, "namespace": namespace,
                        "user_dir": str(user), "mode": args.mode, "stage": stage, "output": str(output),
                        "save_boundary":args.save_boundary,"window_size":args.window_size,"growth":args.growth,"tier":args.tier,
+                       "native":args.native,"fullscreen":args.fullscreen,"native_slot":args.native_slot,
+                       "ui_source_sha256":ui_sources,
                        "qa_sha256": hashlib.sha256((source / QA).read_bytes()).hexdigest()}
             if previous is not None:
                 expected = output / "restore-expected.json"; write_json(expected, previous)
                 request.update(previous=str(expected), previous_sha256=hashlib.sha256(expected.read_bytes()).hexdigest())
             request_path = output / (stage + "-request.json"); write_json(request_path, request)
             flags = [] if args.window_size is None else ["--resolution", "x".join(map(str,args.window_size))]
-            process = launch(stage, [engine, "--headless", *flags, "--max-fps", "60", "--path", source,
-                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], 720 if stage.startswith("night-") else 150)
+            display_flags = (["--fullscreen"] if args.fullscreen else ["--windowed"]) if args.native else ["--headless"]
+            timeout = args.native_timeout if args.native else (720 if stage.startswith("night-") else 150)
+            process = launch(stage, [engine, *display_flags, *flags, "--max-fps", "60", "--path", source,
+                                    "--log-file", output / (stage + "-engine.log"), "--", "--v02-request", request_path], timeout, args.native)
             error_free(output / (stage + "-engine.log"))
             observation = read_json(output / (stage + "-observation.json"))
             validate_observation(observation, request, process)
+            if args.native: validate_native_images(observation,request,output)
             trace = [strict_json(line) for line in (output / (stage + "-inputs.jsonl")).read_text().splitlines()]
             require(trace == observation["inputs"], "raw input trace differs from observation")
             if stage == "inspect":
@@ -345,7 +473,8 @@ def run_source(args):
                     require(result["processes"][-2]["ended_ns"] <= process["started_ns"], "restore processes overlapped")
                 previous = {"snapshot":pre_quit,"files":stage_files}
         check_guards(generated)
-        result["status"] = "observed" if args.stage == "inspect" else "save-boundary-observed"
+        result["status"] = "native-first-observed" if args.native else ("observed" if args.stage == "inspect" else "save-boundary-observed")
+        result["independent_restore_observed"] = not args.native and args.stage != "inspect"
     except (ValueError, OSError, KeyError, TypeError, BuildError, subprocess.SubprocessError, tarfile.TarError) as error:
         result["errors"].append(str(error))
     finally:
@@ -355,7 +484,7 @@ def run_source(args):
             result["status"] = "failed"; result["errors"].append(str(error))
         result["evidence"] = evidence_files(p for p in output.iterdir() if p.is_file() and p.name != "result.json")
         write_json(output / "result.json", result)
-    return 0 if result["status"] in ["observed", "save-boundary-observed"] else 2
+    return 0 if result["status"] in ["observed", "save-boundary-observed", "native-first-observed"] else 2
 
 
 def main():
@@ -369,9 +498,32 @@ def main():
     parser.add_argument("--growth", choices=["shelf", "field_kit"], default="shelf", help="earned next-morning effect for night stages")
     parser.add_argument("--tier", choices=["standard", "premium"], default="standard", help="actual menu price choice for night stages")
     parser.add_argument("--window-size", type=int, nargs=2, help="explicit supported --resolution request; actual size must match before input")
+    display = parser.add_mutually_exclusive_group()
+    display.add_argument("--fullscreen", action="store_true", help="native first-loop visual diagnostic only; separately authorized slot required")
+    display.add_argument("--windowed", action="store_true", help="native first-loop diagnostic at explicit --resolution")
+    parser.add_argument("--resolution", help="native windowed WIDTH,HEIGHT or WIDTHxHEIGHT, e.g. 844,390")
+    parser.add_argument("--native-slot", help="root-authorized slot label; a label alone does not grant authorization")
+    parser.add_argument("--native-timeout", type=int, default=150, help="native owned process bound, 15..180 seconds")
     parser.add_argument("--guard", type=Path, action="append", default=[], help="explicit archived/immutable file only; never active userdata")
     args = parser.parse_args()
-    if args.stage != "inspect" and (args.window_size is None or args.window_size[0] < 640 or args.window_size[1] < 360):
+    args.native = args.fullscreen or args.windowed
+    if args.native:
+        if not args.native_slot or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",args.native_slot):
+            parser.error("native preview requires a separately authorized --native-slot; no native launch")
+        if args.stage not in ["first-manual","first-auto"] or args.save_boundary not in [None,"after-sale"]:
+            parser.error("native preview only supports first-loop after-sale, not full-night/restore claims")
+        if args.window_size is not None or not 15 <= args.native_timeout <= 180:
+            parser.error("native uses fullscreen or windowed --resolution and a 15..180 second bound")
+        if args.fullscreen and args.resolution:
+            parser.error("fullscreen observes screen bounds; do not supply a resolution")
+        if args.windowed:
+            dimensions = re.fullmatch(r"([0-9]+)[,x]([0-9]+)",args.resolution or "")
+            if dimensions is None:
+                parser.error("native windowed requires --resolution WIDTH,HEIGHT")
+            args.window_size = [int(value) for value in dimensions.groups()]
+    elif args.native_slot or args.resolution:
+        parser.error("native slot/resolution requires --fullscreen or --windowed")
+    if args.stage != "inspect" and not args.fullscreen and (args.window_size is None or args.window_size[0] < 640 or args.window_size[1] < 360):
         parser.error("input diagnostics require an explicit window size of at least 640x360; no runtime geometry setters")
     if args.stage == "first-auto" and args.save_boundary == "manual-reservation":
         parser.error("manual reservation boundary requires first-manual")

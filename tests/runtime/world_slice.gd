@@ -16,6 +16,7 @@ var touch_down = false
 var started_ms = 0
 var last_tick = -1
 var previous: Dictionary = {}
+var native_focus_required = false
 
 func _enter_tree():
 	started_ms = Time.get_ticks_msec()
@@ -32,9 +33,21 @@ func _enter_tree():
 	var version_text = "%d.%d.%d.%s.%s.%s" % [version.major, version.minor, version.patch, version.status, version.build, str(version.hash).substr(0, 9)]
 	report = {"kind":"world-source-headless-observation", "status":"failed", "nonce":request.nonce, "source_commit":request.source_commit, "pid":OS.get_process_id(), "engine_version":version_text, "mode":request.mode, "namespace":ProjectSettings.get_setting("application/config/custom_user_dir_name", ""), "user_dir":OS.get_user_data_dir(), "save_path":"", "main_scene":"", "main_script":"", "ready_seen":false, "current_scene_matches":false, "display":DisplayServer.get_name(), "inputs":[], "screenshots":[], "failures":[], "ws07_passed":false, "snapshot":{}, "geometry":{}, "files":{}}
 	report.merge({"stage":request.stage, "checkpoints":[], "trajectory":[], "events":[], "actions":[], "intents":[], "waves":[], "batches":[], "scroll":[], "combat_events":[], "dish_carry_trips":0, "quit_input_dispatched":false})
-	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != "headless":
-		fail("unsupported stage/display; rendered WS07 is not enabled")
+	var native = request.get("native",false)
+	if native: report.kind = "world-source-native-first-observation"
+	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != ("macOS" if native else "headless"):
+		fail("unsupported diagnostic stage/display")
 		return
+	if native:
+		if request.stage not in ["first-manual","first-auto"] or request.get("save_boundary") != "after-sale" or str(request.get("native_slot","")).is_empty():
+			fail("native preview requires declared slot and first-loop-only scope"); return
+		if not request.get("ui_source_sha256") is Dictionary or request.ui_source_sha256.size() != 16:
+			fail("native runtime requires 16 UI source bindings"); return
+		report.ui_source_sha256 = {}
+		for path in request.ui_source_sha256:
+			var actual = FileAccess.get_sha256("res://"+path)
+			if actual != request.ui_source_sha256[path]: fail("runtime UI source hash mismatch: "+path); return
+			report.ui_source_sha256[path] = actual
 	if report.namespace != request.namespace or report.user_dir != request.user_dir or not ProjectSettings.get_setting("application/config/use_custom_user_dir", false):
 		fail("namespace does not match host preflight")
 		return
@@ -103,8 +116,13 @@ func inspect_main():
 	world_ui = find_world(ui)
 	if not check(is_instance_valid(world_ui) and world_ui.is_visible_in_tree(), "actual P11 world projection missing"): return
 	var size = request.get("window_size", [])
-	if not check(size.size() == 2 and observe_geometry().window == size, "declared CLI resolution differs from actual window: " + JSON.stringify(observe_geometry())): return
+	if not (request.get("native",false) and request.get("fullscreen",false)):
+		if not check(size is Array and size.size() == 2 and observe_geometry().window == size, "declared CLI resolution differs from actual window: " + JSON.stringify(observe_geometry())): return
 	if not check(world_ui.size.x >= 640 and world_ui.size.y >= 360, "actual world control too small for declared input route"): return
+	if request.get("native",false):
+		if not await wait_for(func(): return get_window().has_focus(),5000,"native window naturally receives focus"): return
+		native_focus_required = true
+		if not await capture_native("startup") or not await native_visual_tour(): return
 	if request.stage == "restore-exit":
 		checkpoint("settled-before-input")
 		if not restore_barrier(): return
@@ -125,6 +143,7 @@ func dispatch_event(event: InputEvent):
 
 func send_event(event: InputEvent):
 	if failed: return
+	if request.get("native",false) and not check(get_window().has_focus(),"native focus lost; no input or focus reacquisition"): return
 	if request.stage == "inspect":
 		fail("read-only inspection cannot inject input")
 		return
@@ -181,6 +200,7 @@ func station() -> Dictionary: return view().world.stations[0]
 
 func _process(_delta):
 	if not ready_seen or failed or request.stage == "inspect": return
+	if native_focus_required and not check(get_window().has_focus(),"native window lost focus during diagnostic"): return
 	var v = view()
 	if not v.get("world") is Dictionary: return
 	var tick = int(v.world.get("tick", -1))
@@ -366,6 +386,7 @@ func first_loop():
 	if failed: return
 	if not await wait_for(func(): return same(view().world.carried_uids,take.payload.uids), 1000, "ingredient UIDs actually carried"): return
 	checkpoint("carrying")
+	if not await capture_native("carrying"): return
 	if await save_at("carrying"): return
 	if not await walk_to("prep"): return
 	await interact("prep","put")
@@ -374,6 +395,7 @@ func first_loop():
 	if failed: return
 	if not check(station().job is Dictionary and station().job.remaining_ms > 0 and station().job.remaining_ms <= 2000, "actual timed cooking job missing"): return
 	var job = station().job.duplicate(true); var cooking_tick = int(view().world.tick); checkpoint("cooking")
+	if not await capture_native("cooking"): return
 	if await save_at("cooking"): return
 	if not await wait_for(func(): return station().job == null and same(station().output_uids,job.output_uids),4000,"two-second cooking output"): return
 	var ready_events: Array = report.events + view().events
@@ -383,6 +405,7 @@ func first_loop():
 	if not check(not ready_event.is_empty() and (int(ready_event.tick)-cooking_tick)*50 == job.remaining_ms, "cooking_ready event differs from authoritative fixed-step duration"): return
 	report.cooking_timing = {"observed_start_tick":cooking_tick,"observed_remaining_ms":job.remaining_ms,"ready_event_tick":ready_event.tick,"observed_ready_tick":view().world.tick}
 	checkpoint("ready")
+	if not await capture_native("ready"): return
 	await interact("prep","take")
 	if not await wait_for(func(): return same(view().world.carried_uids,job.output_uids),1000,"ready dish UIDs carried"): return
 	report.dish_carry_trips += 1
@@ -390,6 +413,7 @@ func first_loop():
 	await interact("door-bell","open_shop")
 	if not await wait_for(func(): return view().phase == "trading" and not view().world.customers.is_empty(),1000,"real arriving customers"): return
 	checkpoint("customer-arriving")
+	if not await capture_native("customer-arriving"): return
 	if await save_at("customer"): return
 	var order: Dictionary = view().service.orders[0].duplicate(true)
 	var before = view(); var served_uid = int(job.output_uids[0]); var quote: Dictionary = {}
@@ -424,6 +448,7 @@ func first_loop():
 	report.first_sale = sale.duplicate(true); report.first_income_ms = Time.get_ticks_msec()-started_ms
 	report.first_batch = {"recipe":job.recipe_id,"quantity":job.output_uids.size(),"manual_dish_trips":report.dish_carry_trips}
 	checkpoint("first-sale")
+	if not await capture_native("first-sale"): return
 	if request.stage.begins_with("night-"): await complete_night()
 	else: await save_and_exit("after-sale")
 
@@ -484,6 +509,39 @@ func quit_from_pause():
 	report.snapshot = ui.game.snapshot(); report.files = save_files(); report.status = "exit_requested"; report.quit_input_dispatched = true
 	write_report()
 	await click_control("quit",true)
+
+func capture_native(label: String) -> bool:
+	if not request.get("native",false): return not failed
+	if not check(DisplayServer.get_name() == "macOS" and get_window() == get_tree().root,"native capture must be the root Window viewport"): return false
+	var drawn = {"ready":false}; var on_draw = func(): drawn.ready = true
+	RenderingServer.frame_post_draw.connect(on_draw,CONNECT_ONE_SHOT)
+	var deadline = Time.get_ticks_msec()+5000
+	while not drawn.ready and not failed and Time.get_ticks_msec() < deadline: await get_tree().process_frame
+	if not drawn.ready:
+		if RenderingServer.frame_post_draw.is_connected(on_draw): RenderingServer.frame_post_draw.disconnect(on_draw)
+		return check(false,"root viewport did not draw within five seconds: "+label)
+	var window = get_window(); var texture = window.get_texture(); var picture = texture.get_image()
+	if not check(picture != null and not picture.is_empty(),"root viewport image unavailable"): return false
+	var screen = DisplayServer.window_get_current_screen()
+	var screen_rect = Rect2i(DisplayServer.screen_get_position(screen),DisplayServer.screen_get_size(screen))
+	var usable = DisplayServer.screen_get_usable_rect(screen)
+	var window_rect = Rect2i(DisplayServer.window_get_position(),DisplayServer.window_get_size())
+	var coverage = "screen" if window_rect == screen_rect else ("macos_usable_rect" if screen_rect.encloses(usable) and window_rect == usable else "")
+	var logical = window.get_visible_rect(); var stretch = window.get_stretch_transform(); var final = window.get_final_transform()
+	var mapped = (stretch*logical).size
+	var row = {"name":label,"path":request.output.path_join("native-"+label+".png"),"source_commit":request.source_commit,"elapsed_ms":Time.get_ticks_msec()-started_ms,"input_count":report.inputs.size(),"capture_viewport":str(window.get_path()),"screen":screen,"screen_rect":[screen_rect.position.x,screen_rect.position.y,screen_rect.size.x,screen_rect.size.y],"usable_rect":[usable.position.x,usable.position.y,usable.size.x,usable.size.y],"window_position":[window_rect.position.x,window_rect.position.y],"window_size":[window_rect.size.x,window_rect.size.y],"window_mode":DisplayServer.window_get_mode(),"root_mode":window.mode,"root_size":[window.size.x,window.size.y],"logical_root_viewport":[logical.position.x,logical.position.y,logical.size.x,logical.size.y],"root_texture_size":[texture.get_width(),texture.get_height()],"png_size":[picture.get_width(),picture.get_height()],"world_viewport_size":[world_ui.viewport.size.x,world_ui.viewport.size.y],"screen_dpi":DisplayServer.screen_get_dpi(screen),"screen_scale":DisplayServer.screen_get_scale(screen),"final_transform":[final.x.x,final.x.y,final.y.x,final.y.y,final.origin.x,final.origin.y],"stretch_transform":[stretch.x.x,stretch.x.y,stretch.y.x,stretch.y.y,stretch.origin.x,stretch.origin.y],"mapped_root_size":[mapped.x,mapped.y],"content_scale_size":[window.content_scale_size.x,window.content_scale_size.y],"content_scale_mode":window.content_scale_mode,"content_scale_factor":window.content_scale_factor,"window_focused":window.has_focus(),"fullscreen_coverage":coverage,"player":view().world.player.duplicate(true),"region":view().world.region_id,"cash":view().cash,"phase":view().phase,"carried_uids":view().world.carried_uids.duplicate(),"station":station().duplicate(true),"customers":view().world.customers.duplicate(true)}
+	if not check(picture.save_png(row.path) == OK,"root PNG save failed"): return false
+	row.sha256 = FileAccess.get_sha256(row.path); report.screenshots.append(row); report.geometry = observe_geometry(); write_report()
+	# ViewportTexture proxy dimensions are separate evidence, not raw image size.
+	if not check(row.window_focused and row.root_size == row.window_size and row.png_size[0] in [floori(mapped.x),ceili(mapped.x)] and row.png_size[1] in [floori(mapped.y),ceili(mapped.y)] and row.png_size != [640,360] and row.world_viewport_size == [640,360],"root/native/world viewport dimensions differ from observed transforms"): return false
+	if request.fullscreen:
+		return check(row.window_mode in [DisplayServer.WINDOW_MODE_FULLSCREEN,DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN] and int(row.root_mode) == int(row.window_mode) and coverage != "","actual root viewport does not cover native fullscreen bounds")
+	return check(row.window_mode == DisplayServer.WINDOW_MODE_WINDOWED and int(row.root_mode) == int(row.window_mode) and row.window_size == request.window_size,"actual native windowed dimensions/mode differ")
+
+func native_visual_tour() -> bool:
+	if not await open_book("recipe-book") or not await capture_native("recipe-book"): return false
+	if not await close_book() or not await travel("lane") or not await capture_native("lane"): return false
+	return await travel("shop")
 
 func scroll_to_control(control: Control) -> bool:
 	var ancestor = control.get_parent()
