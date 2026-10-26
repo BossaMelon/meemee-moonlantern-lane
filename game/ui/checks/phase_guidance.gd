@@ -136,6 +136,12 @@ func run():
 	if mode == "mouse":
 		await move_mouse(ui.get_action_control("world_lane").get_global_rect().get_center())
 		await move_mouse(Vector2(4, 4)); guidance("mouse_away_from_door", "world_lane")
+	elif mode == "touch":
+		inputs.append({"type": "touch_empty", "position": "(4, 4)"})
+		for down in [true, false]:
+			var event = InputEventScreenTouch.new(); event.index = 0; event.position = Vector2(4, 4); event.pressed = down
+			Input.parse_input_event(event.xformed_by(root.get_final_transform())); await frames(1)
+		await frames(); guidance("touch_empty_preserves_default_focus", "world_lane")
 	await picture("initial-guidance")
 	await activate("world_journal")
 	observe("journal_open")
