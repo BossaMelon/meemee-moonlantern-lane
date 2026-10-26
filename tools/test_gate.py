@@ -49,6 +49,33 @@ def quality_report() -> dict:
         {"id": f"Q{i:02d}", "status": "passed", "checks": 1} for i in range(1, 6)]}
 
 
+def world_contract() -> dict:
+    """Finite protocol fixture, not a world model or execution report."""
+    data = quality_contract()
+    template = data['acceptance'][0]
+    data.update(milestone='world-slice', suite='world-slice')
+    data['acceptance'] = [dict(copy.deepcopy(template), id=f'WS{i:02d}') for i in range(1, 7)]
+    data['acceptance'] += [dict(copy.deepcopy(template), id='WS07', mode='runtime'),
+                           dict(copy.deepcopy(template), id='WSH', mode='human', stage='human')]
+    data['report_protocol'] = {'schema_version': 1, 'suite': 'world-slice', 'runner': 'tests/run.gd',
+                              'runner_args': ['--', '--suite', 'world-slice', '--report', 'ABS_REPORT'],
+                              'required_automated_ids': [f'WS{i:02d}' for i in range(1, 7)],
+                              'external_evidence_ids': ['WS07', 'WSH']}
+    data['profile'] = {'id': 'world-slice-v1', 'default': True, 'save_version': 4,
+                       'rules_version': 1, 'world_model_version': 1,
+                       'user_data_name': 'moonlantern-world-slice-v1',
+                       'save_path': 'user://profiles/world-slice-v1/moonlantern.json',
+                       'backup_suffix': '.bak', 'old_profiles': ['rain-night-v1', 'prototype-v1']}
+    data['movement'] = {'map_id': 'moonlantern-shop-lane', 'map_revision': 1,
+                        'geometry_source': 'fixtures.configuration.layout'}
+    return data
+
+
+def world_report() -> dict:
+    return {'schema_version': 1, 'suite': 'world-slice', 'cases': [
+        {'id': f'WS{i:02d}', 'status': 'passed', 'checks': 1} for i in range(1, 7)]}
+
+
 def tasks() -> dict:
     return {"schema_version": 1, "tasks": [
         {"id": "H01", "owner": "tooling", "allowed_paths": ["tools/**"], "depends_on": []},
@@ -75,10 +102,15 @@ def write_context(root: Path, runtime=False) -> None:
     quality_fixture = copy.deepcopy(fixture)
     quality_fixture.update(suite="quality-slice", seeds=[1, 7, 23, 99, 20261025])
     quality_fixture["scenarios"][0].update(id="quality-protocol-fixture", acceptance_ids=[f"Q{i:02d}" for i in range(1, 6)])
+    world_fixture = copy.deepcopy(quality_fixture)
+    world_fixture.update(suite='world-slice', configuration={'layout': {'id': 'moonlantern-shop-lane', 'revision': 1}})
+    world_fixture['scenarios'][0].update(id='world-protocol-fixture', acceptance_ids=[f'WS{i:02d}' for i in range(1, 7)])
     for path, data in (("contracts/prototype-v1.json", contract()),
                        ("tests/fixtures/prototype-scenarios.json", fixture),
                        ("contracts/quality-slice-v1.json", quality_contract()),
                        ("tests/fixtures/quality-slice-scenarios.json", quality_fixture),
+                       ('contracts/world-slice-v1.json', world_contract()),
+                       ('tests/fixtures/world-slice-scenarios.json', world_fixture),
                        ("harness/tasks.json", tasks())):
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -96,14 +128,19 @@ def write_context(root: Path, runtime=False) -> None:
 
 
 def fake_engine(root: Path, *, version="4.7.2.stable.test", exit_code=0, report=None,
-                reports=None, exit_codes=None, stderr="") -> str:
+                reports=None, exit_codes=None, stderr="", raw_reports=None, hang_suite=None,
+                errors_by_suite=None) -> str:
     """Executable protocol fake exclusively for gate tests, never game evidence."""
     engine = root / "fake-engine"
-    source = "#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n"
+    source = "#!/usr/bin/env python3\nimport json,sys,time\nfrom pathlib import Path\n"
     source += f"if '--version' in sys.argv:\n print({version!r})\n sys.exit(0)\n"
     source += "suite = sys.argv[sys.argv.index('--suite')+1] if '--suite' in sys.argv else 'prototype'\n"
     source += f"reports = {reports!r}\nreport = reports.get(suite) if reports is not None else {report!r}\n"
     source += "if report is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps(report))\n"
+    source += f"raw = ({raw_reports!r} or {{}}).get(suite)\n"
+    source += "if raw is not None:\n Path(sys.argv[sys.argv.index('--report')+1]).write_text(raw)\n"
+    source += f"if suite == {hang_suite!r}: time.sleep(2)\n"
+    source += f"error = ({errors_by_suite!r} or {{}}).get(suite, '')\nif error: print(error, file=sys.stderr)\n"
     source += f"print({stderr!r}, file=sys.stderr) if {bool(stderr)!r} else None\n"
     source += f"sys.exit(({exit_codes!r} or {{}}).get(suite, {exit_code!r}))\n"
     engine.write_text(source)
@@ -439,15 +476,16 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(result["status"], "failed")
             self.assertIn("missing project.godot", result["errors"][0])
 
-    def run_fake_prototype(self, **engine_args):
+    def run_fake_prototype(self, _timeout=5, **engine_args):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             write_context(root, runtime=True)
             if "report" in engine_args:
-                engine_args["reports"] = {"prototype": engine_args.pop("report"), "quality-slice": quality_report()}
+                engine_args["reports"] = {"prototype": engine_args.pop("report"), "quality-slice": quality_report(),
+                                          'world-slice': world_report()}
             engine = fake_engine(root, **engine_args)
             with patch.object(gate, "git_candidate", return_value={"sha": "test", "dirty": False}):
-                return gate.run_gate("prototype", root, engine, 5, root / "output")
+                return gate.run_gate("prototype", root, engine, _timeout, root / "output")
 
     def test_complete_fake_runner_is_accepted_by_protocol_only(self):
         result = self.run_fake_prototype(report=case_report())
@@ -492,18 +530,18 @@ class CommandTests(unittest.TestCase):
                 self.assertIn("requires Godot", result["errors"][0])
 
 
-class DualSuiteCommandTests(unittest.TestCase):
+class TripleSuiteCommandTests(unittest.TestCase):
     run_fake_prototype = CommandTests.run_fake_prototype
-    def test_complete_protocol_requires_two_explicit_fresh_runner_reports(self):
+    def test_complete_protocol_requires_three_explicit_fresh_runner_reports(self):
         result = self.run_fake_prototype(report=case_report())
         self.assertEqual(result["status"], "passed")
         commands = result["commands"][1:]
         self.assertEqual([c["command"][c["command"].index("--suite") + 1] for c in commands],
-                         ["prototype", "quality-slice"])
+                         ["prototype", "quality-slice", 'world-slice'])
         paths = [c["command"][c["command"].index("--report") + 1] for c in commands]
-        self.assertEqual(len(set(paths)), 2)
+        self.assertEqual(len(set(paths)), 3)
         self.assertTrue(all(Path(p).is_absolute() for p in paths))
-        self.assertEqual(set(result["case_reports"]), {"prototype", "quality-slice"})
+        self.assertEqual(set(result["case_reports"]), {"prototype", "quality-slice", 'world-slice'})
         self.assertEqual(result["case_report"], result["case_reports"]["prototype"])
 
     def test_missing_quality_inputs_fail_both_stages_before_runner(self):
@@ -559,6 +597,74 @@ class DualSuiteCommandTests(unittest.TestCase):
                                         stderr="SCRIPT ERROR: unit fake\n" + "trailing diagnostic\n" * 2000)
         self.assertEqual(result["status"], "failed")
         self.assertIn("engine/script error", result["errors"][0])
+
+
+class WorldGateTests(unittest.TestCase):
+    run_fake_prototype = CommandTests.run_fake_prototype
+
+    def test_published_world_roles_and_profile_cannot_drift(self):
+        self.assertEqual(len(gate.validate_contract(world_contract(), 'world-slice')), 8)
+        for key, value in [('milestone', 'quality-slice'), ('suite', 'prototype')]:
+            data = world_contract(); data[key] = value
+            with self.subTest(key=key), self.assertRaises(gate.GateError): gate.validate_contract(data, 'world-slice')
+        for case_id, key, value in [('WS01', 'required', False), ('WS06', 'mode', 'runtime'),
+                                    ('WS07', 'mode', 'automated'), ('WSH', 'required', False)]:
+            data = world_contract(); next(c for c in data['acceptance'] if c['id']==case_id)[key]=value
+            with self.subTest(case=case_id), self.assertRaises(gate.GateError): gate.validate_contract(data, 'world-slice')
+        for key, value in [('id', 'rain-night-v1'), ('default', 1), ('save_version', 3),
+                           ('user_data_name', 'MeeMeeMoonlanternLane/rain-night-v1'),
+                           ('save_path', 'user://moonlantern.json')]:
+            data = world_contract(); data['profile'][key]=value
+            with self.subTest(profile=key), self.assertRaises(gate.GateError): gate.validate_contract(data, 'world-slice')
+
+    def test_world_fixture_identity_seeds_and_required_coverage(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d); write_context(root); fixture=gate.read_json(root/'tests/fixtures/world-slice-scenarios.json')
+        cases=world_contract()['acceptance']
+        self.assertEqual(gate.validate_fixtures(fixture,cases,'world-slice',world_contract()),1)
+        for mutate in [lambda x:x.update(suite='quality-slice'), lambda x:x.update(seeds=[1]),
+                       lambda x:x['scenarios'][0].update(seed=2),
+                       lambda x:x['scenarios'][0].update(acceptance_ids=['WS07','WSH']),
+                       lambda x:x['configuration']['layout'].update(revision=2),
+                       lambda x:x['configuration']['layout'].update(id='other-map')]:
+            value=copy.deepcopy(fixture);mutate(value)
+            with self.subTest(fixture=value), self.assertRaises(gate.GateError):
+                gate.validate_fixtures(value,cases,'world-slice',world_contract())
+
+    def test_missing_world_inputs_fail_both_stages_before_any_runner(self):
+        for missing in ['contracts/world-slice-v1.json','tests/fixtures/world-slice-scenarios.json']:
+            for stage in ['harness','prototype']:
+                with self.subTest(missing=missing,stage=stage),tempfile.TemporaryDirectory() as d:
+                    root=Path(d);write_context(root,True);(root/missing).unlink()
+                    with patch.object(gate,'git_candidate',return_value={'sha':'fixture','dirty':False}):
+                        result=gate.run_gate(stage,root,None,1,root/'output')
+                    self.assertEqual(result['status'],'failed');self.assertEqual(result['commands'],[])
+                    self.assertIn(missing,result['errors'][0])
+
+    def test_world_invalid_or_nonautomated_reports_cannot_pass_after_old_suites(self):
+        mutations=[lambda r:r.update(cases=[]),lambda r:r['cases'].pop(),
+                   lambda r:r['cases'].append(dict(r['cases'][0])),
+                   lambda r:r['cases'][0].update(id='WS99'),lambda r:r['cases'][0].update(checks=0),
+                   lambda r:r['cases'][0].update(status='skipped'),lambda r:r['cases'][0].update(id='WS07'),
+                   lambda r:r['cases'][0].update(id='WSH'),lambda r:r.update(suite='quality-slice')]
+        for mutate in mutations:
+            report=world_report();mutate(report)
+            with self.subTest(report=report):
+                result=self.run_fake_prototype(reports={'prototype':case_report(),'quality-slice':quality_report(),'world-slice':report})
+                self.assertEqual(result['status'],'failed');self.assertEqual(set(result['case_reports']),{'prototype','quality-slice'})
+
+    def test_world_nonzero_missing_malformed_error_and_unfinished_are_red(self):
+        reports={'prototype':case_report(),'quality-slice':quality_report(),'world-slice':world_report()}
+        options=[{'exit_codes':{'world-slice':7}}, {'reports':{k:v for k,v in reports.items() if k!='world-slice'}},
+                 {'raw_reports':{'world-slice':'{"suite":'}},
+                 {'raw_reports':{'world-slice':json.dumps(world_report()).replace('"checks": 1','"checks": 0, "checks": 1',1)}},
+                 {'raw_reports':{'world-slice':json.dumps(world_report())[:-1]+', "invalid": NaN}'}},
+                 {'errors_by_suite':{'world-slice':'ERROR: fixture with complete report'}},
+                 {'hang_suite':'world-slice','_timeout':1}]
+        for extra in options:
+            with self.subTest(extra=extra):
+                result=self.run_fake_prototype(**({'reports':reports}|extra))
+                self.assertEqual(result['status'],'failed');self.assertEqual(set(result['case_reports']),{'prototype','quality-slice'})
 
 
 def main() -> int:

@@ -20,7 +20,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_VERSION = "4.7.2"
 CASE_STATUSES = {"passed", "failed", "skipped"}
-SUITES = ("prototype", "quality-slice")
+SUITES = ("prototype", "quality-slice", "world-slice")
 MODES = {"automated", "runtime", "human"}
 STAGES = {"prototype", "platform", "human"}
 ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
@@ -41,8 +41,16 @@ def integer(value: object, minimum: int = 0) -> bool:
 
 def read_json(path: Path) -> dict:
     require(path.is_file(), f"missing JSON file: {path}")
+    def unique(rows):
+        result = {}
+        for key, value in rows:
+            require(key not in result, f"duplicate JSON key {key}: {path}")
+            result[key] = value
+        return result
+    def nonfinite(value):
+        raise GateError(f"non-finite JSON {value}: {path}")
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique, parse_constant=nonfinite)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise GateError(f"invalid JSON {path}: {exc}") from exc
     require(isinstance(data, dict), f"JSON object required: {path}")
@@ -59,7 +67,7 @@ def validate_contract(data: dict, suite: str = "prototype") -> list[dict]:
     require(suite in SUITES, f"unknown contract suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "contract schema_version must be integer 1")
-    require(data.get("milestone") == ("three-day-prototype" if suite == "prototype" else "quality-slice"),
+    require(data.get("milestone") == ("three-day-prototype" if suite == "prototype" else suite),
             f"unknown {suite} contract milestone")
     if suite == "quality-slice":
         require(data.get("suite") == suite, "quality-slice contract suite must be quality-slice")
@@ -99,18 +107,51 @@ def validate_contract(data: dict, suite: str = "prototype") -> list[dict]:
         require(protocol.get("required_automated_ids") == [f"Q{i:02d}" for i in range(1, 6)]
                 and protocol.get("external_evidence_ids") == ["Q06", "QH"],
                 "quality-slice report evidence IDs mismatch")
+    if suite == 'world-slice':
+        require(data.get('suite') == suite, 'world-slice contract suite must be world-slice')
+        roles = {**{f'WS{i:02d}': ('prototype', 'automated') for i in range(1, 7)},
+                 'WS07': ('prototype', 'runtime'), 'WSH': ('human', 'human')}
+        require(seen == set(roles), 'world-slice requires exactly WS01–WS07 and WSH')
+        for case in cases:
+            require((case['stage'], case['mode']) == roles[case['id']] and case['required'],
+                    'world-slice required evidence role changed: ' + case['id'])
+        protocol = data.get('report_protocol')
+        require(isinstance(protocol, dict) and type(protocol.get('schema_version')) is int
+                and protocol['schema_version'] == 1 and protocol.get('suite') == suite
+                and protocol.get('runner') == 'tests/run.gd'
+                and protocol.get('runner_args') == ['--', '--suite', suite, '--report', 'ABS_REPORT']
+                and protocol.get('required_automated_ids') == [f'WS{i:02d}' for i in range(1, 7)]
+                and protocol.get('external_evidence_ids') == ['WS07', 'WSH'], 'world-slice runner protocol mismatch')
+        profile = data.get('profile')
+        expected = {'id': 'world-slice-v1', 'default': True, 'save_version': 4,
+                    'rules_version': 1, 'world_model_version': 1, 'user_data_name': 'moonlantern-world-slice-v1',
+                    'save_path': 'user://profiles/world-slice-v1/moonlantern.json', 'backup_suffix': '.bak',
+                    'old_profiles': ['rain-night-v1', 'prototype-v1']}
+        require(isinstance(profile, dict) and all(type(profile.get(k)) is type(v) and profile[k] == v
+                for k, v in expected.items()), 'world-slice default/profile/save identity mismatch')
+        movement = data.get('movement')
+        require(isinstance(movement, dict) and movement.get('map_id') == 'moonlantern-shop-lane'
+                and type(movement.get('map_revision')) is int and movement['map_revision'] == 1
+                and movement.get('geometry_source') == 'fixtures.configuration.layout',
+                'world-slice map identity/source mismatch')
     return cases
 
 
-def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype") -> int:
+def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype", contract: dict | None = None) -> int:
     require(suite in SUITES, f"unknown fixture suite: {suite}")
     require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
             "fixtures schema_version must be integer 1")
-    if suite == "quality-slice":
-        require(data.get("suite") == suite, "quality-slice fixtures suite must be quality-slice")
+    if suite in ("quality-slice", 'world-slice'):
+        require(data.get("suite") == suite, f"{suite} fixtures suite must be {suite}")
         require(data.get("seeds") == [1, 7, 23, 99, 20261025]
                 and all(type(seed) is int for seed in data["seeds"]),
-                "quality-slice fixtures require the five frozen seeds")
+                f"{suite} fixtures require the five frozen seeds")
+    if suite == 'world-slice':
+        layout = data.get('configuration', {}).get('layout') if isinstance(data.get('configuration'), dict) else None
+        require(isinstance(contract, dict) and isinstance(layout, dict)
+                and layout.get('id') == contract['movement']['map_id']
+                and type(layout.get('revision')) is int and layout['revision'] == contract['movement']['map_revision'],
+                'world-slice fixture layout identity differs from contract')
     scenarios = data.get("scenarios")
     require(isinstance(scenarios, list) and bool(scenarios), "fixtures scenarios cannot be empty")
     ids = {case["id"] for case in cases}
@@ -123,10 +164,10 @@ def validate_fixtures(data: dict, cases: list[dict], suite: str = "prototype") -
         require(scenario_id not in seen, f"duplicate scenario id: {scenario_id}")
         seen.add(scenario_id)
         require(integer(scenario.get("seed")), f"invalid scenario seed: {scenario_id}")
-        if suite == "quality-slice":
-            require(scenario["seed"] in data["seeds"], f"scenario seed outside quality-slice seeds: {scenario_id}")
+        if suite in ("quality-slice", 'world-slice'):
+            require(scenario["seed"] in data["seeds"], f"scenario seed outside {suite} seeds: {scenario_id}")
             require("seed_policy" not in scenario or scenario["seed_policy"] == "all_seeds",
-                    f"unknown quality-slice seed_policy: {scenario_id}")
+                    f"unknown {suite} seed_policy: {scenario_id}")
         require(isinstance(scenario.get("route"), str) and bool(scenario["route"].strip()),
                 f"scenario route missing: {scenario_id}")
         require(nonempty_strings(scenario.get("acceptance_ids")), f"scenario acceptance_ids missing: {scenario_id}")
@@ -434,16 +475,18 @@ def run_gate(stage: str, root: Path, godot: str | None, timeout: float, report_d
     result = {"schema_version": 1, "gate": stage, "status": "failed", "checks_executed": 0,
               "candidate": git_candidate(root), "commands": [], "errors": [],
               "claim": "Harness infrastructure only; no game, platform, or fun validation." if stage == "harness"
-              else "Required automated prototype and quality-slice contracts only; runtime/platform/human evidence is separate."}
+              else "Required automated prototype, quality-slice and world-slice contracts only; runtime/platform/human evidence is separate."}
     try:
         cases_by_suite = {}
         for suite, contract_path, fixture_path in (
                 ("prototype", "contracts/prototype-v1.json", "tests/fixtures/prototype-scenarios.json"),
-                ("quality-slice", "contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json")):
-            cases = validate_contract(read_json(root / contract_path), suite)
+                ("quality-slice", "contracts/quality-slice-v1.json", "tests/fixtures/quality-slice-scenarios.json"),
+                ('world-slice', 'contracts/world-slice-v1.json', 'tests/fixtures/world-slice-scenarios.json')):
+            contract = read_json(root / contract_path)
+            cases = validate_contract(contract, suite)
             cases_by_suite[suite] = cases
             result["checks_executed"] += len(cases)
-            result["checks_executed"] += validate_fixtures(read_json(root / fixture_path), cases, suite)
+            result["checks_executed"] += validate_fixtures(read_json(root / fixture_path), cases, suite, contract)
         task_data = read_json(root / "harness/tasks.json")
         result["checks_executed"] += validate_tasks(task_data)
         if scope:
@@ -515,6 +558,11 @@ def main() -> int:
                           "candidate": result["candidate"]["sha"], "dirty": result["candidate"]["dirty"],
                           "checks_executed": result["checks_executed"], "errors": result["errors"],
                           "report": str(args.report)}, ensure_ascii=False))
+        if result['status'] != 'passed':
+            # Failed Linux steps do not reach success-only artifact uploads.
+            # Keep the actual structured failure (including prior suite reports
+            # and original process exit/error evidence) in that step's own log.
+            print(args.report.read_text(encoding='utf-8'), end='')
         return 0 if result["status"] == "passed" else 1
     except Exception as exc:
         print(f"gate infrastructure failure: {type(exc).__name__}: {exc}", file=sys.stderr)

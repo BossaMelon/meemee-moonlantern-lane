@@ -17,15 +17,15 @@ python3 tools/gate.py --stage harness --task H01 --base FULL_BASE_COMMIT_SHA
 
 **harness 通过只表示开发底座有效，不表示游戏已实现。** 它验证：
 
-- 旧 [prototype 契约](../contracts/prototype-v1.json) 与新 [quality-slice 契约](../contracts/quality-slice-v1.json) 的 schema、独立身份及必需自动集合；
-- 两套 [旧场景](../tests/fixtures/prototype-scenarios.json)/[新场景](../tests/fixtures/quality-slice-scenarios.json) 对各自必需自动 ID 的覆盖；新场景的 suite、冻结五种子和 seed_policy；
+- [prototype 契约](../contracts/prototype-v1.json)、[quality-slice 契约](../contracts/quality-slice-v1.json) 与 [world-slice 契约](../contracts/world-slice-v1.json) 的 schema、独立身份及必需自动集合；
+- 三套 [prototype 场景](../tests/fixtures/prototype-scenarios.json)/[quality 场景](../tests/fixtures/quality-slice-scenarios.json)/[world 场景](../tests/fixtures/world-slice-scenarios.json) 对各自必需自动 ID 的覆盖；新场景的 suite、冻结五种子和 seed_policy；
 - [任务归属](../harness/tasks.json) 的路径安全、跨 owner 互斥和依赖无环；
 - PR 正文 `Task-IDs: H01` 对应的实际 base/head diff 必须落在认领路径；
 - 项目上下文文件存在、Markdown 本地链接有效；
 - harness 自身的反假绿回归测试实际执行且没有失败、错误或跳过；
 - 一旦存在 `project.godot`、`.gd` 或 `.tscn`，CI 必须增加无条件 prototype job。
 
-`--stage prototype` 在同一候选上分别执行 prototype 与 quality-slice 的真实 runner；两份契约/fixture 在 harness 与 prototype 阶段都强制存在，不提供缺新文件就回退旧绿灯的分支。它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
+`--stage prototype` 在同一候选上固定串行执行 prototype、quality-slice、world-slice 的真实 runner；三份契约/fixture 在 harness 与 prototype 阶段都强制存在，不提供缺新文件就回退旧绿灯的分支。它不会把缺项目、缺引擎、缺测试入口或未执行测试记作通过。
 当前完成程度与运行证据只维护在 [项目状态](../docs/project-status.md)。
 
 ## 渲染验收串行入口
@@ -77,13 +77,14 @@ Godot 4.7.2 实际 `--help` 与 [官方 CLI 文档](https://docs.godotengine.org
 
 ## 游戏执行器合同
 
-gate 只支持两个固定 suite：`prototype` 对应旧契约/fixture，`quality-slice` 对应新契约/fixture。两者读取各自 `mode=automated` 且 `required=true` 的条目，不允许用一个 suite 的报告代替另一个。quality-slice 的 Q01–Q05 必须为 required automated；Q06 为 required runtime，QH 为 required human，不能降低类型或纳入自动 passed。新 JSON 的 profiles/api/field_types/rules 由游戏与真实测试消费，gate 不实现类型 DSL 或代替游戏断言。
+gate 固定三个 suite：`prototype`、`quality-slice`、`world-slice`，各消费独立契约/fixture，读取各自 `mode=automated` 且 `required=true` 的条目，不允许用一个 suite 的报告代替另一个。quality-slice 的 Q01–Q05 必须为 required automated；Q06 为 required runtime，QH 为 required human，不能降低类型或纳入自动 passed。world-slice 的 WS01–06 必须精确为 required automated，WS07 为 runtime、WSH 为 human，不能混入自动 pass。harness 校验 world 默认 profile/v4、独立 user-data/save 身份、冻结五种子、fixture layout 身份与覆盖；移动/经济规则由 Core 与真实 case 消费，gate 不实现物理/规则 DSL 或代替游戏断言。
 
 现有 `--stage prototype` 命令和 CI job 名称保持，内部先核验引擎 `--version` 为 4.7.2，再串行调用：
 
 ```sh
 Godot --headless --path REPOSITORY --script tests/run.gd -- --suite prototype --report ABSOLUTE_FRESH_PROTOTYPE_REPORT
 Godot --headless --path REPOSITORY --script tests/run.gd -- --suite quality-slice --report ABSOLUTE_FRESH_QUALITY_REPORT
+Godot --headless --path REPOSITORY --script tests/run.gd -- --suite world-slice --report ABSOLUTE_FRESH_WORLD_REPORT
 ```
 
 执行器必须以非零状态退出表示失败，并写 UTF-8 JSON：
@@ -98,14 +99,14 @@ Godot --headless --path REPOSITORY --script tests/run.gd -- --suite quality-slic
 }
 ```
 
-示例只说明一条记录的结构，不是完整原型报告。quality-slice 使用同一报告结构，但 `suite` 必须精确为 `quality-slice`、自动 cases 为 Q01–Q05。执行器兼容旧的未指定 suite 的调用由 P04 维护；gate 始终显式请求这两套，忽略 `--suite` 而重复返回旧报告必须失败。
+示例只说明一条记录的结构，不是完整原型报告。quality-slice 使用同一报告结构，但 `suite` 必须精确为 `quality-slice`、自动 cases 为 Q01–Q05。执行器兼容旧的未指定 suite 的调用由 P04 维护；gate 始终显式请求三套，忽略 `--suite` 而重复返回旧报告必须失败。
 所有必需自动 ID 必须各出现一次、状态 `passed`、整数 `checks >= 1`。
 未知、重复、人工或 runtime ID，`failed`、`skipped`、零检查、报告缺失、
-命令错误、超时或引擎/脚本 `ERROR` 日志都会失败；即使 exit 0、错误在日志保留尾部之前也不能获得绿灯。两套报告分别写入新建的绝对临时路径，旧报告不能冒用。
+命令错误、完整报告后未退出的超时、JSON 重复键/非有限值/解析错误或引擎/脚本 `ERROR` 日志都会失败；即使 exit 0、错误在日志保留尾部之前也不能获得绿灯。三套报告分别写入新建的绝对临时路径，旧报告不能冒用。
 测试必须执行真实断言；结构化报告本身不能证明断言有效，仍需要独立评审代码与证据。
 
 gate 最终报告包含候选 Git SHA、完整源文件快照 SHA256、是否存在未提交改动、已执行数量、
-命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。quality-slice 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。
+命令、退出码、耗时、引擎版本、错误和执行器原始报告。`case_reports` 按 suite 保留已验证报告；旧 `case_report` 字段继续保存 prototype 报告，避免破坏已有消费者。任何 suite 缺失或失败时整体仍为 failed，已有旧报告不能单独证明 gate 通过。Linux 失败 step 将原 gate JSON 直接输出到该 step log，保留已完成 suite 与进程退出/错误证据；不跳过失败，也不增加条件运行框架。
 工作区有改动时本地证据只覆盖该快照；合并以 PR 当前提交的 CI 为准。
 
 PR 的 Task-IDs 必须是正文中单行纯文本，用逗号表示已明确分工的联合任务，
@@ -164,10 +165,10 @@ step 上加入条件和失败吞并。更复杂的 YAML 写法应先更新并验
 Mac 原型和无显示测试可立即推进。Windows 导出、iOS 构建、触屏/实体手柄、
 人类趣味验证各有独立证据要求；当前未运行这些验证，且本机缺完整 Xcode。
 
-## D01：Mac 质量 demo 源码运行包装
+## H07：Mac world demo 源码运行包装（保留 D01 恢复点）
 
 [build_local_demo.py](build_local_demo.py) 复用现有 Godot 4.7.2 `.app`，输出可双击的
-`月灯巷质量试玩.app`、`开始试玩.command`、说明和 manifest。它是自带编辑器引擎的离线源码包装，
+`月灯巷世界试玩.app`、`开始试玩.command`、说明和 manifest。它是自带编辑器引擎的离线源码包装，
 不是 Godot 原生导出、签名/公证发行包或 Steam 发行成果。实际构建须等 root 给最终审核候选 SHA：
 
 ```sh
@@ -175,7 +176,7 @@ python3 tools/build_local_demo.py \
   --repo /absolute/source-worktree \
   --candidate ROOT_APPROVED_FULL_40_HEX_SHA \
   --godot-app "/absolute/已有 Godot.app" \
-  --output "/absolute/existing-parent/全新质量试玩"
+  --output "/absolute/existing-parent/全新世界试玩"
 ```
 
 占位符须替换；没有候选或引擎默认值，不接受 HEAD、分支、短 SHA 或 tag 对象。
@@ -185,15 +186,15 @@ python3 tools/build_local_demo.py \
 
 构建器使用 `git archive` 并逐文件对照候选 Git blob，忽略脏工作区和未跟踪文件，保留候选自己的
 可执行启动器；链接、子模块、越界路径及 export-ignore/subst 导致的遗漏/内容变化均拒绝。
-不修改游戏源码。仅新增隔离用户目录的 `override.cfg`；冷导入产生的 `.godot`、`.import`/`.uid`
+除明确排除的 `tests/fixtures/**` 外不修改游戏源码；包内该目录必须不存在，Core 须内置几何，不能补写 fixture 或偷偷恢复运行时读取。manifest 同时绑定完整原 Git archive 与实际 packaged/excluded 文件哈希；其他源文件逐字节/模式不变。源码 project.godot 必须选择 world 独立根 `moonlantern-world-slice-v1`，运行探针还检查默认 GameSession 与实际 Main 同为 world/v4。只新增隔离用户目录的 `override.cfg`；冷导入产生的 `.godot`、`.import`/`.uid`
 元数据和验证 sidecar 显式列哈希及来源，其他新增文件或候选源码/模式变化导致失败。
 manifest 记录源码 SHA/tree/archive、逐文件内容/模式、构建器、引擎、配置和生成文件哈希。
 隔离配置的预期内容与哈希由本次 player/verify 目录生成；每次探测结束和交付前都逐字节核对
 运行配置及配置 sidecar，并要求它们是单链接常规文件。篡改、链接替换或内容不符均拒收，
 阶段切换使用原子替换，不经符号链接写入外部文件。
 
-每包分配独立 player/verify 用户目录，新默认相对路径为
-`user://profiles/rain-night-v1/moonlantern.json`。构建时三次独立进程走实际 `.app` 可执行入口：
+每包分配独立 `MoonlanternDemo/world-SHA-UUID/player` 与 `/verify` 用户目录，新默认相对路径为
+`user://profiles/world-slice-v1/moonlantern.json`。引擎旁 `_sc_` 将随包 editor settings/cache 留在本包内，不改全局设置。构建时三次独立进程走实际 `.app` 可执行入口：
 冷导入后加载候选真实 Main，通过 headless Escape 输入建立非默认暂停标记并调用核心默认保存；
 第二次由 Main 自动恢复并比较完整快照/主备档哈希；第三次仅核对 player 目录与主备档仍为空。
 探针不覆盖 `scene.save_path` 或手动注入恢复状态，读取实际 profile/version/default 路径和资源。
@@ -202,9 +203,9 @@ manifest 记录源码 SHA/tree/archive、逐文件内容/模式、构建器、�
 即使父进程已退出、管道已关闭，也要核验整组退出；TERM 宽限后仍存在则发 KILL，
 退出核验失败就拒收，不向未知进程组发送信号。执行记录保留组 ID、清理信号和组退出核验结果。
 
-这些是 **headless 打包/默认核心保存及 Main 恢复诊断**。manifest 的 native、LaunchServices、Q06、
-外部旧 v2 主备档哈希保护标记保持未验证；不冒充 UI 保存退出/完整输入或人类趣味通过。
-后续实际双击入口、真实保存退出/恢复、旧档哈希保护证据和原生时段由 root/P06 按最终固定包验收，
+这些是 **headless 打包/默认核心保存及 Main 恢复诊断**。manifest 的 native、LaunchServices、WS07/human、
+外部旧档哈希保护标记保持未验证；不冒充 UI 保存退出/完整输入或人类趣味通过。
+后续实际入口、真实 UI 保存退出/恢复与 WS07 由 root/V02 在明确渲染 slot、最终固定生产候选上验收；活动 human 档允许正常变化，不能作为静态守卫或复原/删档，
 不在其它任务持有渲染 slot 时启动原生。
 
 工具守卫测试：
@@ -220,7 +221,7 @@ python3 -m unittest discover -s tools -p test_build_local_demo.py -v
 
 `windows-validation.yml` 的稳定检查名为 `windows-source`，使用 Windows 2022、Python 3.14.6
 与 UTF-8。官方 setup-python v6 已解析并固定为
-`ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 和直接双 suite gate 保留。
+`ece7cb06caefa5fff74198d8649806c4678c61a1`；原 Linux required jobs、Actions pins 保留，现有 stage prototype 内固定三 suite。
 Linux prototype 仅新增冷导入准备、exit 0 错误扫描与白名单诊断。
 现有 validator 禁止 prototype block 中出现任何 if/continue-on-error；因此 Linux 导入失败时
 把原始进程/引擎日志和结果打印到 Actions step log，成功后另存白名单 artifact，不更改该约束。
@@ -245,7 +246,7 @@ stdout、stderr、引擎日志中即使 exit 0 出现 `SCRIPT ERROR:`/`ERROR:` �
 `RUNNER_TEMP/w01-font`，由探针自行创建。缺探针/字体、非零退出、缺字、空绑定、OS fallback、
 字体数据或探针五项源码哈希与本次 Git blob 不符均失败；检查 Main 实际 Label/Button 绑定的字体实例。
 仅白名单上传 `font-report.json` 和日志，不上传该目录内可能产生的存档文件。
-随后真实调用现有 `tools/gate.py --stage prototype`，保留两个 suite、必需 case、默认保存/恢复与独立子进程检查。
+随后真实调用现有 `tools/gate.py --stage prototype`，固定执行三个 suite、必需 case、默认保存/恢复与独立子进程检查。
 不修饰失败报告、不删检查、不跳 case，也不修改 core/gate 协议求绿。
 若现有 gate 的 quality-slice 触发 120 秒超时，只额外运行一次已定位的 Q02、同 120 秒上限的诊断，
 补存控制台、独立引擎日志和实际 case 报告（若完成）；原 gate 失败始终保留，诊断不能替代验收。

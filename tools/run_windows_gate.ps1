@@ -357,11 +357,12 @@ exit 0
         }
         $gate=Get-Content -LiteralPath $gateReport -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         if ($gate.status -ne 'passed' -or $gate.gate -ne 'prototype' -or $gate.candidate.sha -ne $sha) { throw 'Actual source gate did not pass for this source SHA.' }
-        if ((($gate.case_reports.Keys | Sort-Object) -join ',') -ne 'prototype,quality-slice') { throw 'Both actual suites must be present.' }
+        if ((($gate.case_reports.Keys | Sort-Object) -join ',') -ne 'prototype,quality-slice,world-slice') { throw 'All three actual suites must be present.' }
         $summary.case_reports=@{}
-        foreach ($suite in @('prototype','quality-slice')) {
+        foreach ($suite in @('prototype','quality-slice','world-slice')) {
             $rows=$gate.case_reports[$suite].cases
             if (-not $rows -or @($rows | Where-Object { $_.status -ne 'passed' -or $_.checks -lt 1 }).Count) { throw "Failed/empty/skipped real cases: $suite" }
+            if ($suite -eq 'world-slice' -and ((($rows.id | Sort-Object) -join ',') -cne 'WS01,WS02,WS03,WS04,WS05,WS06')) { throw 'World must execute exactly WS01-WS06; runtime/human are separate.' }
             $summary.case_reports[$suite]=@{cases=$rows.Count; checks=($rows | Measure-Object -Property checks -Sum).Sum}
         }
         $null = Invoke-Owned $python @($sourceGuard,$source,$sha,(Join-Path $ReportDirectory 'source-after.json')) $source 60 'source-after'
