@@ -448,6 +448,24 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(gate.GateError):
             self.check_workflow(WORKFLOW.replace('      - run:', '      - if: always()\n        run:') + upload)
 
+    def test_h08_exact_failure_artifacts_only(self):
+        paths = ['output/world-viewport/report.json', 'output/world-viewport/process.log',
+                 'output/world-viewport/frame-1.png', 'output/world-viewport/frame-2.png']
+        prefix = ('      - name: Preserve H08 observation\n        if: always()\n'
+                  '        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\n'
+                  '        with:\n          path: |\n')
+        upload = prefix + ''.join('            ' + path + '\n' for path in paths)
+        self.assertEqual(self.check_workflow(WORKFLOW + upload), 1)
+        for wrong in ['output/world-viewport/**', 'output/world-viewport/*.png',
+                      'output/world-viewport/frame-3.png', 'output/world-viewport/game.exe',
+                      'output/world-viewport/game.pck', 'output/world-viewport/source.zip']:
+            with self.subTest(wrong=wrong), self.assertRaises(gate.GateError):
+                self.check_workflow(WORKFLOW + prefix + '            ' + wrong + '\n')
+        for wrong in [upload.replace('always()', 'success()'), upload + '        run: echo bypass\n',
+                      upload + '        continue-on-error: true\n', upload.replace('@ea165f8d65b6e75b540449e92b4886f43607fa02', '@main')]:
+            with self.subTest(wrong=wrong), self.assertRaises(gate.GateError):
+                self.check_workflow(WORKFLOW + wrong)
+
     def test_runtime_code_without_project_still_requires_job(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

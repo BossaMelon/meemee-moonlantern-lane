@@ -88,6 +88,30 @@ render_python=/absolute/path/reported/by/sys.executable
 [解释器原始参数](https://docs.python.org/3.14/library/sys.html#sys.orig_argv) 与
 [Apple flock 语义](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)。
 
+## H08：有界只读源码 viewport 观察
+
+`tools/observe_world_viewport.py` 是约200行的观察入口，当前仅接受 Linux Actions 环境和
+root 分配的远端 slot `h08-ci-source-view-1`。必须由完整外层 `with_render_lock.py` 启动，
+Python supervisor 在创建输出／子进程前 consume 一次真实交接，持续持原锁并复验到最终报告。
+没有 Mac 窗口许可，也不是 Windows native、WS07、输入／保存或人类趣味验收入口。
+
+工具按实际 CI Git SHA 做 archive/blob 绑定，要求 `game/**`、`scenes/**`、`assets/**` 与 `project.godot` 和冻结
+`dbb4587` 字节相同；当前 checkout 和隔离观察副本的 tracked 内容／权限前后守恒。
+默认 Main 路径不改，临时 overlay 只有全新 user-data namespace 和外部 SceneTree 观察脚本；
+XDG data/config/cache/TMPDIR 都在本次控制目录，不读旧 player/r2。没有输入注入、Core command、
+强制暂停／恢复、movie 输出、系统截图或图像缩放。先 headless import（≤120秒），再由自有
+Xvfb 启动正常绘制（≤45秒）；必须实际报告 X11、非 dummy renderer/adapter 和两个递增绘制帧。
+帧后用 root viewport `get_texture().get_image().save_png` 保存原PNG，并记录模式／尺寸／DPI、
+帧计数和原始 paused 状态。失败保留全部日志／部分帧，关闭本次进程组，不安装依赖或 fallback dummy。
+固定4.7.2的 driver 读取 API 为 `RenderingServer.get_current_rendering_driver_name()`；
+解析检查同时扫描完整日志，不能把 `--check-only` 的 exit0 单独当作通过。
+
+拟接入现有 prototype job 的一次执行及精确诊断上传，原三suite／120秒和四诊断路径不变。
+新增诊断仅为 `output/world-viewport/report.json`、`process.log`、`frame-1.png`、`frame-2.png`；
+白名单正负回归拒目录／glob、第三帧、EXE/PCK/源码包及退出码掩盖。
+执行资格、实际结果、审批情况和尝试预算以[项目状态](../docs/project-status.md)为准。
+目标选择与授权由 root 处理，不得换工具绕过审批或自行改为另一运行目标。
+
 ## Mac 源码启动器
 
 在完整项目目录中双击 [启动月灯巷.command](启动月灯巷.command)，或运行：
