@@ -76,3 +76,37 @@ GODOT --headless --path PROJECT --script game/ui/checks/phase_guidance.gd -- mou
 报告为`ABS_FRESH_OUTPUT/phase-guidance.json`；exit0通过，exit1断言失败，exit2入口或报告写入失败。真实Mouse/ScreenTouch/D-pad/A/B检查初始deferred焦点、等待、账本返回、阶段切换和真实反馈到期。day2特殊委托由挂载前合法核心夹具建立，与输入证据分开；挂载后导航不发经济命令。每个Main在挂载前只把save_path指向该目录全新unused文件，不证明默认路径保存恢复。保持time_scale=1。
 
 `--render`使用同一检查并在真实输入后保存引擎viewport PNG；实际全屏用Godot `--fullscreen`，窄屏用`--windowed --resolution 844x390`及touch模式。仅总协调分配渲染时段后，由共享`tools/with_render_lock.py`包住有界supervisor运行；报告记录实际窗口模式、尺寸、焦点、几何和源hash。透明Label矩形与热点矩形相交只作观察，是否遮住物件由实际PNG核对，不能拿整个透明框冒充文字像素。截图不代表原生包、系统窗口截图或实体设备认证。
+
+### P02：独立运动与物件交互样机
+
+入口为`scenes/ui/walk_world_probe.tscn`，不替换Main或现有经营入口。2400×1120的厨房、客席和短巷道用现有像素资源拼接，CharacterBody2D脚部碰撞与限界Camera2D跟随真实角色。WASD、左摇杆、触屏左下圆盘移动；F、手柄A或右下拿放键只作用于110像素内的桌前亮圈。备餐桌只有一份餐盘，可拿起后漂浮跟随、穿门送到客席、看到回应，也可取回。Esc、Start或右上暂停键冻结移动/动画，恢复清空旧输入。没有订单判定、收入、库存、GameSession或保存读取，不是新经营合同的实现。
+
+以下从**已提交候选**自动建立临时项目、独立namespace并导入资源；默认只跑三输入headless检查，无新窗口。将引擎参数替换为实际Godot 4.7.2（本机已有self-contained引擎可复用）。不是要求用户搭编辑器。
+
+```sh
+python3 - /absolute/path/to/Godot <<'PY'
+import io, pathlib, re, subprocess, sys, tarfile, tempfile, uuid
+engine = sys.argv[1]
+root = pathlib.Path(tempfile.mkdtemp(prefix="moonlantern-walk-"))
+project = root / "source"
+project.mkdir()
+archive = subprocess.check_output(["git", "archive", "HEAD"])
+with tarfile.open(fileobj=io.BytesIO(archive)) as package:
+    package.extractall(project, filter="data")
+config = project / "project.godot"
+text = config.read_text()
+text = re.sub(r'config/custom_user_dir_name="[^"]*"', 'config/custom_user_dir_name="MeeMeeWalkWorldProbe/' + uuid.uuid4().hex + '"', text)
+config.write_text(text)
+subprocess.run([engine, "--headless", "--editor", "--path", str(project), "--log-file", str(root / "import.log"), "--import"], check=True)
+for mode in ["keyboard", "pad", "touch"]:
+    output = root / mode
+    output.mkdir()
+    subprocess.run([engine, "--headless", "--path", str(project), "--log-file", str(root / (mode + ".log")), "--script", "game/ui/checks/walk_world_probe.gd", "--", mode, str(output)], check=True)
+print("Reports:", root)
+print("Play after a render slot or human launch authorization:", engine, "--path", project, "res://scenes/ui/walk_world_probe.tscn")
+PY
+```
+
+资源导入会生成PNG sidecar和`.godot`缓存；不要只复制缓存而遗漏sidecar。直接检查入口：`GODOT --headless --path FRESH_PROJECT --script game/ui/checks/walk_world_probe.gd -- keyboard ABS_EMPTY_OUTPUT`（另外运行pad/touch）。调用者先建空报告目录；exit0通过，exit1断言失败，exit2参数/报告入口失败；`walk-probe.json`保留实际InputEvent、物理轨迹、相机中心、唯一物件节点/位置、反馈及源hash。独立起点夹具只在挂载前赋值，不把运行时传送当行走。检查不加载Main、不发经济命令、不造存档，也不证明保存恢复。
+
+本轮先交headless可操作候选；原生窗口、全屏像素、实体手柄/触屏与真人趣味反馈须等总协调安排。独立样机默认关闭窗口直接退出，不影响旧经营试玩。后续生产经营接入以H02冻结合同为准，不从本样机推断收入/加工/存档接口。
