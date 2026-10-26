@@ -566,7 +566,7 @@ func test_isolated_processes():
 
 func run(folder: String, selected: String = "") -> Dictionary:
 	output_dir = folder+"/world-%d" % OS.get_process_id(); DirAccess.make_dir_recursive_absolute(output_dir)
-	DirAccess.make_dir_recursive_absolute("res://output"); progress_path = "res://output/world-progress-%d.json" % OS.get_process_id()
+	progress_path = folder.path_join("world-progress.json")
 	fixture_data = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/world-slice-scenarios.json")); seeds = fixture_data.seeds
 	var callbacks = {"WS01":test_movement,"WS02":test_spatial_guards,"WS03":test_cooking_and_carry,"WS04":test_delivery,"WS05":test_nights_and_growth,"WS06":test_save_and_expedition}
 	for id in callbacks:
