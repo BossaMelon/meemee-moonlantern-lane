@@ -37,15 +37,17 @@ func _enter_tree():
 	var native = request.get("native",false)
 	if native and request.get("headless_logical_size") != null:
 		fail("headless logical preparation is forbidden for native evidence"); return
-	if native: report.kind = "world-source-native-first-observation"
+	if native: report.kind = "world-source-native-night-observation" if request.get("native_night",false) else "world-source-native-first-observation"
 	if request.stage not in ["inspect", "first-manual", "first-auto", "night-quick", "night-hot", "restore-exit"] or DisplayServer.get_name() != ("macOS" if native else "headless"):
 		fail("unsupported diagnostic stage/display")
 		return
 	if native:
-		if request.stage not in ["first-manual","first-auto"] or request.get("save_boundary") != "after-sale" or str(request.get("native_slot","")).is_empty():
-			fail("native preview requires declared slot and first-loop-only scope"); return
-		if not request.get("ui_source_sha256") is Dictionary or request.ui_source_sha256.size() != 18:
-			fail("native runtime requires 18 UI source bindings"); return
+		var night = request.get("native_night",false)
+		var valid_role = request.stage == "night-quick" and request.get("fullscreen",false) and request.get("save_boundary") == "growth" and request.get("growth") == "shelf" and request.get("tier") == "standard" if night else request.stage in ["first-manual","first-auto"] and request.get("save_boundary") == "after-sale"
+		if not valid_role or str(request.get("native_slot","")).is_empty():
+			fail("native requires declared slot and explicit first-loop or full-night role"); return
+		if not request.get("ui_source_sha256") is Dictionary or not request.ui_source_sha256.has_all(["game/ui/main.gd","game/ui/world_play.gd","scenes/ui/world_play.tscn"]):
+			fail("native runtime requires candidate UI source bindings"); return
 		report.ui_source_sha256 = {}
 		for path in request.ui_source_sha256:
 			var actual = FileAccess.get_sha256("res://"+path)
@@ -439,7 +441,11 @@ func walk_to(target_id: String) -> bool:
 	for object in v.world.geometry.objects:
 		if object.id == target_id: target = object; break
 	if not check(not target.is_empty(), "target absent in authoritative region: " + target_id): return false
-	var path = plan_path(foot(), Vector2(target.anchor.x,target.anchor.y), v.world.geometry)
+	return await walk_point(Vector2(target.anchor.x,target.anchor.y),target_id)
+
+func walk_point(destination: Vector2, target_id: String) -> bool:
+	var v = view()
+	var path = plan_path(foot(), destination, v.world.geometry)
 	if not check(not path.is_empty(), "no conservative path to " + target_id): return false
 	var deadline = Time.get_ticks_msec()+45000
 	for waypoint in path:
@@ -453,7 +459,7 @@ func walk_to(target_id: String) -> bool:
 			await get_tree().process_frame
 			if foot().distance_to(last) >= 2: last = foot(); progress_at = Time.get_ticks_msec()
 	await stop_moving()
-	return check(foot().distance_to(Vector2(target.anchor.x,target.anchor.y)) <= 56, "actual foot outside interaction radius")
+	return check(foot().distance_to(destination) <= 56, "actual foot outside planned walking radius")
 
 func first_loop():
 	var fresh = view()
@@ -486,6 +492,7 @@ func first_loop():
 	if not await capture_native("ready"): return
 	await interact("prep","take")
 	if not await wait_for(func(): return same(view().world.carried_uids,job.output_uids),1000,"ready dish UIDs carried"): return
+	if not await capture_native("dish-group"): return
 	report.dish_carry_trips += 1
 	if not await walk_to("door-bell"): return
 	await interact("door-bell","open_shop")
@@ -622,6 +629,13 @@ func capture_native(label: String) -> bool:
 	var logical = window.get_visible_rect(); var stretch = window.get_stretch_transform(); var final = window.get_final_transform()
 	var mapped = (stretch*logical).size
 	var row = {"name":label,"path":request.output.path_join("native-"+label+".png"),"source_commit":request.source_commit,"elapsed_ms":Time.get_ticks_msec()-started_ms,"input_count":report.inputs.size(),"capture_viewport":str(window.get_path()),"screen":screen,"screen_rect":[screen_rect.position.x,screen_rect.position.y,screen_rect.size.x,screen_rect.size.y],"usable_rect":[usable.position.x,usable.position.y,usable.size.x,usable.size.y],"window_position":[window_rect.position.x,window_rect.position.y],"window_size":[window_rect.size.x,window_rect.size.y],"window_mode":DisplayServer.window_get_mode(),"root_mode":window.mode,"root_size":[window.size.x,window.size.y],"logical_root_viewport":[logical.position.x,logical.position.y,logical.size.x,logical.size.y],"root_texture_size":[texture.get_width(),texture.get_height()],"png_size":[picture.get_width(),picture.get_height()],"world_viewport_size":[world_ui.viewport.size.x,world_ui.viewport.size.y],"screen_dpi":DisplayServer.screen_get_dpi(screen),"screen_scale":DisplayServer.screen_get_scale(screen),"final_transform":[final.x.x,final.x.y,final.y.x,final.y.y,final.origin.x,final.origin.y],"stretch_transform":[stretch.x.x,stretch.x.y,stretch.y.x,stretch.y.y,stretch.origin.x,stretch.origin.y],"mapped_root_size":[mapped.x,mapped.y],"content_scale_size":[window.content_scale_size.x,window.content_scale_size.y],"content_scale_mode":window.content_scale_mode,"content_scale_factor":window.content_scale_factor,"window_focused":window.has_focus(),"fullscreen_coverage":coverage,"player":view().world.player.duplicate(true),"region":view().world.region_id,"cash":view().cash,"phase":view().phase,"carried_uids":view().world.carried_uids.duplicate(),"station":station().duplicate(true),"customers":view().world.customers.duplicate(true)}
+	row.merge({"service":view().service.duplicate(true),"items":view().items.duplicate(true),"day":view().day,"upgrades":ui.game.snapshot().upgrades.duplicate(),"active_upgrades":view().active_upgrades.duplicate(),"book_target":ui.world_controller.book_target})
+	var center: Vector2 = world_ui.camera.get_screen_center_position()
+	var canvas: Transform2D = world_ui.viewport.get_global_canvas_transform()*world_ui.viewport.get_canvas_transform()
+	var world_rect = Rect2(Vector2.ZERO,Vector2(world_ui.viewport.size))
+	row.camera_center = [center.x,center.y]
+	row.world_canvas_transform = [canvas.x.x,canvas.x.y,canvas.y.x,canvas.y.y,canvas.origin.x,canvas.origin.y]
+	row.visible_customer_ids = view().world.customers.filter(func(c): return c.spawned and c.state != "gone" and world_rect.has_point(canvas*Vector2(c.x,c.y))).map(func(c): return c.id)
 	if not check(picture.save_png(row.path) == OK,"root PNG save failed"): return false
 	row.sha256 = FileAccess.get_sha256(row.path); report.screenshots.append(row); report.geometry = observe_geometry(); write_report()
 	# ViewportTexture proxy dimensions are separate evidence, not raw image size.
@@ -632,10 +646,19 @@ func capture_native(label: String) -> bool:
 
 func native_visual_tour() -> bool:
 	if not await open_book("recipe-book") or not await capture_native("recipe-book"): return false
-	if not await close_book() or not await travel("lane") or not await capture_native("lane"): return false
-	return await travel("shop")
+	# Read the current product labels; scroll through the existing real-input path.
+	var materials = ui.find_children("*","Label",true,false).filter(func(label): return label.is_visible_in_tree() and "每份" in label.text and "份需" in label.text)
+	if not check(not materials.is_empty(),"recipe material labels unavailable"): return false
+	var material = materials[0]
+	if not await scroll_to_control(material,true): return false
+	report.recipe_material = {"text":material.text,"rect":[material.global_position.x,material.global_position.y,material.size.x,material.size.y],"input_count":report.inputs.size()}
+	if not await capture_native("recipe-materials"): return false
+	if not await close_book() or not await walk_to("shop-exit") or not await capture_native("shop-exit"): return false
+	if not await travel("lane") or not await capture_native("lane"): return false
+	if not await travel("shop"): return false
+	return await capture_native("shop-return")
 
-func scroll_to_control(control: Control) -> bool:
+func scroll_to_control(control: Control, full_height: bool = false) -> bool:
 	var ancestor = control.get_parent()
 	while ancestor != null and not ancestor is ScrollContainer: ancestor = ancestor.get_parent()
 	if ancestor == null: return true
@@ -644,11 +667,14 @@ func scroll_to_control(control: Control) -> bool:
 	for attempt in range(40):
 		var clip = scroll.get_global_rect().intersection(get_window().get_visible_rect()).grow(-6)
 		var rect = control.get_global_rect()
-		if clip.has_point(rect.get_center()):
+		if clip.has_point(rect.get_center()) and (not full_height or (rect.position.y >= clip.position.y and rect.end.y <= clip.end.y)):
 			return check(same(before,ui.game.snapshot()), "scrolling changed authoritative book state")
 		var direction = 1 if rect.get_center().y > clip.get_center().y else -1
 		report.scroll.append({"control":str(control.get_meta("action_id","")),"attempt":attempt,"value":scroll.scroll_vertical,"clip":[clip.position.x,clip.position.y,clip.size.x,clip.size.y],"target":[rect.position.x,rect.position.y,rect.size.x,rect.size.y]})
-		if request.mode == "touch":
+		if request.mode == "pad":
+			var button = JOY_BUTTON_DPAD_DOWN if direction > 0 else JOY_BUTTON_DPAD_UP
+			await dispatch_event(pad_button(button,true)); await dispatch_event(pad_button(button,false))
+		elif request.mode == "touch":
 			# Start on a real visible label/gap. Never tap a transaction button to scroll.
 			var point = Vector2.ZERO; var found = false
 			for label in scroll.find_children("*","Label",true,false):
@@ -783,6 +809,9 @@ func prepare_batch(recipe: String, quantity: int, relay: bool = false) -> bool:
 	if failed: return false
 	if not check(station().job is Dictionary and station().job.output_uids.size() == quantity,"actual batch job missing/wrong quantity"): return false
 	var job = station().job.duplicate(true); var tick = int(view().world.tick)
+	if request.get("native_night",false) and view().day == 1:
+		var label = "wave-%d-cooking" % (int(view().service.wave_index)+1)
+		if not has_native_image(label) and not await capture_native(label): return false
 	if not await wait_for(func(): return station().job == null,4000,"actual batch cooking completes"): return false
 	var events: Array = report.events + view().events
 	if not check(events.any(func(e): return e.get("type") == "cooking_ready" and e.get("job_id") == job.id and (int(e.tick)-tick)*50 == job.remaining_ms),"actual batch completion tick missing/differs"): return false
@@ -797,9 +826,14 @@ func prepare_batch(recipe: String, quantity: int, relay: bool = false) -> bool:
 		await interact("prep","take")
 		if not await wait_for(func(): return same(view().world.carried_uids,job.output_uids),1000,"batch dishes actually carried"): return false
 		report.dish_carry_trips += 1
-		if not await walk_to("pass"): return false
-		await interact("pass","put")
-		if not await wait_for(func(): return view().world.carried_uids.is_empty(),1000,"actual pass deposit"): return false
+		if request.get("native_night",false) and view().day == 1 and int(view().service.wave_index) == 1:
+			# Keep these real dishes in hand until wave two's four guests enter.
+			# Normal service time continues; deposit only by walking and real Put input.
+			report.native_waiting_dishes = job.output_uids.duplicate()
+		else:
+			if not await walk_to("pass"): return false
+			await interact("pass","put")
+			if not await wait_for(func(): return view().world.carried_uids.is_empty(),1000,"actual pass deposit"): return false
 	if not check(view().cash == before_cash,"preparation created cash before customer delivery"): return false
 	report.batches.append({"day":view().day,"recipe":recipe,"quantity":quantity,"input_uids":input_uids,"output_uids":job.output_uids,"input_cost":input_cost,"output_cost":output_cost,"manual_dish_trips":report.dish_carry_trips-trips_before,"relay":relay})
 	return true
@@ -807,7 +841,28 @@ func prepare_batch(recipe: String, quantity: int, relay: bool = false) -> bool:
 func finish_wave(index: int) -> bool:
 	var before = view(); var wave = before.service.wave_id
 	if not check(before.phase == "trading" and int(before.service.wave_index) == index,"wrong real wave start"): return false
-	if not await wait_for(func(): return view().phase in ["intermission","closing"],100000,"normal wall-clock wave completion"): return false
+	if request.get("native_night",false):
+		if index == 2:
+			var seats = view().world.geometry.objects.filter(func(o): return str(o.id).begins_with("seat-"))
+			if not check(seats.size() == 4,"native four-guest observation requires actual four-seat geometry"): return false
+			var center = Vector2.ZERO
+			for seat in seats: center += Vector2(seat.anchor.x,seat.anchor.y)
+			if not await walk_point(center/seats.size(),"four-seat-center"): return false
+		var deadline = Time.get_ticks_msec()+100000
+		while view().phase == "trading":
+			if failed or not check(Time.get_ticks_msec() < deadline,"normal native wave deadline"): return false
+			var present = view().world.customers.filter(func(c): return c.spawned and c.state != "gone")
+			if not present.is_empty() and not has_native_image("wave-%d-service" % index):
+				if not await capture_native("wave-%d-service" % index): return false
+			if present.size() >= 4 and present.all(func(c): return c.state == "waiting") and not has_native_image("four-customers"):
+				if not await capture_native("four-customers"): return false
+				if not check(same(view().world.carried_uids,report.get("native_waiting_dishes",[])),"four-guest wait changed held dishes"): return false
+				if not await walk_to("pass"): return false
+				await interact("pass","put")
+				if not await wait_for(func(): return view().world.carried_uids.is_empty(),1000,"four-guest real pass deposit"): return false
+			await get_tree().process_frame
+		if not check(view().phase in ["intermission","closing"],"native wave left trading unexpectedly"): return false
+	elif not await wait_for(func(): return view().phase in ["intermission","closing"],100000,"normal wall-clock wave completion"): return false
 	var after = view(); var rows = after.sales.filter(func(s): return s.wave_id == wave)
 	var paid = rows.filter(func(s): return s.get("revenue",0) > 0); var revenue = 0; var seen: Dictionary = {}
 	for sale in rows:
@@ -818,7 +873,11 @@ func finish_wave(index: int) -> bool:
 	if not check(rows.size() == (3 if index == 1 else 4) and not paid.is_empty() and after.cash-before.cash == interval_revenue and after.service.reservations.is_empty() and after.service.orders.all(func(o): return o.status in ["delivered","left"]),"actual wave cash/order/reservation reconciliation failed"): return false
 	report.waves.append({"wave_id":wave,"paid":paid.size(),"left":rows.size()-paid.size(),"revenue":revenue,"cash":after.cash,"held_uids":after.service.held_uids.duplicate(),"elapsed_ms":Time.get_ticks_msec()-started_ms})
 	checkpoint("wave-%d-complete" % index)
+	if not await capture_native("wave-%d-complete" % index): return false
 	return not failed
+
+func has_native_image(label: String) -> bool:
+	return report.screenshots.any(func(row): return row.name == label)
 
 func start_next_wave(index: int) -> bool:
 	if not await walk_to("door-bell"): return false
@@ -832,31 +891,37 @@ func complete_night():
 		if not await purchase({"flour":4,"pumpkin":6,"ember_herb":2}) or not await prepare_batch("floating_pie",2): return
 	else:
 		if not await purchase({"pumpkin":4,"cream":4}) or not await prepare_batch("moon_stew",4): return
+	if not await capture_native("wave-2-prepared"): return
 	if not await start_next_wave(2) or not await finish_wave(2): return
 	if request.stage == "night-quick":
 		if not await prepare_batch("floating_pie",2) or not await prepare_batch("ember_soup",2): return
 	else:
 		if not check(view().service.held_uids.size() == 2 and view().items.filter(func(i): return i.uid in view().service.held_uids).all(func(i): return i.item_id == "moon_stew" and i.temperature == "held"),"hot route did not preserve two real warm portions"): return
+	if not await capture_native("wave-3-prepared"): return
 	if not await start_next_wave(3) or not await finish_wave(3): return
 	if not await open_book("ledger") or not await book_action("settle","settle"): return
 	if not check(view().phase == "settled" and view().cash >= 125 and ui.game.snapshot().daily_recovery == 0 and view().sales.all(func(s): return s.get("tip",0) == 0),"normal night cannot fund growth and basics without recovery/tips"): return
 	checkpoint("settled")
+	if not await capture_native("settled"): return
 	var upgrade = request.growth; var offered = view().upgrades.filter(func(row): return row.upgrade_id == upgrade)
 	if not check(offered.size() == 1 and offered[0].available,"earned upgrade not actually available"): return
 	var cash = view().cash
 	if not await book_action("upgrade_"+upgrade,"upgrade",{"upgrade_id":upgrade}): return
 	if not check(upgrade in ui.game.snapshot().upgrades and upgrade not in view().active_upgrades and view().cash == cash-int(offered[0].cost),"upgrade purchase not deferred/cash-exact"): return
 	checkpoint("upgrade-purchased")
+	if not await capture_native("upgrade-purchased"): return
 	if not await book_action("next_day","next_day"): return
 	if not check(view().day == 2 and view().phase == "preparation" and upgrade in view().active_upgrades,"next morning did not activate purchased upgrade"): return
 	checkpoint("next-morning")
 	# P11 next_day closes the ledger itself; observe that actual transition.
 	if not await wait_for(func(): return ui.world_controller.book_target.is_empty() and not view().paused,1000,"next morning leaves ledger"): return
+	if not await capture_native("next-morning"): return
 	if not await purchase({"flour":3,"pumpkin":3}) or not await prepare_batch("floating_pie",3,upgrade == "shelf"): return
 	if upgrade == "shelf" and not check(report.first_batch.recipe == report.batches.back().recipe and report.first_batch.quantity == report.batches.back().quantity and report.first_batch.manual_dish_trips > report.batches.back().manual_dish_trips,"observed relay batch did not reduce manual dish trips"): return
 	if upgrade == "field_kit" and not await demonstrate_fan(): return
 	report.growth = {"upgrade":upgrade,"day":view().day,"demonstrated":true,"active_upgrades":view().active_upgrades.duplicate(),"last_batch":report.batches.back().duplicate(true),"baseline_first_batch":report.first_batch.duplicate(true),"combat_event_count":report.combat_events.size()}
 	checkpoint("growth-demonstrated")
+	if not await capture_native("growth-demonstrated"): return
 	await save_and_exit("growth")
 
 func demonstrate_fan() -> bool:

@@ -1,5 +1,7 @@
 """V02 supervisor unit/owned-child checks; never WS07 gameplay evidence."""
 import copy
+import contextlib
+import io
 from contextlib import nullcontext
 import json
 import os
@@ -221,7 +223,7 @@ class SupervisorTests(unittest.TestCase):
         # Deliberately incomplete PNG header, never a rendered game image.
         raw = self.root / "invalid-world-only.png"
         raw.write_bytes(b"\x89PNG\r\n\x1a\n" + struct.pack(">I",13) + b"IHDR" + struct.pack(">II",640,360))
-        names = ["startup","recipe-book","lane","carrying","cooking","ready","customer-arriving","first-sale"]
+        names = w.native_image_names("first-auto")
         rows = [{"name":name,"path":str(raw),"png_size":[640,360],"root_texture_size":[640,360]} for name in names]
         with self.assertRaisesRegex(ValueError,"root PNG replaced"):
             w.validate_native_images({"screenshots":rows,"ui_source_sha256":{}},{"ui_source_sha256":{}},self.root)
@@ -299,12 +301,57 @@ class SupervisorTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_native_binding_rejects_missing_new_item_group_source_or_uid(self):
-        expected={path:"a"*64 for path in w.UI_SOURCES}
-        shots=[{"name":name} for name in ["startup","recipe-book","lane","carrying","cooking","ready","customer-arriving","first-sale"]]
-        for path in ["game/ui/world/item_group.gd","game/ui/world/item_group.gd.uid"]:
+        for name in w.UI_REQUIRED + ["game/ui/world/future_helper.gd","game/ui/world/future_helper.gd.uid"]:
+            path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text("synthetic fixture")
+            if name.endswith(".gd"): Path(str(path)+".uid").write_text("uid://synthetic")
+        expected=w.ui_source_bindings(self.root)
+        self.assertIn("game/ui/world/future_helper.gd",expected)
+        self.assertIn("game/ui/world/future_helper.gd.uid",expected)
+        shots=[{"name":name} for name in w.native_image_names("first-auto")]
+        for path in ["game/ui/world/item_group.gd","game/ui/world/item_group.gd.uid","game/ui/world/future_helper.gd","game/ui/world/future_helper.gd.uid"]:
             actual=expected.copy();del actual[path]
             with self.subTest(path=path),self.assertRaisesRegex(ValueError,"source binding differs"):
                 w.validate_native_images({"ui_source_sha256":actual,"screenshots":shots},{"ui_source_sha256":expected},self.root)
+        (self.root/"game/ui/world/future_helper.gd.uid").unlink()
+        with self.assertRaisesRegex(ValueError,"no bound UID"):
+            w.ui_source_bindings(self.root)
+
+    def test_native_night_requires_explicit_role_bound_and_separate_headless_restore(self):
+        base=["world_slice.py","--candidate","a"*40,"--godot","/must-not-start","--output",str(self.root/"absent"),"--mode","mouse","--stage","night-quick","--fullscreen","--native-slot","not-authority"]
+        cases=[([],"first-loop after-sale"),(["--native-night"],"requires explicit subsequent"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","421"],"360..420"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--stage","night-hot"],"requires fullscreen night-quick"),
+               (["--native-night","--restore-headless-logical-size","1280","720","--headless-logical-size","1280","720"],"360..420")]
+        for flags,message in cases:
+            error=io.StringIO()
+            with self.subTest(flags=flags),patch.object(sys,"argv",base+flags),patch.object(w,"run_source") as launch,contextlib.redirect_stderr(error):
+                with self.assertRaises(SystemExit) as raised: w.main()
+                self.assertEqual(raised.exception.code,2);self.assertIn(message,error.getvalue());launch.assert_not_called()
+        with patch.object(sys,"argv",base+["--native-night","--restore-headless-logical-size","1280","720","--native-timeout","420"]),patch.object(w,"run_source",return_value=0) as launch:
+            self.assertEqual(w.main(),0)
+            args=launch.call_args.args[0]
+        self.assertEqual(args.save_boundary,"growth")
+        first=w.stage_display(args,"night-quick");restore=w.stage_display(args,"restore-exit")
+        self.assertTrue(first["native"] and first["native_night"] and first["fullscreen"])
+        self.assertIsNone(first["headless_logical_size"])
+        self.assertFalse(restore["native"] or restore["native_night"] or restore["fullscreen"])
+        self.assertIsNone(restore["native_slot"]);self.assertIsNone(restore["window_size"])
+        self.assertEqual(restore["headless_logical_size"],[1280,720])
+
+    def test_native_night_rejects_first_loop_or_unspawned_four_guest_evidence(self):
+        request={"stage":"night-quick","ui_source_sha256":{}}
+        obs={"screenshots":[{"name":name} for name in w.native_image_names("first-auto")],"ui_source_sha256":{}}
+        with self.assertRaisesRegex(ValueError,"root PNG set incomplete"):
+            w.validate_native_images(obs,request,self.root)
+        obs["screenshots"]=[{"name":name} for name in w.native_image_names("night-quick")]
+        four=next(row for row in obs["screenshots"] if row["name"]=="four-customers")
+        four.update(phase="trading",customers=[{"id":str(i),"spawned":False,"state":"arriving"} for i in range(4)],service={"orders":[{}]*4})
+        with self.assertRaisesRegex(ValueError,"four actual present"):
+            w.validate_native_images(obs,request,self.root)
+        for row in four["customers"]: row["spawned"]=True
+        four["visible_customer_ids"]=["0","1","2"]
+        with self.assertRaisesRegex(ValueError,"all inside the observed world viewport"):
+            w.validate_native_images(obs,request,self.root)
 
 
 if __name__ == "__main__":
